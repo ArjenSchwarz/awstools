@@ -4,12 +4,12 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/ArjenSchwarz/awstools/config"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
 
-var verbose bool
-var outputFile string
+var settings = new(config.Config)
 
 // RootCmd represents the base command when called without any subcommands
 var RootCmd = &cobra.Command{
@@ -36,9 +36,10 @@ func Execute() {
 }
 
 func init() {
-	cobra.OnInitialize(initConfig)
-	RootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Give verbose output")
-	RootCmd.PersistentFlags().StringVarP(&outputFile, "output", "o", "", "Optional file to save the output to")
+	// cobra.OnInitialize(initConfig)
+	settings.Verbose = RootCmd.PersistentFlags().BoolP("verbose", "v", false, "Give verbose output")
+	settings.OutputFile = RootCmd.PersistentFlags().StringP("output", "o", "", "Optional file to save the output to")
+	settings.OutputFormat = RootCmd.PersistentFlags().StringP("format", "f", "csv", "Format for the output, currently supported are csv and json")
 }
 
 // initConfig reads in config file and ENV variables if set.

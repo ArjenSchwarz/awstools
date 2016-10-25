@@ -43,7 +43,7 @@ func detailUsers(cmd *cobra.Command, args []string) {
 		userlist[i] = <-c
 	}
 	keys := []string{"User", "Groups", "Policy Names"}
-	if verbose {
+	if *settings.Verbose {
 		keys = append(keys, "Policies")
 	}
 	output := helpers.OutputArray{Keys: keys}
@@ -58,13 +58,13 @@ func detailUsers(cmd *cobra.Command, args []string) {
 			policyDetails = append(policyDetails, policydetail)
 		}
 		content["Policy Names"] = strings.Join(policyNames, ", ")
-		if verbose {
+		if *settings.Verbose {
 			content["Policies"] = strings.Join(policyDetails, ",\n")
 		}
 		holder := helpers.OutputHolder{Contents: content}
 		output.AddHolder(holder)
 	}
-	output.ToCSV(outputFile)
+	output.Write(*settings)
 }
 
 func (user iamUser) GetAllPolicies() map[string]string {
