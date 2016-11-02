@@ -21,9 +21,6 @@ examples and usage of using your application. For example:
 Cobra is a CLI library for Go that empowers applications.
 This application is a tool to generate the needed files
 to quickly create a Cobra application.`,
-	// Uncomment the following line if your bare application
-	// has an action associated with it:
-	//	Run: func(cmd *cobra.Command, args []string) { },
 }
 
 // Execute adds all child commands to the root command sets flags appropriately.
@@ -38,8 +35,8 @@ func Execute() {
 func init() {
 	// cobra.OnInitialize(initConfig)
 	settings.Verbose = RootCmd.PersistentFlags().BoolP("verbose", "v", false, "Give verbose output")
-	settings.OutputFile = RootCmd.PersistentFlags().StringP("output", "o", "", "Optional file to save the output to")
-	settings.OutputFormat = RootCmd.PersistentFlags().StringP("format", "f", "csv", "Format for the output, currently supported are csv and json")
+	settings.OutputFile = RootCmd.PersistentFlags().StringP("file", "f", "", "Optional file to save the output to")
+	settings.OutputFormat = RootCmd.PersistentFlags().StringP("output", "o", "json", "Format for the output, currently supported are csv and json")
 }
 
 // initConfig reads in config file and ENV variables if set.
