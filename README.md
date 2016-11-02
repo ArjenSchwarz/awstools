@@ -4,6 +4,11 @@ awstools is a Go application that allows me to more easily do complex actions wi
 
 # Functionalities
 
+Currently built in features:
+
+ * Get a list of all IAM users, their groups, and the policies active upon them
+ * Get a list of all the resources in a CloudFormation stack, including those from nested stacks
+
 Run the application without any commands to get an overview, as shown below. For more details you can then run `awstools [command] --help`, which also works with subcommands such as `awstools cfn resources --help`.
 
 ```bash
