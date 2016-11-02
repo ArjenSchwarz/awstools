@@ -49,7 +49,7 @@ The AWS configuration is read from the standard locations:
 
 # Development
 
-awstools uses the Cobra framework for ease of development. While I will usually only build the functionalities that I need at a certain time feel free to request or provide features.
+awstools uses the Cobra framework for ease of development. While I will usually only build the functionalities that I need at a certain time, feel free to request or add features.
 
 If you wish to contribute you can always create Issues or Pull Requests. For Pull Request, just follow the standard pattern.
 
