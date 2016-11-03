@@ -14,21 +14,25 @@ import (
 	"github.com/ArjenSchwarz/awstools/config"
 )
 
+// OutputHolder holds key-value pairs that belong together in the output
 type OutputHolder struct {
 	Contents map[string]string
 }
 
+// OutputArray holds all the different OutputHolders that will be provided as
+// output, as well as the keys (headers) that will actually need to be printed
 type OutputArray struct {
 	Contents []OutputHolder
 	Keys     []string
 }
 
+// Write will provide the output as configured in the configuration
 func (output OutputArray) Write(settings config.Config) {
 	switch strings.ToLower(*settings.OutputFormat) {
-	case "json":
-		output.toJSON(*settings.OutputFile)
-	default:
+	case "csv":
 		output.toCSV(*settings.OutputFile)
+	default:
+		output.toJSON(*settings.OutputFile)
 	}
 }
 
@@ -98,6 +102,7 @@ func (output OutputArray) toJSON(outputFile string) {
 	buf.WriteTo(target)
 }
 
+// AddHolder adds the provided OutputHolder to the OutputArray
 func (output *OutputArray) AddHolder(holder OutputHolder) {
 	var contents []OutputHolder
 	if output.Contents != nil {

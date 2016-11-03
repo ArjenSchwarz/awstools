@@ -14,6 +14,8 @@ func IAMSession() *iam.IAM {
 	return iamSession
 }
 
+// GetPoliciesMap retrieves a map of policies with the policy name as the key
+// and the actual policy object as the value
 func GetPoliciesMap() map[string]*iam.Policy {
 	svc := IAMSession()
 
@@ -30,6 +32,9 @@ func GetPoliciesMap() map[string]*iam.Policy {
 	return result
 }
 
+// GetUserPoliciesMapForUser retrieves a map of policies for the provided IAM
+// username where the key is the name of the policy and the value is the actual
+// json policy document
 func GetUserPoliciesMapForUser(username *string) map[string]string {
 	svc := IAMSession()
 	result := make(map[string]string)
@@ -60,6 +65,9 @@ func GetUserPoliciesMapForUser(username *string) map[string]string {
 	return result
 }
 
+// GetGroupPoliciesMapForGroup retrieves a map of policies for the provided IAM
+// groupname where the key is the name of the policy and the value is the actual
+// json policy document
 func GetGroupPoliciesMapForGroup(groupname *string) map[string]string {
 	svc := IAMSession()
 	result := make(map[string]string)
@@ -90,6 +98,9 @@ func GetGroupPoliciesMapForGroup(groupname *string) map[string]string {
 	return result
 }
 
+// GetGroupPoliciesMapForGroups retrieves all of the policies for the provided
+// slice of groups, where the key is the name of the policy and the value is the
+// json policy document
 func GetGroupPoliciesMapForGroups(groups []string) map[string]string {
 	result := make(map[string]string)
 	for _, group := range groups {
@@ -101,6 +112,9 @@ func GetGroupPoliciesMapForGroups(groups []string) map[string]string {
 	return result
 }
 
+// GetAttachedPoliciesMapForUser retrieves a map of attached policies for the
+// provided IAM username where the key is the name of the policy and the value
+// is the actual json policy document
 func GetAttachedPoliciesMapForUser(username *string) map[string]string {
 	svc := IAMSession()
 	result := make(map[string]string)
@@ -138,6 +152,9 @@ func GetAttachedPoliciesMapForUser(username *string) map[string]string {
 	return result
 }
 
+// GetAttachedPoliciesMapForGroup retrieves a map of attached policies for the
+// provided IAM groupname where the key is the name of the policy and the value
+// is the actual json policy document
 func GetAttachedPoliciesMapForGroup(groupname *string) map[string]string {
 	svc := IAMSession()
 	result := make(map[string]string)
@@ -175,6 +192,9 @@ func GetAttachedPoliciesMapForGroup(groupname *string) map[string]string {
 	return result
 }
 
+// GetAttachedPoliciesMapForGroups retrieves a map of attached policies for the
+// slice of IAM groupnames where the key is the name of the policy and the value
+// is the actual json policy document
 func GetAttachedPoliciesMapForGroups(groups []string) map[string]string {
 	result := make(map[string]string)
 	for _, group := range groups {
@@ -186,6 +206,8 @@ func GetAttachedPoliciesMapForGroups(groups []string) map[string]string {
 	return result
 }
 
+// GetGroupNameSliceForUser retrieves a slice of all the groups the provided
+// IAM username belongs to
 func GetGroupNameSliceForUser(username *string) []string {
 	svc := IAMSession()
 	params := &iam.ListGroupsForUserInput{
