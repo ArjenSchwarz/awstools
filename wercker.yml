@@ -38,7 +38,7 @@ build:
           zip -j dist/awstools_windows_amd64.zip $WERCKER_OUTPUT_DIR/pkg/windows_amd64/awstools.exe
           zip -j dist/awstools_windows_386.zip $WERCKER_OUTPUT_DIR/pkg/windows_386/awstools.exe
           tar czf dist/awstools_linux_amd64.tgz -C $WERCKER_OUTPUT_DIR/pkg/linux_amd64 awstools
-          tar czf dist/awstools_linux_386.tgz -C $WERCKER_OUTPUT_DIR/pkg/linux_386 aqua
+          tar czf dist/awstools_linux_386.tgz -C $WERCKER_OUTPUT_DIR/pkg/linux_386 awstools
           cp -R dist $WERCKER_OUTPUT_DIR
 
 deploy:
