@@ -2,11 +2,8 @@ package helpers
 
 import (
 	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/autoscaling"
 	"github.com/aws/aws-sdk-go/service/ec2"
-	"github.com/aws/aws-sdk-go/service/elb"
 )
 
 var ec2Session = ec2.New(session.New())
@@ -40,6 +37,7 @@ func GetEc2Name(ec2name *string) string {
 	return ""
 }
 
+// GetAllSecurityGroups returns a list of all securitygroups in the region
 func GetAllSecurityGroups() []*ec2.SecurityGroup {
 	svc := Ec2Session()
 	resp, err := svc.DescribeSecurityGroups(&ec2.DescribeSecurityGroupsInput{})
@@ -50,13 +48,14 @@ func GetAllSecurityGroups() []*ec2.SecurityGroup {
 	return resp.SecurityGroups
 }
 
-func GetEc2BySecurityGroup(securitygroupId *string) []*ec2.Reservation {
+// GetEc2BySecurityGroup retrieves all instances attached to a securitygroup
+func GetEc2BySecurityGroup(securitygroupID *string) []*ec2.Reservation {
 	svc := Ec2Session()
 	input := &ec2.DescribeInstancesInput{
 		Filters: []*ec2.Filter{
 			{
 				Name:   aws.String("instance.group-id"),
-				Values: []*string{securitygroupId},
+				Values: []*string{securitygroupID},
 			},
 		},
 	}
@@ -68,6 +67,7 @@ func GetEc2BySecurityGroup(securitygroupId *string) []*ec2.Reservation {
 	return resp.Reservations
 }
 
+// GetAllEc2Instances retrieves all EC2 instances
 func GetAllEc2Instances() []*ec2.Reservation {
 	svc := Ec2Session()
 	resp, err := svc.DescribeInstances(&ec2.DescribeInstancesInput{})
@@ -78,6 +78,9 @@ func GetAllEc2Instances() []*ec2.Reservation {
 	return resp.Reservations
 }
 
+// IsLatestInstanceFamily checks if an instance is part of the la
+// test family is running in the latest instance family.
+// TODO: Automate this to work properly
 func IsLatestInstanceFamily(instanceFamily string) bool {
 	family := instanceFamily[0:1]
 	version := instanceFamily[1:]
@@ -105,103 +108,4 @@ func IsLatestInstanceFamily(instanceFamily string) bool {
 	default:
 		return false
 	}
-}
-
-func GetMagneticVolumes() []*ec2.Volume {
-	svc := Ec2Session()
-	input := &ec2.DescribeVolumesInput{
-		Filters: []*ec2.Filter{
-			{
-				Name:   aws.String("volume-type"),
-				Values: []*string{aws.String("st1"), aws.String("sc1"), aws.String("standard")},
-			},
-		},
-	}
-
-	result, err := svc.DescribeVolumes(input)
-	if err != nil {
-		panic(err)
-	}
-	return result.Volumes
-}
-
-func GetUnattachedVolumes() []*ec2.Volume {
-	svc := Ec2Session()
-	input := &ec2.DescribeVolumesInput{
-		Filters: []*ec2.Filter{
-			{
-				Name:   aws.String("status"),
-				Values: []*string{aws.String("available")},
-			},
-		},
-	}
-
-	result, err := svc.DescribeVolumes(input)
-	if err != nil {
-		panic(err)
-	}
-	return result.Volumes
-}
-
-func GetAllASGs() []*autoscaling.Group {
-	svc := autoscaling.New(session.New())
-	result, err := svc.DescribeAutoScalingGroups(&autoscaling.DescribeAutoScalingGroupsInput{})
-	if err != nil {
-		panic(err)
-	}
-	return result.AutoScalingGroups
-}
-
-func GetAllELBs() []*elb.LoadBalancerDescription {
-	svc := elb.New(session.New())
-	result, err := svc.DescribeLoadBalancers(&elb.DescribeLoadBalancersInput{})
-	if err != nil {
-		panic(err)
-	}
-	return result.LoadBalancerDescriptions
-}
-
-func GetNrOfUnhealthyELBInstances(elbname *string) int {
-	svc := elb.New(session.New())
-	input := &elb.DescribeInstanceHealthInput{
-		LoadBalancerName: elbname,
-	}
-	unhealthy := 0
-	result, err := svc.DescribeInstanceHealth(input)
-	if err != nil {
-		panic(err)
-	}
-	for _, status := range result.InstanceStates {
-		if aws.StringValue(status.State) == "OutOfService" {
-			unhealthy++
-		}
-	}
-	return unhealthy
-}
-
-func GetELBsByName(elbnames []*string) ([]*elb.LoadBalancerDescription, error) {
-	svc := elb.New(session.New())
-	result, err := svc.DescribeLoadBalancers(&elb.DescribeLoadBalancersInput{
-		LoadBalancerNames: elbnames,
-	})
-	if err != nil {
-		return nil, err
-	}
-	return result.LoadBalancerDescriptions, nil
-}
-
-func DoesELBExist(elbname string) bool {
-	var search []*string
-	search = append(search, &elbname)
-	_, err := GetELBsByName(search)
-	if err != nil {
-		if aerr, ok := err.(awserr.Error); ok {
-			switch aerr.Code() {
-			case elb.ErrCodeAccessPointNotFoundException:
-				return false
-			}
-		}
-		panic(err)
-	}
-	return true
 }

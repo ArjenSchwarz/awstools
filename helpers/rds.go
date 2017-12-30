@@ -30,29 +30,3 @@ func GetRDSName(rdsname *string) string {
 	}
 	return ""
 }
-
-func GetRDSBySecurityGroup(securityGroupId *string) []*rds.DBInstance {
-	var result []*rds.DBInstance
-	svc := RDSSession()
-	resp, err := svc.DescribeDBInstances(&rds.DescribeDBInstancesInput{})
-	if err != nil {
-		panic(err)
-	}
-	for _, instance := range resp.DBInstances {
-		for _, vpcsecgroup := range instance.VpcSecurityGroups {
-			if aws.StringValue(vpcsecgroup.Status) == "active" && aws.StringValue(vpcsecgroup.VpcSecurityGroupId) == aws.StringValue(securityGroupId) {
-				result = append(result, instance)
-			}
-		}
-	}
-	return result
-}
-
-func GetAllRDS() []*rds.DBInstance {
-	svc := RDSSession()
-	resp, err := svc.DescribeDBInstances(&rds.DescribeDBInstancesInput{})
-	if err != nil {
-		panic(err)
-	}
-	return resp.DBInstances
-}

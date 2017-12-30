@@ -3,10 +3,7 @@ package helpers
 import (
 	"fmt"
 	"net/url"
-	"strings"
-	"time"
 
-	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/iam"
@@ -14,7 +11,8 @@ import (
 
 var iamSession = iam.New(session.New())
 
-type iamUser struct {
+// IAMUser contains information about IAM Users
+type IAMUser struct {
 	Username              string
 	AttachedPolicies      map[string]string
 	InlinePolicies        map[string]string
@@ -242,6 +240,8 @@ func GetGroupNameSliceForUser(username *string) []string {
 	return groups
 }
 
+// GetAccountSummary retrieves the account summary map which contains high level
+// information about the root account
 func GetAccountSummary() (map[string]*int64, error) {
 	svc := IAMSession()
 	input := &iam.GetAccountSummaryInput{}
@@ -264,43 +264,19 @@ func GetAccountSummary() (map[string]*int64, error) {
 	return result.SummaryMap, nil
 }
 
-func GetAccountPasswordPolicy() (*iam.PasswordPolicy, error) {
-	svc := IAMSession()
-	input := &iam.GetAccountPasswordPolicyInput{}
-
-	result, err := svc.GetAccountPasswordPolicy(input)
-	if err != nil {
-		if aerr, ok := err.(awserr.Error); ok {
-			switch aerr.Code() {
-			case iam.ErrCodeNoSuchEntityException:
-				fmt.Println(iam.ErrCodeNoSuchEntityException, aerr.Error())
-				return nil, aerr
-			case iam.ErrCodeServiceFailureException:
-				fmt.Println(iam.ErrCodeServiceFailureException, aerr.Error())
-				panic(aerr)
-			default:
-				fmt.Println(aerr.Error())
-				panic(aerr)
-			}
-		} else {
-			fmt.Println(err.Error())
-			panic(err)
-		}
-	}
-	return result.PasswordPolicy, nil
-}
-
-func GetUserDetails() []iamUser {
+// GetUserDetails collects detailed information about a user, consisting mostly
+// of the groups and policies it follows.
+func GetUserDetails() []IAMUser {
 	svc := IAMSession()
 	resp, err := svc.ListUsers(&iam.ListUsersInput{})
 	if err != nil {
 		panic(err)
 	}
-	c := make(chan iamUser)
-	userlist := make([]iamUser, len(resp.Users))
+	c := make(chan IAMUser)
+	userlist := make([]IAMUser, len(resp.Users))
 	for _, user := range resp.Users {
 		go func(user *iam.User) {
-			userStruct := iamUser{
+			userStruct := IAMUser{
 				Username: *user.UserName,
 				User:     user,
 			}
@@ -319,7 +295,8 @@ func GetUserDetails() []iamUser {
 
 }
 
-func (user iamUser) GetAllPolicies() map[string]string {
+// GetAllPolicies retrieves a map of all the users policies
+func (user IAMUser) GetAllPolicies() map[string]string {
 	result := make(map[string]string)
 	for k, v := range user.InlinePolicies {
 		result[k] = v
@@ -334,114 +311,4 @@ func (user iamUser) GetAllPolicies() map[string]string {
 		result[k] = v
 	}
 	return result
-}
-
-func GetAllMFAs() []*iam.VirtualMFADevice {
-	svc := IAMSession()
-	input := &iam.ListVirtualMFADevicesInput{}
-
-	result, err := svc.ListVirtualMFADevices(input)
-	if err != nil {
-		panic(err)
-	}
-	return result.VirtualMFADevices
-}
-
-func (user iamUser) HasMFA() bool {
-	mfas := GetAllMFAs()
-	for _, mfa := range mfas {
-		if aws.StringValue(mfa.User.UserName) == user.Username &&
-			!strings.Contains(aws.StringValue(mfa.SerialNumber), "root-account-mfa-device") {
-			return true
-		}
-	}
-	return false
-}
-
-func (user iamUser) HasPassword() bool {
-	if user.User.PasswordLastUsed != nil {
-		return true
-	}
-	return false
-}
-
-func (user iamUser) GetAccessKeys() []*iam.AccessKeyMetadata {
-	svc := IAMSession()
-	input := &iam.ListAccessKeysInput{
-		UserName: aws.String(user.Username),
-	}
-
-	result, err := svc.ListAccessKeys(input)
-	if err != nil {
-		panic(err)
-	}
-
-	return result.AccessKeyMetadata
-}
-
-func (user iamUser) HasOldAccessKeys() bool {
-	for _, key := range user.GetAccessKeys() {
-		sinceTime := time.Since(aws.TimeValue(key.CreateDate))
-		if sinceTime.Hours() > 8760 {
-			return true
-		}
-	}
-	return false
-}
-
-func (user iamUser) HasAdminAccess() bool {
-	policies := user.GetAllPolicies()
-	for policyname := range policies {
-		if policyname == "AdministratorAccess" {
-			return true
-		}
-	}
-	return false
-}
-
-func (user iamUser) NeverActive() bool {
-	svc := IAMSession()
-	if user.User.PasswordLastUsed != nil {
-		return false
-	}
-	for _, key := range user.GetAccessKeys() {
-		keyusage, err := svc.GetAccessKeyLastUsed(&iam.GetAccessKeyLastUsedInput{
-			AccessKeyId: key.AccessKeyId,
-		})
-		if err != nil {
-			panic(err)
-		}
-		if keyusage.AccessKeyLastUsed != nil && keyusage.AccessKeyLastUsed.LastUsedDate != nil {
-			return false
-		}
-	}
-	return true
-}
-
-func (user iamUser) IsInactive() bool {
-	// time since last login = 6 months = 180 * 24 hours
-	comparisonHours := float64(4320)
-	svc := IAMSession()
-	if user.User.PasswordLastUsed != nil {
-		sinceTime := time.Since(aws.TimeValue(user.User.PasswordLastUsed))
-		if sinceTime.Hours() < comparisonHours {
-			return false
-		}
-	}
-
-	for _, key := range user.GetAccessKeys() {
-		keyusage, err := svc.GetAccessKeyLastUsed(&iam.GetAccessKeyLastUsedInput{
-			AccessKeyId: key.AccessKeyId,
-		})
-		if err != nil {
-			panic(err)
-		}
-		if keyusage.AccessKeyLastUsed != nil && keyusage.AccessKeyLastUsed.LastUsedDate != nil {
-			sinceTime := time.Since(aws.TimeValue(keyusage.AccessKeyLastUsed.LastUsedDate))
-			if sinceTime.Hours() < comparisonHours {
-				return false
-			}
-		}
-	}
-	return true
 }
