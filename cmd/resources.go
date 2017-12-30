@@ -1,9 +1,10 @@
 package cmd
 
 import (
+	"github.com/ArjenSchwarz/awstools/config"
 	"github.com/ArjenSchwarz/awstools/helpers"
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/service/cloudformation"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	"github.com/spf13/cobra"
 )
 
@@ -33,17 +34,17 @@ func init() {
 }
 
 func listResources(cmd *cobra.Command, args []string) {
-	unparsedResources := helpers.GetNestedCloudFormationResources(stackname)
+	unparsedResources := helpers.GetNestedCloudFormationResources(stackname, config.DefaultAwsConfig())
 	resources := make([]cfnResource, len(unparsedResources))
 
 	c := make(chan cfnResource)
 	for _, unparsedResource := range unparsedResources {
-		go func(resource *cloudformation.StackResource) {
+		go func(resource cloudformation.StackResource) {
 			resourceStruct := cfnResource{
 				ResourceID:   aws.StringValue(resource.PhysicalResourceId),
 				Type:         aws.StringValue(resource.ResourceType),
 				Stack:        aws.StringValue(resource.StackName),
-				Status:       aws.StringValue(resource.ResourceStatus),
+				Status:       string(resource.ResourceStatus),
 				LogicalName:  aws.StringValue(resource.LogicalResourceId),
 				ResourceName: aws.StringValue(resource.PhysicalResourceId),
 			}

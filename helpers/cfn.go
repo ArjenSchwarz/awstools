@@ -1,44 +1,35 @@
 package helpers
 
 import (
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/cloudformation"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 )
 
-var cfnSession = cloudformation.New(session.New())
-
-// CfnSession returns a shared CfnSession
-func CfnSession() *cloudformation.CloudFormation {
-	return cfnSession
-}
-
 // GetResourcesByStackName returns a slice of the Stack Resources in the provided stack
-func GetResourcesByStackName(stackname *string) []*cloudformation.StackResource {
-	svc := CfnSession()
+func GetResourcesByStackName(stackname *string, config aws.Config) []cloudformation.StackResource {
+	svc := cloudformation.New(config)
 
 	params := &cloudformation.DescribeStackResourcesInput{
 		StackName: stackname,
 	}
-	resp, err := svc.DescribeStackResources(params)
-
+	req := svc.DescribeStackResourcesRequest(params)
+	resp, err := req.Send()
 	if err != nil {
 		panic(err)
 	}
 
-	// Pretty-print the response data.
 	return resp.StackResources
 }
 
 // GetNestedCloudFormationResources retrieves a slice of the Stack Resources that
 // are in the provided stack or in one of its children
-func GetNestedCloudFormationResources(stackname *string) []*cloudformation.StackResource {
-	resources := GetResourcesByStackName(stackname)
-	result := make([]*cloudformation.StackResource, 0, len(resources))
+func GetNestedCloudFormationResources(stackname *string, config aws.Config) []cloudformation.StackResource {
+	resources := GetResourcesByStackName(stackname, config)
+	result := make([]cloudformation.StackResource, 0, len(resources))
 	for _, resource := range resources {
 		result = append(result, resource)
 		if aws.StringValue(resource.ResourceType) == "AWS::CloudFormation::Stack" {
-			for _, subresource := range GetNestedCloudFormationResources(resource.PhysicalResourceId) {
+			for _, subresource := range GetNestedCloudFormationResources(resource.PhysicalResourceId, config) {
 				result = append(result, subresource)
 			}
 		}
