@@ -4,9 +4,10 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/ArjenSchwarz/awstools/config"
 	"github.com/ArjenSchwarz/awstools/helpers"
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/service/ec2"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	"github.com/spf13/cobra"
 )
 
@@ -28,30 +29,16 @@ func init() {
 }
 
 func listRules(cmd *cobra.Command, args []string) {
-	svc := helpers.Ec2Session()
-	params := &ec2.DescribeSecurityGroupsInput{}
-	filters := make([]*ec2.Filter, 1)
-	if *vpc != "" {
-		values := make([]*string, 1)
-		values = append(values, vpc)
-		filter := ec2.Filter{
-			Name:   aws.String("vpc-id"),
-			Values: values,
-		}
-		filters = append(filters, &filter)
+	awsConfig := config.DefaultAwsConfig()
+	var securitygroups []ec2.SecurityGroup
+	if *vpc == "" {
+		securitygroups = helpers.GetAllSecurityGroups(awsConfig)
+	} else {
+		securitygroups = helpers.GetAllSecurityGroupsForVPC(*vpc, awsConfig)
 	}
-	params.SetFilters(filters)
-	// if *groupname != "" {
-	// 	groupnames := make([]*string, 1)
-	// 	groupnames = append(groupnames, groupname)
-	// 	params.GroupNames = groupnames
-	// }
-	resp, err := svc.DescribeSecurityGroups(params)
-	if err != nil {
-		panic(err)
-	}
-	rules := make([]sgRule, len(resp.SecurityGroups))
-	for _, group := range resp.SecurityGroups {
+
+	rules := make([]sgRule, len(securitygroups))
+	for _, group := range securitygroups {
 		for _, permission := range group.IpPermissions {
 			for _, ip := range permission.IpRanges {
 				if aws.StringValue(ip.CidrIp) == "" {

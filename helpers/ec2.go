@@ -1,31 +1,18 @@
 package helpers
 
 import (
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/ec2"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/ec2"
 )
 
-var ec2Session = ec2.New(session.New())
-
-// Ec2Session returns a shared Ec2Session
-func Ec2Session() *ec2.EC2 {
-	return ec2Session
-}
-
 // GetEc2Name returns the name of the provided EC2 Resource
-func GetEc2Name(ec2name *string) string {
-	svc := Ec2Session()
+func GetEc2Name(ec2name string, config aws.Config) string {
 	params := &ec2.DescribeInstancesInput{
-		InstanceIds: []*string{ec2name},
+		InstanceIds: []string{ec2name},
 	}
-	resp, err := svc.DescribeInstances(params)
+	reservations := describeInstances(params, config)
 
-	if err != nil {
-		panic(err)
-	}
-
-	for _, reservation := range resp.Reservations {
+	for _, reservation := range reservations {
 		for _, instance := range reservation.Instances {
 			for _, tag := range instance.Tags {
 				if aws.StringValue(tag.Key) == "Name" {
@@ -38,9 +25,31 @@ func GetEc2Name(ec2name *string) string {
 }
 
 // GetAllSecurityGroups returns a list of all securitygroups in the region
-func GetAllSecurityGroups() []*ec2.SecurityGroup {
-	svc := Ec2Session()
-	resp, err := svc.DescribeSecurityGroups(&ec2.DescribeSecurityGroupsInput{})
+func GetAllSecurityGroups(config aws.Config) []ec2.SecurityGroup {
+	svc := ec2.New(config)
+	req := svc.DescribeSecurityGroupsRequest(&ec2.DescribeSecurityGroupsInput{})
+	resp, err := req.Send()
+	if err != nil {
+		panic(err)
+	}
+
+	return resp.SecurityGroups
+}
+
+// GetAllSecurityGroupsForVPC returns a list of all securitygroups for the provided VPC
+func GetAllSecurityGroupsForVPC(vpc string, config aws.Config) []ec2.SecurityGroup {
+	svc := ec2.New(config)
+	params := &ec2.DescribeSecurityGroupsInput{
+		Filters: []ec2.Filter{
+			{
+				Name:   aws.String("vpc-id"),
+				Values: []string{vpc},
+			},
+		},
+	}
+
+	req := svc.DescribeSecurityGroupsRequest(params)
+	resp, err := req.Send()
 	if err != nil {
 		panic(err)
 	}
@@ -49,33 +58,21 @@ func GetAllSecurityGroups() []*ec2.SecurityGroup {
 }
 
 // GetEc2BySecurityGroup retrieves all instances attached to a securitygroup
-func GetEc2BySecurityGroup(securitygroupID *string) []*ec2.Reservation {
-	svc := Ec2Session()
-	input := &ec2.DescribeInstancesInput{
-		Filters: []*ec2.Filter{
+func GetEc2BySecurityGroup(securitygroupID string, config aws.Config) []ec2.RunInstancesOutput {
+	params := &ec2.DescribeInstancesInput{
+		Filters: []ec2.Filter{
 			{
 				Name:   aws.String("instance.group-id"),
-				Values: []*string{securitygroupID},
+				Values: []string{securitygroupID},
 			},
 		},
 	}
-	resp, err := svc.DescribeInstances(input)
-	if err != nil {
-		panic(err)
-	}
-
-	return resp.Reservations
+	return describeInstances(params, config)
 }
 
 // GetAllEc2Instances retrieves all EC2 instances
-func GetAllEc2Instances() []*ec2.Reservation {
-	svc := Ec2Session()
-	resp, err := svc.DescribeInstances(&ec2.DescribeInstancesInput{})
-	if err != nil {
-		panic(err)
-	}
-
-	return resp.Reservations
+func GetAllEc2Instances(config aws.Config) []ec2.RunInstancesOutput {
+	return describeInstances(&ec2.DescribeInstancesInput{}, config)
 }
 
 // IsLatestInstanceFamily checks if an instance is part of the la
@@ -108,4 +105,15 @@ func IsLatestInstanceFamily(instanceFamily string) bool {
 	default:
 		return false
 	}
+}
+
+func describeInstances(params *ec2.DescribeInstancesInput, config aws.Config) []ec2.RunInstancesOutput {
+	svc := ec2.New(config)
+	req := svc.DescribeInstancesRequest(params)
+	resp, err := req.Send()
+	if err != nil {
+		panic(err)
+	}
+
+	return resp.Reservations
 }
