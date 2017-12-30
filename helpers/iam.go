@@ -4,12 +4,10 @@ import (
 	"fmt"
 	"net/url"
 
-	"github.com/aws/aws-sdk-go/aws/awserr"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/iam"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/aws/awserr"
+	"github.com/aws/aws-sdk-go-v2/service/iam"
 )
-
-var iamSession = iam.New(session.New())
 
 // IAMUser contains information about IAM Users
 type IAMUser struct {
@@ -22,20 +20,16 @@ type IAMUser struct {
 	User                  *iam.User
 }
 
-// IAMSession returns a shared IAMSession
-func IAMSession() *iam.IAM {
-	return iamSession
-}
-
 // GetPoliciesMap retrieves a map of policies with the policy name as the key
 // and the actual policy object as the value
-func GetPoliciesMap() map[string]*iam.Policy {
-	svc := IAMSession()
+func GetPoliciesMap(config aws.Config) map[string]iam.Policy {
+	svc := iam.New(config)
 
-	result := make(map[string]*iam.Policy)
+	result := make(map[string]iam.Policy)
 
 	params := &iam.ListPoliciesInput{}
-	resp, err := svc.ListPolicies(params)
+	req := svc.ListPoliciesRequest(params)
+	resp, err := req.Send()
 	if err != nil {
 		panic(err)
 	}
@@ -48,23 +42,25 @@ func GetPoliciesMap() map[string]*iam.Policy {
 // GetUserPoliciesMapForUser retrieves a map of policies for the provided IAM
 // username where the key is the name of the policy and the value is the actual
 // json policy document
-func GetUserPoliciesMapForUser(username *string) map[string]string {
-	svc := IAMSession()
+func GetUserPoliciesMapForUser(username *string, config aws.Config) map[string]string {
+	svc := iam.New(config)
 	result := make(map[string]string)
 	params := &iam.ListUserPoliciesInput{
 		UserName: username,
 	}
-	resp, err := svc.ListUserPolicies(params)
+	req := svc.ListUserPoliciesRequest(params)
+	resp, err := req.Send()
 	if err != nil {
 		panic(err)
 	}
 	if len(resp.PolicyNames) > 0 {
 		for _, policyname := range resp.PolicyNames {
 			params := &iam.GetUserPolicyInput{
-				PolicyName: policyname,
+				PolicyName: &policyname,
 				UserName:   username,
 			}
-			resp, err := svc.GetUserPolicy(params)
+			req := svc.GetUserPolicyRequest(params)
+			resp, err := req.Send()
 			if err != nil {
 				panic(err)
 			}
@@ -72,7 +68,7 @@ func GetUserPoliciesMapForUser(username *string) map[string]string {
 			if err != nil {
 				panic(err)
 			}
-			result[*policyname] = policyDocument
+			result[policyname] = policyDocument
 		}
 	}
 	return result
@@ -81,23 +77,25 @@ func GetUserPoliciesMapForUser(username *string) map[string]string {
 // GetGroupPoliciesMapForGroup retrieves a map of policies for the provided IAM
 // groupname where the key is the name of the policy and the value is the actual
 // json policy document
-func GetGroupPoliciesMapForGroup(groupname *string) map[string]string {
-	svc := IAMSession()
+func GetGroupPoliciesMapForGroup(groupname *string, config aws.Config) map[string]string {
+	svc := iam.New(config)
 	result := make(map[string]string)
 	params := &iam.ListGroupPoliciesInput{
 		GroupName: groupname,
 	}
-	resp, err := svc.ListGroupPolicies(params)
+	req := svc.ListGroupPoliciesRequest(params)
+	resp, err := req.Send()
 	if err != nil {
 		panic(err)
 	}
 	if len(resp.PolicyNames) > 0 {
 		for _, policyname := range resp.PolicyNames {
 			params := &iam.GetGroupPolicyInput{
-				PolicyName: policyname,
+				PolicyName: &policyname,
 				GroupName:  groupname,
 			}
-			resp, err := svc.GetGroupPolicy(params)
+			req := svc.GetGroupPolicyRequest(params)
+			resp, err := req.Send()
 			if err != nil {
 				panic(err)
 			}
@@ -105,7 +103,7 @@ func GetGroupPoliciesMapForGroup(groupname *string) map[string]string {
 			if err != nil {
 				panic(err)
 			}
-			result[*policyname] = policyDocument
+			result[policyname] = policyDocument
 		}
 	}
 	return result
@@ -114,10 +112,10 @@ func GetGroupPoliciesMapForGroup(groupname *string) map[string]string {
 // GetGroupPoliciesMapForGroups retrieves all of the policies for the provided
 // slice of groups, where the key is the name of the policy and the value is the
 // json policy document
-func GetGroupPoliciesMapForGroups(groups []string) map[string]string {
+func GetGroupPoliciesMapForGroups(groups []string, config aws.Config) map[string]string {
 	result := make(map[string]string)
 	for _, group := range groups {
-		groupmap := GetGroupPoliciesMapForGroup(&group)
+		groupmap := GetGroupPoliciesMapForGroup(&group, config)
 		for k, v := range groupmap {
 			result[k] = v
 		}
@@ -128,13 +126,14 @@ func GetGroupPoliciesMapForGroups(groups []string) map[string]string {
 // GetAttachedPoliciesMapForUser retrieves a map of attached policies for the
 // provided IAM username where the key is the name of the policy and the value
 // is the actual json policy document
-func GetAttachedPoliciesMapForUser(username *string) map[string]string {
-	svc := IAMSession()
+func GetAttachedPoliciesMapForUser(username *string, config aws.Config) map[string]string {
+	svc := iam.New(config)
 	result := make(map[string]string)
 	params := &iam.ListAttachedUserPoliciesInput{
 		UserName: username,
 	}
-	resp, err := svc.ListAttachedUserPolicies(params)
+	req := svc.ListAttachedUserPoliciesRequest(params)
+	resp, err := req.Send()
 	if err != nil {
 		panic(err)
 	}
@@ -143,7 +142,8 @@ func GetAttachedPoliciesMapForUser(username *string) map[string]string {
 			params := &iam.GetPolicyInput{
 				PolicyArn: policy.PolicyArn,
 			}
-			resp, err := svc.GetPolicy(params)
+			req := svc.GetPolicyRequest(params)
+			resp, err := req.Send()
 			if err != nil {
 				panic(err)
 			}
@@ -151,7 +151,8 @@ func GetAttachedPoliciesMapForUser(username *string) map[string]string {
 				PolicyArn: policy.PolicyArn,             // Required
 				VersionId: resp.Policy.DefaultVersionId, // Required
 			}
-			resp2, err := svc.GetPolicyVersion(params2)
+			req2 := svc.GetPolicyVersionRequest(params2)
+			resp2, err := req2.Send()
 			if err != nil {
 				panic(err)
 			}
@@ -168,13 +169,14 @@ func GetAttachedPoliciesMapForUser(username *string) map[string]string {
 // GetAttachedPoliciesMapForGroup retrieves a map of attached policies for the
 // provided IAM groupname where the key is the name of the policy and the value
 // is the actual json policy document
-func GetAttachedPoliciesMapForGroup(groupname *string) map[string]string {
-	svc := IAMSession()
+func GetAttachedPoliciesMapForGroup(groupname *string, config aws.Config) map[string]string {
+	svc := iam.New(config)
 	result := make(map[string]string)
 	params := &iam.ListAttachedGroupPoliciesInput{
 		GroupName: groupname,
 	}
-	resp, err := svc.ListAttachedGroupPolicies(params)
+	req := svc.ListAttachedGroupPoliciesRequest(params)
+	resp, err := req.Send()
 	if err != nil {
 		panic(err)
 	}
@@ -183,7 +185,8 @@ func GetAttachedPoliciesMapForGroup(groupname *string) map[string]string {
 			params := &iam.GetPolicyInput{
 				PolicyArn: policy.PolicyArn,
 			}
-			resp, err := svc.GetPolicy(params)
+			req := svc.GetPolicyRequest(params)
+			resp, err := req.Send()
 			if err != nil {
 				panic(err)
 			}
@@ -191,7 +194,8 @@ func GetAttachedPoliciesMapForGroup(groupname *string) map[string]string {
 				PolicyArn: policy.PolicyArn,             // Required
 				VersionId: resp.Policy.DefaultVersionId, // Required
 			}
-			resp2, err := svc.GetPolicyVersion(params2)
+			req2 := svc.GetPolicyVersionRequest(params2)
+			resp2, err := req2.Send()
 			if err != nil {
 				panic(err)
 			}
@@ -208,10 +212,10 @@ func GetAttachedPoliciesMapForGroup(groupname *string) map[string]string {
 // GetAttachedPoliciesMapForGroups retrieves a map of attached policies for the
 // slice of IAM groupnames where the key is the name of the policy and the value
 // is the actual json policy document
-func GetAttachedPoliciesMapForGroups(groups []string) map[string]string {
+func GetAttachedPoliciesMapForGroups(groups []string, config aws.Config) map[string]string {
 	result := make(map[string]string)
 	for _, group := range groups {
-		groupmap := GetAttachedPoliciesMapForGroup(&group)
+		groupmap := GetAttachedPoliciesMapForGroup(&group, config)
 		for k, v := range groupmap {
 			result[k] = v
 		}
@@ -221,12 +225,13 @@ func GetAttachedPoliciesMapForGroups(groups []string) map[string]string {
 
 // GetGroupNameSliceForUser retrieves a slice of all the groups the provided
 // IAM username belongs to
-func GetGroupNameSliceForUser(username *string) []string {
-	svc := IAMSession()
+func GetGroupNameSliceForUser(username *string, config aws.Config) []string {
+	svc := iam.New(config)
 	params := &iam.ListGroupsForUserInput{
 		UserName: username,
 	}
-	resp, err := svc.ListGroupsForUser(params)
+	req := svc.ListGroupsForUserRequest(params)
+	resp, err := req.Send()
 
 	if err != nil {
 		panic(err)
@@ -242,11 +247,12 @@ func GetGroupNameSliceForUser(username *string) []string {
 
 // GetAccountSummary retrieves the account summary map which contains high level
 // information about the root account
-func GetAccountSummary() (map[string]*int64, error) {
-	svc := IAMSession()
+func GetAccountSummary(config aws.Config) (map[string]int64, error) {
+	svc := iam.New(config)
 	input := &iam.GetAccountSummaryInput{}
 
-	result, err := svc.GetAccountSummary(input)
+	req := svc.GetAccountSummaryRequest(input)
+	resp, err := req.Send()
 	if err != nil {
 		if aerr, ok := err.(awserr.Error); ok {
 			switch aerr.Code() {
@@ -261,30 +267,31 @@ func GetAccountSummary() (map[string]*int64, error) {
 			panic(err)
 		}
 	}
-	return result.SummaryMap, nil
+	return resp.SummaryMap, nil
 }
 
 // GetUserDetails collects detailed information about a user, consisting mostly
 // of the groups and policies it follows.
-func GetUserDetails() []IAMUser {
-	svc := IAMSession()
-	resp, err := svc.ListUsers(&iam.ListUsersInput{})
+func GetUserDetails(config aws.Config) []IAMUser {
+	svc := iam.New(config)
+	req := svc.ListUsersRequest(&iam.ListUsersInput{})
+	resp, err := req.Send()
 	if err != nil {
 		panic(err)
 	}
 	c := make(chan IAMUser)
 	userlist := make([]IAMUser, len(resp.Users))
 	for _, user := range resp.Users {
-		go func(user *iam.User) {
+		go func(user iam.User) {
 			userStruct := IAMUser{
 				Username: *user.UserName,
-				User:     user,
+				User:     &user,
 			}
-			userStruct.Groups = GetGroupNameSliceForUser(user.UserName)
-			userStruct.InlinePolicies = GetUserPoliciesMapForUser(user.UserName)
-			userStruct.AttachedPolicies = GetAttachedPoliciesMapForUser(user.UserName)
-			userStruct.InlineGroupPolicies = GetGroupPoliciesMapForGroups(userStruct.Groups)
-			userStruct.AttachedGroupPolicies = GetAttachedPoliciesMapForGroups(userStruct.Groups)
+			userStruct.Groups = GetGroupNameSliceForUser(user.UserName, config)
+			userStruct.InlinePolicies = GetUserPoliciesMapForUser(user.UserName, config)
+			userStruct.AttachedPolicies = GetAttachedPoliciesMapForUser(user.UserName, config)
+			userStruct.InlineGroupPolicies = GetGroupPoliciesMapForGroups(userStruct.Groups, config)
+			userStruct.AttachedGroupPolicies = GetAttachedPoliciesMapForGroups(userStruct.Groups, config)
 			c <- userStruct
 		}(user)
 	}

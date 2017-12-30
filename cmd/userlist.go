@@ -3,6 +3,7 @@ package cmd
 import (
 	"strings"
 
+	"github.com/ArjenSchwarz/awstools/config"
 	"github.com/ArjenSchwarz/awstools/helpers"
 	"github.com/spf13/cobra"
 )
@@ -18,7 +19,7 @@ The verbose option will add the details of the policies to the output.`,
 }
 
 func detailUsers(cmd *cobra.Command, args []string) {
-	userlist := helpers.GetUserDetails()
+	userlist := helpers.GetUserDetails(config.DefaultAwsConfig())
 
 	keys := []string{"User", "Groups", "Policy Names"}
 	if *settings.Verbose {
