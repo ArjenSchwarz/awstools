@@ -2,15 +2,6 @@ package cmd
 
 import "github.com/spf13/cobra"
 
-type iamUser struct {
-	Username              string
-	AttachedPolicies      map[string]string
-	InlinePolicies        map[string]string
-	Groups                []string
-	AttachedGroupPolicies map[string]string
-	InlineGroupPolicies   map[string]string
-}
-
 // iamCmd represents the iam command
 var iamCmd = &cobra.Command{
 	Use:   "iam",

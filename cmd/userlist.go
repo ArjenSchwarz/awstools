@@ -4,7 +4,6 @@ import (
 	"strings"
 
 	"github.com/ArjenSchwarz/awstools/helpers"
-	"github.com/aws/aws-sdk-go/service/iam"
 	"github.com/spf13/cobra"
 )
 
@@ -19,29 +18,8 @@ The verbose option will add the details of the policies to the output.`,
 }
 
 func detailUsers(cmd *cobra.Command, args []string) {
-	svc := helpers.IAMSession()
-	resp, err := svc.ListUsers(&iam.ListUsersInput{})
-	if err != nil {
-		panic(err)
-	}
-	c := make(chan iamUser)
-	userlist := make([]iamUser, len(resp.Users))
-	for _, user := range resp.Users {
-		go func(user *iam.User) {
-			userStruct := iamUser{
-				Username: *user.UserName,
-			}
-			userStruct.Groups = helpers.GetGroupNameSliceForUser(user.UserName)
-			userStruct.InlinePolicies = helpers.GetUserPoliciesMapForUser(user.UserName)
-			userStruct.AttachedPolicies = helpers.GetAttachedPoliciesMapForUser(user.UserName)
-			userStruct.InlineGroupPolicies = helpers.GetGroupPoliciesMapForGroups(userStruct.Groups)
-			userStruct.AttachedGroupPolicies = helpers.GetAttachedPoliciesMapForGroups(userStruct.Groups)
-			c <- userStruct
-		}(user)
-	}
-	for i := 0; i < len(resp.Users); i++ {
-		userlist[i] = <-c
-	}
+	userlist := helpers.GetUserDetails()
+
 	keys := []string{"User", "Groups", "Policy Names"}
 	if *settings.Verbose {
 		keys = append(keys, "Policies")
@@ -65,23 +43,6 @@ func detailUsers(cmd *cobra.Command, args []string) {
 		output.AddHolder(holder)
 	}
 	output.Write(*settings)
-}
-
-func (user iamUser) GetAllPolicies() map[string]string {
-	result := make(map[string]string)
-	for k, v := range user.InlinePolicies {
-		result[k] = v
-	}
-	for k, v := range user.AttachedPolicies {
-		result[k] = v
-	}
-	for k, v := range user.InlineGroupPolicies {
-		result[k] = v
-	}
-	for k, v := range user.AttachedGroupPolicies {
-		result[k] = v
-	}
-	return result
 }
 
 func init() {
