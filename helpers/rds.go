@@ -1,25 +1,18 @@
 package helpers
 
 import (
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/rds"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/rds"
 )
 
-var rdsSession = rds.New(session.New())
-
-// RDSSession returns a shared RDSSession
-func RDSSession() *rds.RDS {
-	return rdsSession
-}
-
 // GetRDSName returns the name of the provided RDS Resource
-func GetRDSName(rdsname *string) string {
-	svc := RDSSession()
+func GetRDSName(rdsname *string, config aws.Config) string {
+	svc := rds.New(config)
 	params := &rds.DescribeDBInstancesInput{
 		DBInstanceIdentifier: rdsname,
 	}
-	resp, err := svc.DescribeDBInstances(params)
+	req := svc.DescribeDBInstancesRequest(params)
+	resp, err := req.Send()
 
 	if err != nil {
 		panic(err)

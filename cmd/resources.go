@@ -54,7 +54,7 @@ func listResources(cmd *cobra.Command, args []string) {
 			case "AWS::EC2::Instance":
 				resourceStruct.ResourceName = helpers.GetEc2Name(*resource.PhysicalResourceId, awsConfig)
 			case "AWS::RDS::DBInstance":
-				resourceStruct.ResourceName = helpers.GetRDSName(resource.PhysicalResourceId)
+				resourceStruct.ResourceName = helpers.GetRDSName(resource.PhysicalResourceId, awsConfig)
 
 			}
 			c <- resourceStruct
