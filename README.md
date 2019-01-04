@@ -2,7 +2,7 @@
 
 awstools is a Go application that allows me to more easily do complex actions with AWS data. It doesn't try to replicate things that are already easy to do with the CLI, but instead focuses on more complex actions. This usually involves things that would take multiple CLI calls and a fair bit of scripting or manual work.
 
-# Functionalities
+## Functionalities
 
 Currently built in features:
 
@@ -35,7 +35,7 @@ Use "awstools [command] --help" for more information about a command.
 
 Output options at the moment are either csv or json, with json being the default so you can easily pass it to a tool like [jq](https://stedolan.github.io/jq/). It's also possible to directly save the output into a file. Most commands will have a verbose option that will show some additional information that you often won't need.
 
-# Installation and configuration
+## Installation and configuration
 
 Simply download the [latest release][latest] for your platform, and you can use it. You can place it somewhere in your $PATH to ensure you can run it from anywhere.
 
@@ -47,7 +47,7 @@ The AWS configuration is read from the standard locations:
 
 [latest]: https://github.com/ArjenSchwarz/awstools/releases
 
-# Development
+## Development
 
 awstools uses the Cobra framework for ease of development. While I will usually only build the functionalities that I need at a certain time, feel free to request or add features.
 
