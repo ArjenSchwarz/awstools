@@ -1,5 +1,5 @@
 .PHONY: all
-build: deps test clean compile package
+build: deps test clean compile
 
 .PHONY: deps
 deps:
@@ -17,11 +17,11 @@ clean:
 
 .PHONY: compile
 compile:
-	GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -a -ldflags '-s' -installsuffix cgo -o pkg/linux_amd64/awstools main.go
-	GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -a -ldflags '-s' -installsuffix cgo -o pkg/darwin_amd64/awstools main.go
-	GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -a -ldflags '-s' -installsuffix cgo -o pkg/windows_amd64/awstools.exe main.go
-	GOOS=linux GOARCH=386 CGO_ENABLED=0 go build -a -ldflags '-s' -installsuffix cgo -o pkg/linux_386/awstools main.go
-	GOOS=windows GOARCH=386 CGO_ENABLED=0 go build -a -ldflags '-s' -installsuffix cgo -o pkg/windows_386/awstools.exe main.go
+	GOOS=linux GOARCH=amd64 go build -o pkg/linux_amd64/awstools main.go
+	GOOS=darwin GOARCH=amd64 go build -o pkg/darwin_amd64/awstools main.go
+	GOOS=windows GOARCH=amd64 go build -o pkg/windows_amd64/awstools.exe main.go
+	GOOS=linux GOARCH=386 go build -o pkg/linux_386/awstools main.go
+	GOOS=windows GOARCH=386 go build -o pkg/windows_386/awstools.exe main.go
 
 .PHONY: package
 package:

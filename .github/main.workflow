@@ -9,9 +9,16 @@ action "Build" {
     args = "build"
 }
 
+action "Package" {
+    needs = "Build"
+    uses = "ArjenSchwarz/actions/utils/zip@master"
+    runs = "make"
+    args = "package"
+}
+
 action "Deploy" {
     uses = "ArjenSchwarz/actions/github/release@master"
-    needs = "Build"
+    needs = "Package"
     secrets = ["GITHUB_TOKEN"]
     args = "-delete"
     env = {
