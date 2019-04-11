@@ -31,3 +31,8 @@ package:
 	zip -j dist/awstools_windows_386.zip pkg/windows_386/awstools.exe
 	tar czf dist/awstools_linux_amd64.tgz -C pkg/linux_amd64 awstools
 	tar czf dist/awstools_linux_386.tgz -C pkg/linux_386 awstools
+
+local:
+	golint ./...
+	go test ./...
+	go build
