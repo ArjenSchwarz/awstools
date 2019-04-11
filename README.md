@@ -21,8 +21,11 @@ Usage:
   awstools [command]
 
 Available Commands:
+  appmesh     App Mesh commands
   cfn         CloudFormation commands
+  help        Help about any command
   iam         IAM commands
+  sg          Security Group commands
 
 Flags:
   -f, --file string     Optional file to save the output to
