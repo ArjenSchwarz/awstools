@@ -8,6 +8,8 @@ Currently built in features:
 
 * Get a list of all IAM users, their groups, and the policies active upon them
 * Get a list of all the resources in a CloudFormation stack, including those from nested stacks
+* Get an overview of the security groups in your account
+* Find dangling nodes, see the routes, or get a graphical overview of your mesh from App Mesh
 
 Run the application without any commands to get an overview, as shown below. For more details you can then run `awstools [command] --help`, which also works with subcommands such as `awstools cfn resources --help`.
 
@@ -21,8 +23,11 @@ Usage:
   awstools [command]
 
 Available Commands:
+  appmesh     App Mesh commands
   cfn         CloudFormation commands
+  help        Help about any command
   iam         IAM commands
+  sg          Security Group commands
 
 Flags:
   -f, --file string     Optional file to save the output to

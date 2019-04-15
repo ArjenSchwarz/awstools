@@ -16,13 +16,18 @@ action "Package" {
     args = "package"
 }
 
+action "ProdFilter" {
+  uses = "actions/bin/filter@707718ee26483624de00bd146e073d915139a3d8"
+  needs = ["Package"]
+  args = "branch master"
+}
+
 action "Deploy" {
     uses = "ArjenSchwarz/actions/github/release@master"
-    needs = "Package"
+    needs = "ProdFilter"
     secrets = ["GITHUB_TOKEN"]
     args = "-delete"
     env = {
-        ONLY_IN_BRANCH="master"
         SOURCE_PATH="dist"
         VERSION="latest"
     }
