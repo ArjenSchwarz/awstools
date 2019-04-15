@@ -61,4 +61,3 @@ If you wish to contribute you can always create Issues or Pull Requests. For Pul
 1. Fork the repository
 2. Make your changes
 3. Make a pull request that explains what it does
-
