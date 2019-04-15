@@ -16,7 +16,7 @@ action "Package" {
     args = "package"
 }
 
-action "ProdFilter" {
+action "Production Filter" {
   uses = "actions/bin/filter@707718ee26483624de00bd146e073d915139a3d8"
   needs = ["Package"]
   args = "branch master"
@@ -24,7 +24,7 @@ action "ProdFilter" {
 
 action "Deploy" {
     uses = "ArjenSchwarz/actions/github/release@master"
-    needs = "ProdFilter"
+    needs = "Production Filter"
     secrets = ["GITHUB_TOKEN"]
     args = "-delete"
     env = {
