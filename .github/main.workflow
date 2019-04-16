@@ -26,7 +26,7 @@ action "Deploy" {
     uses = "ArjenSchwarz/actions/github/release@master"
     needs = "Production Filter"
     secrets = ["GITHUB_TOKEN"]
-    # args = "-delete"
+    args = "-delete"
     env = {
         SOURCE_PATH="dist"
         VERSION="latest"
