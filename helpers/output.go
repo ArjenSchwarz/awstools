@@ -32,15 +32,17 @@ type OutputArray struct {
 func (output OutputArray) Write(settings config.Config) {
 	switch strings.ToLower(*settings.OutputFormat) {
 	case "csv":
-		output.toCSV(*settings.OutputFile)
+		output.toCSV(*settings.OutputFile, "")
 	case "dot":
 		output.toDot(*settings.OutputFile)
+	case "drawio":
+		output.toDrawIO(*settings.OutputFile)
 	default:
 		output.toJSON(*settings.OutputFile)
 	}
 }
 
-func (output OutputArray) toCSV(outputFile string) {
+func (output OutputArray) toCSV(outputFile string, metadata string) {
 	total := [][]string{}
 	total = append(total, output.Keys)
 	for _, holder := range output.Contents {
@@ -63,6 +65,9 @@ func (output OutputArray) toCSV(outputFile string) {
 		defer file.Close()
 		target = bufio.NewWriter(file)
 	}
+	buf := new(bytes.Buffer)
+	fmt.Fprintf(buf, "%s", metadata)
+	buf.WriteTo(target)
 	w := csv.NewWriter(target)
 
 	for _, record := range total {
@@ -148,6 +153,31 @@ func (output OutputArray) toDot(outputFile string) {
 		target = bufio.NewWriter(file)
 	}
 	buf.WriteTo(target)
+}
+
+func (output OutputArray) toDrawIO(outputFile string) {
+	metadata := `# label: %Name%
+# style: %Image%
+# parentstyle: swimlane;whiteSpace=wrap;html=1;childLayout=stackLayout;horizontal=1;horizontalStack=0;resizeParent=1;resizeLast=0;collapsible=1;
+# identity: -
+# parent: -
+# namespace: csvimport-
+# connect: {"from": "Parent", "to": "Name", "invert": true, "label": "", \
+#          "style": "curved=1;endArrow=blockThin;endFill=1;fontSize=11;"}
+# left:
+# top:
+# width: 78
+# height: 78
+# padding: 0
+# ignore: id,Image,fill,stroke
+# link: url
+# nodespacing: 40
+# levelspacing: 100
+# edgespacing: 40
+# layout: auto
+## ---- CSV below this line. First line are column names. ----
+`
+	output.toCSV(outputFile, metadata)
 }
 
 // AddHolder adds the provided OutputHolder to the OutputArray

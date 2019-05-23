@@ -33,7 +33,7 @@ func init() {
 	// cobra.OnInitialize(initConfig)
 	settings.Verbose = RootCmd.PersistentFlags().BoolP("verbose", "v", false, "Give verbose output")
 	settings.OutputFile = RootCmd.PersistentFlags().StringP("file", "f", "", "Optional file to save the output to")
-	settings.OutputFormat = RootCmd.PersistentFlags().StringP("output", "o", "json", "Format for the output, currently supported are csv and json")
+	settings.OutputFormat = RootCmd.PersistentFlags().StringP("output", "o", "json", "Format for the output, currently supported are csv, json, dot, and drawio")
 }
 
 // initConfig reads in config file and ENV variables if set.

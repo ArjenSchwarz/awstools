@@ -22,10 +22,11 @@ func getOrganizationRoot(svc *organizations.Organizations) OrganizationEntry {
 	}
 	rootentry := root.Roots[0]
 	entry := OrganizationEntry{
-		ID:   *rootentry.Id,
-		Arn:  *rootentry.Arn,
-		Name: *rootentry.Name,
-		Type: organizations.TargetTypeRoot,
+		ID:    *rootentry.Id,
+		Arn:   *rootentry.Arn,
+		Name:  *rootentry.Name,
+		Image: drawIOAWSOrganization,
+		Type:  organizations.TargetTypeRoot,
 	}
 	return entry
 }
@@ -43,6 +44,7 @@ type OrganizationEntry struct {
 	Name     string
 	Arn      string
 	Type     string
+	Image    string
 	Children []OrganizationEntry
 }
 
@@ -79,7 +81,7 @@ func (entry *OrganizationEntry) String() string {
 	if entry.Type == organizations.TargetTypeRoot {
 		return entry.Type
 	} else if entry.Type == organizations.TargetTypeOrganizationalUnit {
-		return entry.Type + ": " + entry.Name
+		return entry.Name
 	} else {
 		return entry.Name + " (" + entry.ID + ")"
 	}
@@ -99,6 +101,7 @@ func formatChild(raw organizations.Child, svc *organizations.Organizations) Orga
 			ID:       *details.OrganizationalUnit.Id,
 			Type:     *raw.Type,
 			Arn:      *details.OrganizationalUnit.Arn,
+			Image:    drawIOAWSOrgOU,
 			Children: []OrganizationEntry{},
 		}
 	}
@@ -114,6 +117,7 @@ func formatChild(raw organizations.Child, svc *organizations.Organizations) Orga
 		ID:       *details.Account.Id,
 		Type:     *raw.Type,
 		Arn:      *details.Account.Arn,
+		Image:    drawIOAWSOrgAccount,
 		Children: []OrganizationEntry{},
 	}
 }
