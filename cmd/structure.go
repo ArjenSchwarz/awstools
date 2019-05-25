@@ -3,6 +3,7 @@ package cmd
 import (
 	"strings"
 
+	"github.com/ArjenSchwarz/awstools/drawio"
 	"github.com/ArjenSchwarz/awstools/helpers"
 	"github.com/spf13/cobra"
 )
@@ -58,6 +59,12 @@ func orgstructure(cmd *cobra.Command, args []string) {
 	}
 	if strings.ToLower(*settings.OutputFormat) == "drawio" {
 		*settings.Verbose = true
+		header := ""
+		drawioheader := drawio.DefaultHeader()
+		connection := drawio.NewConnection()
+		drawioheader.AddConnection(connection)
+		header = drawioheader.String()
+		settings.OutputHeaders = &header
 	}
 	svc := helpers.OrganizationsSession()
 	organization := helpers.GetFullOrganization(svc)

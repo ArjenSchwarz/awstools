@@ -3,6 +3,7 @@ package helpers
 import (
 	"fmt"
 
+	"github.com/ArjenSchwarz/awstools/drawio"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/organizations"
@@ -25,7 +26,7 @@ func getOrganizationRoot(svc *organizations.Organizations) OrganizationEntry {
 		ID:    *rootentry.Id,
 		Arn:   *rootentry.Arn,
 		Name:  *rootentry.Name,
-		Image: drawIOAWSOrganization,
+		Image: drawio.ShapeAWSOrganization,
 		Type:  organizations.TargetTypeRoot,
 	}
 	return entry
@@ -101,7 +102,7 @@ func formatChild(raw organizations.Child, svc *organizations.Organizations) Orga
 			ID:       *details.OrganizationalUnit.Id,
 			Type:     *raw.Type,
 			Arn:      *details.OrganizationalUnit.Arn,
-			Image:    drawIOAWSOrgOU,
+			Image:    drawio.ShapeAWSOrgOU,
 			Children: []OrganizationEntry{},
 		}
 	}
@@ -117,7 +118,7 @@ func formatChild(raw organizations.Child, svc *organizations.Organizations) Orga
 		ID:       *details.Account.Id,
 		Type:     *raw.Type,
 		Arn:      *details.Account.Arn,
-		Image:    drawIOAWSOrgAccount,
+		Image:    drawio.ShapeAWSOrgAccount,
 		Children: []OrganizationEntry{},
 	}
 }
