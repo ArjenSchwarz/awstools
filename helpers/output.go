@@ -30,14 +30,11 @@ type OutputArray struct {
 
 // Write will provide the output as configured in the configuration
 func (output OutputArray) Write(settings config.Config) {
-	headers := ""
 	switch strings.ToLower(*settings.OutputFormat) {
 	case "csv":
+		output.toCSV(*settings.OutputFile, "")
 	case "drawio":
-		if settings.OutputHeaders != nil {
-			headers = *settings.OutputHeaders
-		}
-		output.toCSV(*settings.OutputFile, headers)
+		output.toCSV(*settings.OutputFile, *settings.OutputHeaders)
 	case "dot":
 		output.toDot(*settings.OutputFile)
 	default:
