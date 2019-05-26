@@ -36,7 +36,7 @@ func (output OutputArray) Write(settings config.Config) {
 	case "drawio":
 		output.toCSV(*settings.OutputFile, *settings.OutputHeaders)
 	case "dot":
-		output.toDot(*settings.OutputFile)
+		output.toDot(*settings.OutputFile, settings.DotColumns)
 	default:
 		output.toJSON(*settings.OutputFile)
 	}
@@ -111,32 +111,42 @@ func (output OutputArray) toJSON(outputFile string) {
 	buf.WriteTo(target)
 }
 
-func (output OutputArray) toDot(outputFile string) {
-	if len(output.Keys) != 2 {
-		log.Fatal("You can only use DOT format when you only have To and From keys")
+func (output OutputArray) toDot(outputFile string, columns *config.DotColumns) {
+	if columns == nil {
+		log.Fatal("Please set the columns to be used for the dot format")
 	}
-	if !stringInSlice("To", output.Keys) {
-		log.Fatal("You need a To key to use DOT format")
+	type dotholder struct {
+		To   string
+		From string
 	}
-	if !stringInSlice("From", output.Keys) {
-		log.Fatal("You need a From key to use DOT format")
+	// Create new lines using the dotcolumns, splitting up multi values
+	cleanedlist := []dotholder{}
+	for _, holder := range output.Contents {
+		for _, tovalue := range strings.Split(holder.Contents[columns.To], ",") {
+			dothold := dotholder{
+				From: holder.Contents[columns.From],
+				To:   tovalue,
+			}
+			cleanedlist = append(cleanedlist, dothold)
+		}
 	}
+
 	g := dot.NewGraph(dot.Directed)
 
 	nodelist := make(map[string]dot.Node)
 
 	// Step 1: Put all nodes in the list
-	for _, holder := range output.Contents {
-		if _, ok := nodelist[holder.Contents["From"]]; !ok {
-			node := g.Node(holder.Contents["From"])
-			nodelist[holder.Contents["From"]] = node
+	for _, cleaned := range cleanedlist {
+		if _, ok := nodelist[cleaned.From]; !ok {
+			node := g.Node(cleaned.From)
+			nodelist[cleaned.From] = node
 		}
 	}
 
 	// Step 2: Add all the edges/connections
-	for _, holder := range output.Contents {
-		if holder.Contents["To"] != "" {
-			g.Edge(nodelist[holder.Contents["From"]], nodelist[holder.Contents["To"]])
+	for _, cleaned := range cleanedlist {
+		if cleaned.To != "" {
+			g.Edge(nodelist[cleaned.From], nodelist[cleaned.To])
 		}
 	}
 	buf := new(bytes.Buffer)

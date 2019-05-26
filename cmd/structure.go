@@ -3,6 +3,7 @@ package cmd
 import (
 	"strings"
 
+	"github.com/ArjenSchwarz/awstools/config"
 	"github.com/ArjenSchwarz/awstools/drawio"
 	"github.com/ArjenSchwarz/awstools/helpers"
 	"github.com/spf13/cobra"
@@ -26,76 +27,51 @@ func init() {
 	organizationsCmd.AddCommand(structureCmd)
 }
 
-func orgDotstructure(cmd *cobra.Command, args []string) {
-	svc := helpers.OrganizationsSession()
-	organization := helpers.GetFullOrganization(svc)
-	keys := []string{"From", "To"}
-	output := helpers.OutputArray{Keys: keys}
-	traverseOrgDotStructureEntry(organization, &output)
-	output.Write(*settings)
-}
-
-func traverseOrgDotStructureEntry(entry helpers.OrganizationEntry, output *helpers.OutputArray) {
-	for _, child := range entry.Children {
-		content := make(map[string]string)
-		content["From"] = entry.String()
-		content["To"] = child.String()
-		holder := helpers.OutputHolder{Contents: content}
-		output.AddHolder(holder)
-		traverseOrgDotStructureEntry(child, output)
-	}
-	if len(entry.Children) == 0 {
-		content := make(map[string]string)
-		content["From"] = entry.String()
-		holder := helpers.OutputHolder{Contents: content}
-		output.AddHolder(holder)
-	}
-}
-
 func orgstructure(cmd *cobra.Command, args []string) {
-	if strings.ToLower(*settings.OutputFormat) == "dot" {
-		orgDotstructure(cmd, args)
-		return
-	}
-	if strings.ToLower(*settings.OutputFormat) == "drawio" {
+	switch strings.ToLower(*settings.OutputFormat) {
+	case "drawio":
 		*settings.Verbose = true
 		header := ""
 		drawioheader := drawio.DefaultHeader()
 		connection := drawio.NewConnection()
+		connection.Invert = false
+		connection.From = "Children"
+		connection.To = "Name"
 		drawioheader.AddConnection(connection)
 		header = drawioheader.String()
 		settings.OutputHeaders = &header
+	case "dot":
+		dotcolumns := config.DotColumns{
+			From: "Name",
+			To:   "Children",
+		}
+		settings.DotColumns = &dotcolumns
 	}
 	svc := helpers.OrganizationsSession()
 	organization := helpers.GetFullOrganization(svc)
-	keys := []string{"Name", "Type", "Parent"}
+	keys := []string{"Name", "Type", "Children"}
 	if *settings.Verbose {
 		keys = append(keys, "Image")
 	}
 	output := helpers.OutputArray{Keys: keys}
-	content := make(map[string]string)
-	content["Name"] = organization.String()
-	content["Type"] = organization.Type
-	if *settings.Verbose {
-		content["Image"] = organization.Image
-	}
-	holder := helpers.OutputHolder{Contents: content}
-	output.AddHolder(holder)
 	traverseOrgStructureEntry(organization, &output)
 	output.Write(*settings)
 }
 
 func traverseOrgStructureEntry(entry helpers.OrganizationEntry, output *helpers.OutputArray) {
+	content := make(map[string]string)
+	content["Name"] = entry.String()
+	content["Type"] = entry.Type
+	content["Children"] = entry.String()
+	if *settings.Verbose {
+		content["Image"] = entry.Image
+	}
+	children := []string{}
 	for _, child := range entry.Children {
-		content := make(map[string]string)
-		content["Name"] = child.String()
-		content["Type"] = child.Type
-		content["Parent"] = entry.String()
-		if *settings.Verbose {
-			content["Image"] = child.Image
-		}
-		holder := helpers.OutputHolder{Contents: content}
-		output.AddHolder(holder)
+		children = append(children, child.String())
 		traverseOrgStructureEntry(child, output)
 	}
+	content["Children"] = strings.Join(children, ",")
+	holder := helpers.OutputHolder{Contents: content}
+	output.AddHolder(holder)
 }

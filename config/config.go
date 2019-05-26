@@ -6,4 +6,11 @@ type Config struct {
 	OutputFile    *string
 	OutputFormat  *string
 	OutputHeaders *string
+	DotColumns    *DotColumns
+}
+
+// DotColumns is used to set the From and To columns for the dot output format
+type DotColumns struct {
+	From string
+	To   string
 }

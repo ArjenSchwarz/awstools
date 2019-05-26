@@ -79,13 +79,7 @@ func (entry *OrganizationEntry) findChildren(svc *organizations.Organizations) [
 }
 
 func (entry *OrganizationEntry) String() string {
-	if entry.Type == organizations.TargetTypeRoot {
-		return entry.Type
-	} else if entry.Type == organizations.TargetTypeOrganizationalUnit {
-		return entry.Name
-	} else {
-		return entry.Name + " (" + entry.ID + ")"
-	}
+	return entry.Name + " (" + entry.ID + ")"
 }
 
 func formatChild(raw organizations.Child, svc *organizations.Organizations) OrganizationEntry {

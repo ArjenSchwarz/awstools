@@ -1,6 +1,10 @@
 package cmd
 
 import (
+	"strings"
+
+	"github.com/ArjenSchwarz/awstools/config"
+	"github.com/ArjenSchwarz/awstools/drawio"
 	"github.com/ArjenSchwarz/awstools/helpers"
 	"github.com/spf13/cobra"
 )
@@ -23,25 +27,46 @@ func init() {
 }
 
 func showmesh(cmd *cobra.Command, args []string) {
-	// Step 1: Get all paths for each service
 	svc := helpers.AppmeshSession()
+	// Set output specific config
+	switch strings.ToLower(*settings.OutputFormat) {
+	case "drawio":
+		*settings.Verbose = true
+		drawioheader := drawio.NewHeader("%Name%", "%Image%", "Image")
+		connection := drawio.NewConnection()
+		connection.From = "Endpoints"
+		connection.To = "Name"
+		connection.Invert = false
+		connection.Label = "Calls"
+		drawioheader.AddConnection(connection)
+		header := drawioheader.String()
+		settings.OutputHeaders = &header
+	case "dot":
+		dotcolumns := config.DotColumns{
+			From: "Name",
+			To:   "Endpoints",
+		}
+		settings.DotColumns = &dotcolumns
+	}
 	nodes := helpers.GetAllAppMeshNodeConnections(meshname, svc)
-	keys := []string{"From", "To"}
+	keys := []string{"Name", "Endpoints"}
+	if *settings.Verbose {
+		keys = append(keys, "Image")
+	}
 	output := helpers.OutputArray{Keys: keys}
 	for _, node := range nodes {
-		if len(node.BackendNodes) == 0 {
-			content := make(map[string]string)
-			content["From"] = node.VirtualNodeName
-			holder := helpers.OutputHolder{Contents: content}
-			output.AddHolder(holder)
+		content := make(map[string]string)
+		content["Name"] = node.VirtualNodeName
+		if *settings.Verbose {
+			content["Image"] = drawio.ShapeAWSContainer2
 		}
+		endpoints := []string{}
 		for _, backendNode := range node.BackendNodes {
-			content := make(map[string]string)
-			content["From"] = node.VirtualNodeName
-			content["To"] = backendNode
-			holder := helpers.OutputHolder{Contents: content}
-			output.AddHolder(holder)
+			endpoints = append(endpoints, backendNode)
 		}
+		content["Endpoints"] = strings.Join(endpoints, ",")
+		holder := helpers.OutputHolder{Contents: content}
+		output.AddHolder(holder)
 	}
 	output.Write(*settings)
 }
