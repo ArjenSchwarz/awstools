@@ -34,8 +34,14 @@ func (output OutputArray) Write(settings config.Config) {
 	case "csv":
 		output.toCSV(*settings.OutputFile, "")
 	case "drawio":
+		if settings.OutputHeaders == nil {
+			log.Fatal("This command doesn't currently support the drawio output format")
+		}
 		output.toCSV(*settings.OutputFile, *settings.OutputHeaders)
 	case "dot":
+		if settings.DotColumns == nil {
+			log.Fatal("This command doesn't currently support the dot output format")
+		}
 		output.toDot(*settings.OutputFile, settings.DotColumns)
 	default:
 		output.toJSON(*settings.OutputFile)
@@ -112,9 +118,6 @@ func (output OutputArray) toJSON(outputFile string) {
 }
 
 func (output OutputArray) toDot(outputFile string, columns *config.DotColumns) {
-	if columns == nil {
-		log.Fatal("Please set the columns to be used for the dot format")
-	}
 	type dotholder struct {
 		To   string
 		From string
