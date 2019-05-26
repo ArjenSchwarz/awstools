@@ -52,18 +52,18 @@ The dot format outputs a dot compatible file that you can then convert into an i
 $ awstools appmesh showmesh -m bookinfo-mesh -o dot                                                                   14:15:04
 digraph  {
 
-	n5[label="details-v1-appmesh-bookinfo"];
-	n2[label="productpage-v1-appmesh-bookinfo"];
-	n1[label="ratings-v1-appmesh-bookinfo"];
-	n3[label="reviews-v1-appmesh-bookinfo"];
-	n6[label="reviews-v2-appmesh-bookinfo"];
-	n4[label="reviews-v3-appmesh-bookinfo"];
-	n2->n5;
-	n2->n1;
-	n2->n6;
-	n2->n4;
-	n6->n1;
-	n4->n1;
+  n5[label="details-v1-appmesh-bookinfo"];
+  n2[label="productpage-v1-appmesh-bookinfo"];
+  n1[label="ratings-v1-appmesh-bookinfo"];
+  n3[label="reviews-v1-appmesh-bookinfo"];
+  n6[label="reviews-v2-appmesh-bookinfo"];
+  n4[label="reviews-v3-appmesh-bookinfo"];
+  n2->n5;
+  n2->n1;
+  n2->n6;
+  n2->n4;
+  n6->n1;
+  n4->n1;
 
 }%
 ```
@@ -81,7 +81,7 @@ $ awstools appmesh showmesh -m bookinfo-mesh -o dot | dot -Tpng -o mesh.png && o
 [Draw.io](https://draw.io) is a very good free online diagramming tool. One of its advantages is that you can import diagrams from a CSV file, which is therefore one of the output formats.
 
 ```bash
-awstools appmesh showmesh -m bookinfo-mesh -o drawio
+$ awstools appmesh showmesh -m bookinfo-mesh -o drawio
 # label: %Name%
 # style: %Image%
 # parentstyle: swimlane;whiteSpace=wrap;html=1;childLayout=stackLayout;horizontal=1;horizontalStack=0;resizeParent=1;resizeLast=0;collapsible=1;
