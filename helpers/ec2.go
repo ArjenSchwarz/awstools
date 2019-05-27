@@ -78,6 +78,35 @@ func GetAllEc2Instances() []*ec2.Reservation {
 	return resp.Reservations
 }
 
+// VpcPeering represents a VPC Peering object
+type VpcPeering struct {
+	RequesterVpc     string
+	RequesterAccount string
+	AccepterVpc      string
+	AccepterAccount  string
+	PeeringName      string
+}
+
+// GetAllVpcPeers returns the peerings that are present in this region of this account
+func GetAllVpcPeers(svc *ec2.EC2) []VpcPeering {
+	var result []VpcPeering
+	resp, err := svc.DescribeVpcPeeringConnections(&ec2.DescribeVpcPeeringConnectionsInput{})
+	if err != nil {
+		panic(err)
+	}
+	for _, connection := range resp.VpcPeeringConnections {
+		peering := VpcPeering{
+			RequesterVpc:     *connection.RequesterVpcInfo.VpcId,
+			RequesterAccount: *connection.RequesterVpcInfo.OwnerId,
+			AccepterVpc:      *connection.AccepterVpcInfo.VpcId,
+			AccepterAccount:  *connection.AccepterVpcInfo.OwnerId,
+			PeeringName:      *connection.VpcPeeringConnectionId,
+		}
+		result = append(result, peering)
+	}
+	return result
+}
+
 // IsLatestInstanceFamily checks if an instance is part of the la
 // test family is running in the latest instance family.
 // TODO: Automate this to work properly
