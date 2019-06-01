@@ -16,8 +16,8 @@ var peeringsCmd = &cobra.Command{
 	Long: `Get an overview of Peerings. For a graphical option consider using
 	the dot or drawio output formats.
 
-	awstools vpc peeringsn -o dot | dot -Tpng  -o bookinfo-mesh.png
-	awstools vpc peeringsn -o drawio | pbcopy`,
+	awstools vpc peerings -o dot | dot -Tpng  -o peerings.png
+	awstools vpc peerings -o drawio | pbcopy`,
 	Run: peerings,
 }
 
