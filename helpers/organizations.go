@@ -26,7 +26,7 @@ func getOrganizationRoot(svc *organizations.Organizations) OrganizationEntry {
 		ID:    *rootentry.Id,
 		Arn:   *rootentry.Arn,
 		Name:  *rootentry.Name,
-		Image: drawio.ShapeAWSOrganization,
+		Image: drawio.ShapeAWSOrganizations,
 		Type:  organizations.TargetTypeRoot,
 	}
 	return entry
@@ -96,7 +96,7 @@ func formatChild(raw organizations.Child, svc *organizations.Organizations) Orga
 			ID:       *details.OrganizationalUnit.Id,
 			Type:     *raw.Type,
 			Arn:      *details.OrganizationalUnit.Arn,
-			Image:    drawio.ShapeAWSOrgOU,
+			Image:    drawio.ShapeAWSOrganizationsOrganizationalUnit,
 			Children: []OrganizationEntry{},
 		}
 	}
@@ -112,7 +112,7 @@ func formatChild(raw organizations.Child, svc *organizations.Organizations) Orga
 		ID:       *details.Account.Id,
 		Type:     *raw.Type,
 		Arn:      *details.Account.Arn,
-		Image:    drawio.ShapeAWSOrgAccount,
+		Image:    drawio.ShapeAWSOrganizationsAccount,
 		Children: []OrganizationEntry{},
 	}
 }
