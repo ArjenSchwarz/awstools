@@ -78,13 +78,64 @@ func GetAllEc2Instances() []*ec2.Reservation {
 	return resp.Reservations
 }
 
+// GetAllEC2ResourceNames retrieves the names of EC2 related objects
+func GetAllEC2ResourceNames(svc *ec2.EC2) map[string]string {
+	result := make(map[string]string)
+	result = addAllVPCNames(svc, result)
+	result = addAllPeerNames(svc, result)
+	return result
+}
+
+//GetAllVPCNames returns the names of all vpcs in a map
+func addAllVPCNames(svc *ec2.EC2, result map[string]string) map[string]string {
+	resp, err := svc.DescribeVpcs(&ec2.DescribeVpcsInput{})
+	if err != nil {
+		panic(err)
+	}
+	for _, vpc := range resp.Vpcs {
+		result[*vpc.VpcId] = *vpc.VpcId
+		if vpc.Tags != nil {
+			for _, tag := range vpc.Tags {
+				if *tag.Key == "Name" {
+					result[*vpc.VpcId] = *tag.Value
+					break
+				}
+			}
+		}
+	}
+	return result
+}
+
+func addAllPeerNames(svc *ec2.EC2, result map[string]string) map[string]string {
+	resp, err := svc.DescribeVpcPeeringConnections(&ec2.DescribeVpcPeeringConnectionsInput{})
+	if err != nil {
+		panic(err)
+	}
+	for _, peer := range resp.VpcPeeringConnections {
+		result[*peer.VpcPeeringConnectionId] = *peer.VpcPeeringConnectionId
+		if peer.Tags != nil {
+			for _, tag := range peer.Tags {
+				if *tag.Key == "Name" {
+					result[*peer.VpcPeeringConnectionId] = *tag.Value
+					break
+				}
+			}
+		}
+	}
+	return result
+}
+
 // VpcPeering represents a VPC Peering object
 type VpcPeering struct {
-	RequesterVpc     string
-	RequesterAccount string
-	AccepterVpc      string
-	AccepterAccount  string
-	PeeringName      string
+	RequesterVpc VPCHolder
+	AccepterVpc  VPCHolder
+	PeeringID    string
+}
+
+// VPCHolder represents basic information about a VPC
+type VPCHolder struct {
+	ID        string
+	AccountID string
 }
 
 // GetAllVpcPeers returns the peerings that are present in this region of this account
@@ -96,11 +147,11 @@ func GetAllVpcPeers(svc *ec2.EC2) []VpcPeering {
 	}
 	for _, connection := range resp.VpcPeeringConnections {
 		peering := VpcPeering{
-			RequesterVpc:     *connection.RequesterVpcInfo.VpcId,
-			RequesterAccount: *connection.RequesterVpcInfo.OwnerId,
-			AccepterVpc:      *connection.AccepterVpcInfo.VpcId,
-			AccepterAccount:  *connection.AccepterVpcInfo.OwnerId,
-			PeeringName:      *connection.VpcPeeringConnectionId,
+			RequesterVpc: VPCHolder{ID: *connection.RequesterVpcInfo.VpcId,
+				AccountID: *connection.RequesterVpcInfo.OwnerId},
+			AccepterVpc: VPCHolder{ID: *connection.AccepterVpcInfo.VpcId,
+				AccountID: *connection.AccepterVpcInfo.OwnerId},
+			PeeringID: *connection.VpcPeeringConnectionId,
 		}
 		result = append(result, peering)
 	}
