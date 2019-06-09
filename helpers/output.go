@@ -100,21 +100,12 @@ func (output OutputArray) toJSON(outputFile string) {
 		}
 		total = append(total, values)
 	}
-	buf := new(bytes.Buffer)
-	responseString, _ := json.Marshal(total)
-	fmt.Fprintf(buf, "%s", responseString)
-	var target io.Writer
-	if outputFile == "" {
-		target = os.Stdout
-	} else {
-		file, err := os.Create(outputFile)
-		if err != nil {
-			log.Fatal(err)
-		}
-		defer file.Close()
-		target = bufio.NewWriter(file)
+	jsonString, _ := json.Marshal(total)
+
+	err := printByteSlice(jsonString, outputFile)
+	if err != nil {
+		log.Fatal(err.Error())
 	}
-	buf.WriteTo(target)
 }
 
 func (output OutputArray) toDot(outputFile string, columns *config.DotColumns) {
@@ -152,20 +143,28 @@ func (output OutputArray) toDot(outputFile string, columns *config.DotColumns) {
 			g.Edge(nodelist[cleaned.From], nodelist[cleaned.To])
 		}
 	}
-	buf := new(bytes.Buffer)
-	fmt.Fprintf(buf, "%s", g.String())
+	err := printByteSlice([]byte(g.String()), outputFile)
+	if err != nil {
+		log.Fatal(err.Error())
+	}
+}
+
+// printByteSlice prints the provided contents to stdout or the provided filepath
+func printByteSlice(contents []byte, outputFile string) error {
 	var target io.Writer
+	var err error
 	if outputFile == "" {
 		target = os.Stdout
 	} else {
-		file, err := os.Create(outputFile)
+		target, err = os.Create(outputFile)
 		if err != nil {
-			log.Fatal(err)
+			return err
 		}
-		defer file.Close()
-		target = bufio.NewWriter(file)
 	}
-	buf.WriteTo(target)
+	w := bufio.NewWriter(target)
+	w.Write(contents)
+	err = w.Flush()
+	return err
 }
 
 // AddHolder adds the provided OutputHolder to the OutputArray
