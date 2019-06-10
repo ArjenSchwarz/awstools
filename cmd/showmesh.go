@@ -32,9 +32,8 @@ func showmesh(cmd *cobra.Command, args []string) {
 	resultTitle := "Virtual node connections for mesh " + *meshname
 	svc := helpers.AppmeshSession()
 	// Set output specific config
-	switch strings.ToLower(*settings.OutputFormat) {
+	switch settings.GetOutputFormat() {
 	case "drawio":
-		*settings.Verbose = true
 		drawioheader := drawio.NewHeader("%Name%", "%Image%", "Image")
 		connection := drawio.NewConnection()
 		connection.From = "Endpoints"
@@ -53,14 +52,14 @@ func showmesh(cmd *cobra.Command, args []string) {
 	}
 	nodes := helpers.GetAllAppMeshNodeConnections(meshname, svc)
 	keys := []string{"Name", "Endpoints"}
-	if *settings.Verbose {
+	if settings.IsDrawIO() {
 		keys = append(keys, "Image")
 	}
 	output := helpers.OutputArray{Keys: keys, Title: resultTitle}
 	for _, node := range nodes {
 		content := make(map[string]string)
 		content["Name"] = node.VirtualNodeName
-		if *settings.Verbose {
+		if settings.IsDrawIO() {
 			content["Image"] = drawio.ShapeAWSECSContainer2
 		}
 		endpoints := []string{}

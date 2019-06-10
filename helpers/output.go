@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"html/template"
 	"io"
+	"io/ioutil"
 	"log"
 	"os"
 	"strings"
@@ -33,11 +34,11 @@ type OutputArray struct {
 
 // Write will provide the output as configured in the configuration
 func (output OutputArray) Write(settings config.Config) {
-	switch strings.ToLower(*settings.OutputFormat) {
+	switch settings.GetOutputFormat() {
 	case "csv":
 		output.toCSV(*settings.OutputFile, "")
 	case "html":
-		output.toHTML(*settings.OutputFile)
+		output.toHTML(*settings.OutputFile, settings.ShouldAppend())
 	case "drawio":
 		if settings.OutputHeaders == nil {
 			log.Fatal("This command doesn't currently support the drawio output format")
@@ -154,20 +155,30 @@ func (output OutputArray) toDot(outputFile string, columns *config.DotColumns) {
 	}
 }
 
-func (output OutputArray) toHTML(outputFile string) {
-	t := template.New("output")
-	t, _ = t.Parse(templates.BaseHTMLTemplate)
-	var target io.Writer
-	var err error
-	if outputFile == "" {
-		target = os.Stdout
-	} else {
-		target, err = os.Create(outputFile)
+func (output OutputArray) toHTML(outputFile string, append bool) {
+	t := template.New("table")
+	t, _ = t.Parse(templates.HTMLTableTemplate)
+	var baseTemplate string
+	if append {
+		originalfile, err := ioutil.ReadFile(outputFile)
 		if err != nil {
-			log.Fatal(err.Error())
+			panic(err)
 		}
+		baseTemplate = string(originalfile)
+	} else {
+		b := template.New("base")
+		b, _ = b.Parse(templates.BaseHTMLTemplate)
+		baseBuf := new(bytes.Buffer)
+		b.Execute(baseBuf, output)
+		baseTemplate = baseBuf.String()
 	}
-	t.Execute(target, output)
+	tableBuf := new(bytes.Buffer)
+	t.Execute(tableBuf, output)
+	resultString := strings.Replace(baseTemplate, "<div id='end'></div>", tableBuf.String(), 1)
+	err := PrintByteSlice([]byte(resultString), outputFile)
+	if err != nil {
+		log.Fatal(err.Error())
+	}
 }
 
 // PrintByteSlice prints the provided contents to stdout or the provided filepath

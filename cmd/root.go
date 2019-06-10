@@ -35,8 +35,8 @@ func init() {
 	// cobra.OnInitialize(initConfig)
 	settings.Verbose = RootCmd.PersistentFlags().BoolP("verbose", "v", false, "Give verbose output")
 	settings.OutputFile = RootCmd.PersistentFlags().StringP("file", "f", "", "Optional file to save the output to")
-	settings.OutputFormat = RootCmd.PersistentFlags().StringP("output", "o", "json", "Format for the output, currently supported are csv, json, dot, and drawio")
-	settings.AppendToOutput = RootCmd.PersistentFlags().BoolP("append", "a", false, "Add to the provided filename instead of replacing it")
+	settings.OutputFormat = RootCmd.PersistentFlags().StringP("output", "o", "json", "Format for the output, currently supported are csv, json, html, dot, and drawio")
+	settings.AppendToOutput = RootCmd.PersistentFlags().BoolP("append", "a", false, "Add to the provided output file instead of replacing it")
 	settings.NameFile = RootCmd.PersistentFlags().StringP("namefile", "n", "", "Use this file to provide names")
 }
 

@@ -27,7 +27,7 @@ func init() {
 
 func names(cmd *cobra.Command, args []string) {
 	var names []map[string]string
-	if *settings.AppendToOutput {
+	if settings.ShouldCombineAndAppend() {
 		names = append(names, helpers.GetStringMapFromJSONFile(*settings.OutputFile))
 	}
 	names = append(names, helpers.GetAllEC2ResourceNames(helpers.Ec2Session()))

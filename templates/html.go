@@ -1,9 +1,7 @@
 package templates
 
 // BaseHTMLTemplate is the base HTML template for outputs
-const BaseHTMLTemplate = `{{ $keys := .Keys }}
-	{{ $rows := .Contents }}
-<html>
+const BaseHTMLTemplate = `<html>
 <head>
 	<title>{{.Title}}</title>
 	<style>
@@ -40,7 +38,7 @@ If you like this solution, you might also want to check out the 1.0 version:
 }
 .responstable th:first-child {
   display: table-cell;
-  text-align: center;
+  text-align: left;
 }
 .responstable th:nth-child(2) {
   display: table-cell;
@@ -66,7 +64,7 @@ If you like this solution, you might also want to check out the 1.0 version:
 }
 .responstable td:first-child {
   display: table-cell;
-  text-align: center;
+  text-align: left;
   border-right: 1px solid #d9e4e6;
 }
 @media (min-width: 480px) {
@@ -105,6 +103,13 @@ h1 span {
 	</style>
 </head>
 <body>
+	<div id='end'></div>
+</body>
+</html>`
+
+// HTMLTableTemplate renders a HTML Table
+const HTMLTableTemplate = `{{ $keys := .Keys }}
+	{{ $rows := .Contents }}
 	<h1>{{.Title}}</h1>
 	<table class="responstable">
 	<thead>
@@ -116,5 +121,4 @@ h1 span {
 	{{end}}
 	</tbody>
 	</table>
-</body>
-</html>`
+	<div id='end'></div>`

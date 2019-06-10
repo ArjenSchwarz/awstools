@@ -31,13 +31,13 @@ func peerings(cmd *cobra.Command, args []string) {
 	svc := helpers.Ec2Session()
 	peerings := helpers.GetAllVpcPeers(svc)
 	keys := []string{"ID", "Name", "AccountID", "PeeringIDs"}
-	if *settings.Verbose {
+	if settings.IsDrawIO() {
 		keys = append(keys, "Image")
 	}
 	output := helpers.OutputArray{Keys: keys, Title: resultTitle}
 	vpcs := make(map[string]helpers.VPCHolder)
 	sorted := make(map[string][]string)
-	if *settings.AppendToOutput {
+	if settings.ShouldCombineAndAppend() {
 		headers, previousResults := drawio.GetHeaderAndContentsFromFile(*settings.OutputFile)
 		for _, row := range previousResults {
 			id := row[headers["ID"]]
@@ -81,11 +81,11 @@ func peerings(cmd *cobra.Command, args []string) {
 		if len(entry) > 0 {
 			content["AccountID"] = vpcs[id].AccountID
 			content["PeeringIDs"] = strings.Join(peeringIDs, ",")
-			if *settings.Verbose {
+			if settings.IsDrawIO() {
 				content["Image"] = drawio.ShapeAWSVPC
 			}
 		} else {
-			if *settings.Verbose {
+			if settings.IsDrawIO() {
 				content["Image"] = drawio.ShapeAWSVPCPeering
 			}
 		}
@@ -96,9 +96,8 @@ func peerings(cmd *cobra.Command, args []string) {
 }
 
 func setPeeringConfigs() {
-	switch strings.ToLower(*settings.OutputFormat) {
+	switch settings.GetOutputFormat() {
 	case "drawio":
-		*settings.Verbose = true
 		drawioheader := drawio.NewHeader("%Name%", "%Image%", "Image")
 		connection := drawio.NewConnection()
 		connection.From = "PeeringIDs"

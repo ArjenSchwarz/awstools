@@ -8,6 +8,7 @@ import (
 )
 
 // GetHeaderAndContentsFromFile returns the headers of a CSV in a reverse map (name:column-id) and the remaining rows
+// It filters away all of the comments
 func GetHeaderAndContentsFromFile(filename string) (map[string]int, [][]string) {
 	originalfile, err := ioutil.ReadFile(filename)
 	if err != nil {

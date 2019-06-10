@@ -29,7 +29,7 @@ func init() {
 
 func orgstructure(cmd *cobra.Command, args []string) {
 	resultTitle := "AWS Organization Structure"
-	switch strings.ToLower(*settings.OutputFormat) {
+	switch settings.GetOutputFormat() {
 	case "drawio":
 		*settings.Verbose = true
 		header := ""
