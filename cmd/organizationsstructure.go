@@ -51,7 +51,7 @@ func orgstructure(cmd *cobra.Command, args []string) {
 	svc := helpers.OrganizationsSession()
 	organization := helpers.GetFullOrganization(svc)
 	keys := []string{"Name", "Type", "Children"}
-	if *settings.Verbose {
+	if settings.IsDrawIO() {
 		keys = append(keys, "Image")
 	}
 	output := helpers.OutputArray{Keys: keys, Title: resultTitle}
@@ -64,7 +64,7 @@ func traverseOrgStructureEntry(entry helpers.OrganizationEntry, output *helpers.
 	content["Name"] = entry.String()
 	content["Type"] = entry.Type
 	content["Children"] = entry.String()
-	if *settings.Verbose {
+	if settings.IsDrawIO() {
 		content["Image"] = entry.Image
 	}
 	children := []string{}
