@@ -18,13 +18,14 @@ The verbose option will add the details of the policies to the output.`,
 }
 
 func detailUsers(cmd *cobra.Command, args []string) {
+	resultTitle := "IAM User overview for account " + getName(helpers.GetAccountID())
 	userlist := helpers.GetUserDetails()
 
 	keys := []string{"User", "Groups", "Policy Names"}
 	if *settings.Verbose {
 		keys = append(keys, "Policies")
 	}
-	output := helpers.OutputArray{Keys: keys}
+	output := helpers.OutputArray{Keys: keys, Title: resultTitle}
 	for _, user := range userlist {
 		content := make(map[string]string)
 		content["User"] = user.Username
@@ -47,15 +48,4 @@ func detailUsers(cmd *cobra.Command, args []string) {
 
 func init() {
 	iamCmd.AddCommand(userlistCmd)
-
-	// Here you will define your flags and configuration settings.
-
-	// Cobra supports Persistent Flags which will work for this command
-	// and all subcommands, e.g.:
-	// userlistCmd.PersistentFlags().String("foo", "", "A help for foo")
-
-	// Cobra supports local flags which will only run when this command
-	// is called directly, e.g.:
-	// userlistCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
-
 }

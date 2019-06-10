@@ -18,10 +18,11 @@ func init() {
 }
 
 func danglingnodes(cmd *cobra.Command, args []string) {
+	resultTitle := "App Mesh Unattached Nodes for mesh " + *meshname
 	svc := helpers.AppmeshSession()
 	unserviced := helpers.GetAllUnservicedAppMeshNodes(meshname, svc)
 	keys := []string{"Virtual Node"}
-	output := helpers.OutputArray{Keys: keys}
+	output := helpers.OutputArray{Keys: keys, Title: resultTitle}
 	for _, node := range unserviced {
 		content := make(map[string]string)
 		content["Virtual Node"] = node

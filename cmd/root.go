@@ -1,7 +1,9 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"os"
 
 	"github.com/ArjenSchwarz/awstools/config"
@@ -48,4 +50,22 @@ func initConfig() {
 	if err := viper.ReadInConfig(); err == nil {
 		fmt.Println("Using config file:", viper.ConfigFileUsed())
 	}
+}
+
+func getName(id string) string {
+	if *settings.NameFile != "" {
+		nameFile, err := ioutil.ReadFile(*settings.NameFile)
+		if err != nil {
+			panic(err)
+		}
+		values := make(map[string]string)
+		err = json.Unmarshal(nameFile, &values)
+		if err != nil {
+			panic(err)
+		}
+		if val, ok := values[id]; ok {
+			return val
+		}
+	}
+	return id
 }

@@ -33,6 +33,7 @@ func init() {
 }
 
 func listResources(cmd *cobra.Command, args []string) {
+	resultTitle := "CloudFormation resources for stack " + *stackname
 	unparsedResources := helpers.GetNestedCloudFormationResources(stackname)
 	resources := make([]cfnResource, len(unparsedResources))
 
@@ -66,7 +67,7 @@ func listResources(cmd *cobra.Command, args []string) {
 		keys = append(keys, "Status")
 		keys = append(keys, "LogicalName")
 	}
-	output := helpers.OutputArray{Keys: keys}
+	output := helpers.OutputArray{Keys: keys, Title: resultTitle}
 	for _, resource := range resources {
 		content := make(map[string]string)
 		content["ResourceID"] = resource.ResourceID

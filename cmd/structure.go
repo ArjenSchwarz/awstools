@@ -28,6 +28,7 @@ func init() {
 }
 
 func orgstructure(cmd *cobra.Command, args []string) {
+	resultTitle := "AWS Organization Structure"
 	switch strings.ToLower(*settings.OutputFormat) {
 	case "drawio":
 		*settings.Verbose = true
@@ -53,7 +54,7 @@ func orgstructure(cmd *cobra.Command, args []string) {
 	if *settings.Verbose {
 		keys = append(keys, "Image")
 	}
-	output := helpers.OutputArray{Keys: keys}
+	output := helpers.OutputArray{Keys: keys, Title: resultTitle}
 	traverseOrgStructureEntry(organization, &output)
 	output.Write(*settings)
 }

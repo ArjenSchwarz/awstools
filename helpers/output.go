@@ -6,6 +6,7 @@ import (
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
+	"html/template"
 	"io"
 	"log"
 	"os"
@@ -14,6 +15,7 @@ import (
 	"github.com/emicklei/dot"
 
 	"github.com/ArjenSchwarz/awstools/config"
+	"github.com/ArjenSchwarz/awstools/templates"
 )
 
 // OutputHolder holds key-value pairs that belong together in the output
@@ -24,6 +26,7 @@ type OutputHolder struct {
 // OutputArray holds all the different OutputHolders that will be provided as
 // output, as well as the keys (headers) that will actually need to be printed
 type OutputArray struct {
+	Title    string
 	Contents []OutputHolder
 	Keys     []string
 }
@@ -33,6 +36,8 @@ func (output OutputArray) Write(settings config.Config) {
 	switch strings.ToLower(*settings.OutputFormat) {
 	case "csv":
 		output.toCSV(*settings.OutputFile, "")
+	case "html":
+		output.toHTML(*settings.OutputFile)
 	case "drawio":
 		if settings.OutputHeaders == nil {
 			log.Fatal("This command doesn't currently support the drawio output format")
@@ -102,7 +107,7 @@ func (output OutputArray) toJSON(outputFile string) {
 	}
 	jsonString, _ := json.Marshal(total)
 
-	err := printByteSlice(jsonString, outputFile)
+	err := PrintByteSlice(jsonString, outputFile)
 	if err != nil {
 		log.Fatal(err.Error())
 	}
@@ -143,14 +148,30 @@ func (output OutputArray) toDot(outputFile string, columns *config.DotColumns) {
 			g.Edge(nodelist[cleaned.From], nodelist[cleaned.To])
 		}
 	}
-	err := printByteSlice([]byte(g.String()), outputFile)
+	err := PrintByteSlice([]byte(g.String()), outputFile)
 	if err != nil {
 		log.Fatal(err.Error())
 	}
 }
 
-// printByteSlice prints the provided contents to stdout or the provided filepath
-func printByteSlice(contents []byte, outputFile string) error {
+func (output OutputArray) toHTML(outputFile string) {
+	t := template.New("output")
+	t, _ = t.Parse(templates.BaseHTMLTemplate)
+	var target io.Writer
+	var err error
+	if outputFile == "" {
+		target = os.Stdout
+	} else {
+		target, err = os.Create(outputFile)
+		if err != nil {
+			log.Fatal(err.Error())
+		}
+	}
+	t.Execute(target, output)
+}
+
+// PrintByteSlice prints the provided contents to stdout or the provided filepath
+func PrintByteSlice(contents []byte, outputFile string) error {
 	var target io.Writer
 	var err error
 	if outputFile == "" {

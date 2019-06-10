@@ -1,10 +1,6 @@
 package cmd
 
 import (
-	"encoding/csv"
-	"encoding/json"
-	"io/ioutil"
-	"log"
 	"strings"
 
 	"github.com/ArjenSchwarz/awstools/config"
@@ -30,6 +26,7 @@ func init() {
 }
 
 func peerings(cmd *cobra.Command, args []string) {
+	resultTitle := "VPC Peerings for account " + getName(helpers.GetAccountID())
 	setPeeringConfigs()
 	svc := helpers.Ec2Session()
 	peerings := helpers.GetAllVpcPeers(svc)
@@ -37,23 +34,22 @@ func peerings(cmd *cobra.Command, args []string) {
 	if *settings.Verbose {
 		keys = append(keys, "Image")
 	}
-	output := helpers.OutputArray{Keys: keys}
+	output := helpers.OutputArray{Keys: keys, Title: resultTitle}
 	vpcs := make(map[string]helpers.VPCHolder)
 	sorted := make(map[string][]string)
 	if *settings.AppendToOutput {
-		previousResults := appendToDrawIO()
+		headers, previousResults := drawio.GetHeaderAndContentsFromFile(*settings.OutputFile)
 		for _, row := range previousResults {
-			// TODO fix magic numbers
-			id := row[0]
-			accountid := row[2]
-			peeringids := row[3]
+			id := row[headers["ID"]]
+			accountid := row[headers["AccountID"]]
+			peeringids := row[headers["PeeringIDs"]]
 			if peeringids != "" {
 				sorted[id] = strings.Split(peeringids, ",")
 				vpcHolder := helpers.VPCHolder{
 					ID:        id,
 					AccountID: accountid,
 				}
-				vpcs[row[0]] = vpcHolder
+				vpcs[id] = vpcHolder
 			} else {
 				sorted[id] = []string{}
 			}
@@ -81,7 +77,7 @@ func peerings(cmd *cobra.Command, args []string) {
 		peeringIDs := unique(entry)
 		content := make(map[string]string)
 		content["ID"] = id
-		content["Name"] = setNames(id)
+		content["Name"] = getName(id)
 		if len(entry) > 0 {
 			content["AccountID"] = vpcs[id].AccountID
 			content["PeeringIDs"] = strings.Join(peeringIDs, ",")
@@ -119,40 +115,6 @@ func setPeeringConfigs() {
 		}
 		settings.DotColumns = &dotcolumns
 	}
-}
-
-func setNames(id string) string {
-	if *settings.NameFile != "" {
-		nameFile, err := ioutil.ReadFile(*settings.NameFile)
-		if err != nil {
-			panic(err)
-		}
-		values := make(map[string]string)
-		err = json.Unmarshal(nameFile, &values)
-		if err != nil {
-			panic(err)
-		}
-		if val, ok := values[id]; ok {
-			return val
-		}
-	}
-	return id
-}
-
-func appendToDrawIO() [][]string {
-	originalfile, err := ioutil.ReadFile(*settings.OutputFile)
-	if err != nil {
-		panic(err)
-	}
-	originalString := string(originalfile)
-	r := csv.NewReader(strings.NewReader(originalString))
-	r.Comment = '#'
-	records, err := r.ReadAll()
-	if err != nil {
-		log.Fatal(err)
-	}
-	// Strip header as we don't need it
-	return records[1:]
 }
 
 func unique(stringSlice []string) []string {

@@ -20,6 +20,7 @@ func init() {
 }
 
 func meshroute(cmd *cobra.Command, args []string) {
+	resultTitle := "Overview of the routes in the mesh"
 	svc := helpers.AppmeshSession()
 	routes := helpers.GetAllAppMeshPaths(meshname, svc)
 	keys := []string{"Service", "Path", "Node"}
@@ -27,7 +28,7 @@ func meshroute(cmd *cobra.Command, args []string) {
 		keys = append(keys, "Weight")
 		keys = append(keys, "Router")
 	}
-	output := helpers.OutputArray{Keys: keys}
+	output := helpers.OutputArray{Keys: keys, Title: resultTitle}
 	for _, route := range routes {
 		for _, path := range route.VirtualServiceRoutes {
 			content := make(map[string]string)

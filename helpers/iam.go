@@ -2,6 +2,7 @@ package helpers
 
 import (
 	"fmt"
+	"log"
 	"net/url"
 
 	"github.com/aws/aws-sdk-go/aws/awserr"
@@ -311,4 +312,22 @@ func (user IAMUser) GetAllPolicies() map[string]string {
 		result[k] = v
 	}
 	return result
+}
+
+// GetAccountAlias returns the account alias in a map of [accountid]accountalias
+// If no alias is present, it will return the account ID instead
+func GetAccountAlias() map[string]string {
+	svc := IAMSession()
+	alias := make(map[string]string)
+	alias[GetAccountID()] = GetAccountID()
+
+	input := &iam.ListAccountAliasesInput{}
+	result, err := svc.ListAccountAliases(input)
+	if err != nil {
+		log.Fatal(err.Error())
+	}
+	if len(result.AccountAliases) > 0 {
+		alias[GetAccountID()] = *result.AccountAliases[0]
+	}
+	return alias
 }

@@ -29,6 +29,7 @@ func init() {
 }
 
 func showmesh(cmd *cobra.Command, args []string) {
+	resultTitle := "Virtual node connections for mesh " + *meshname
 	svc := helpers.AppmeshSession()
 	// Set output specific config
 	switch strings.ToLower(*settings.OutputFormat) {
@@ -55,7 +56,7 @@ func showmesh(cmd *cobra.Command, args []string) {
 	if *settings.Verbose {
 		keys = append(keys, "Image")
 	}
-	output := helpers.OutputArray{Keys: keys}
+	output := helpers.OutputArray{Keys: keys, Title: resultTitle}
 	for _, node := range nodes {
 		content := make(map[string]string)
 		content["Name"] = node.VirtualNodeName
