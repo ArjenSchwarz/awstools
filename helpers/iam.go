@@ -12,15 +12,34 @@ import (
 
 var iamSession = iam.New(session.New())
 
+// IAMObject interface for IAM objects
+type IAMObject interface {
+	GetName() string
+	GetUsers() []string
+	GetGroups() []string
+	GetObjectType() string
+	GetDirectPolicies() map[string]string
+	GetInheritedPolicies() map[string]string
+}
+
 // IAMUser contains information about IAM Users
 type IAMUser struct {
-	Username              string
+	Name                  string
 	AttachedPolicies      map[string]string
 	InlinePolicies        map[string]string
 	Groups                []string
 	AttachedGroupPolicies map[string]string
 	InlineGroupPolicies   map[string]string
 	User                  *iam.User
+}
+
+// IAMGroup contains information about IAM Groups
+type IAMGroup struct {
+	Name             string
+	Users            []string
+	AttachedPolicies map[string]string
+	InlinePolicies   map[string]string
+	Group            *iam.Group
 }
 
 // IAMSession returns a shared IAMSession
@@ -278,8 +297,8 @@ func GetUserDetails() []IAMUser {
 	for _, user := range resp.Users {
 		go func(user *iam.User) {
 			userStruct := IAMUser{
-				Username: *user.UserName,
-				User:     user,
+				Name: *user.UserName,
+				User: user,
 			}
 			userStruct.Groups = GetGroupNameSliceForUser(user.UserName)
 			userStruct.InlinePolicies = GetUserPoliciesMapForUser(user.UserName)
@@ -293,7 +312,53 @@ func GetUserDetails() []IAMUser {
 		userlist[i] = <-c
 	}
 	return userlist
+}
 
+// GetGroupDetails collects detailed information about a group, consisting mostly
+// of the users and policies it follows.
+func GetGroupDetails() []IAMGroup {
+	svc := IAMSession()
+	resp, err := svc.ListGroups(&iam.ListGroupsInput{})
+	if err != nil {
+		panic(err)
+	}
+	c := make(chan IAMGroup)
+	grouplist := make([]IAMGroup, len(resp.Groups))
+	for _, group := range resp.Groups {
+		go func(group *iam.Group) {
+			groupStruct := IAMGroup{
+				Name:  *group.GroupName,
+				Group: group,
+			}
+			groupStruct.InlinePolicies = GetGroupPoliciesMapForGroups([]string{*group.GroupName})
+			groupStruct.AttachedPolicies = GetAttachedPoliciesMapForGroups([]string{*group.GroupName})
+			c <- groupStruct
+		}(group)
+	}
+	for i := 0; i < len(resp.Groups); i++ {
+		grouplist[i] = <-c
+	}
+	return grouplist
+}
+
+// GetName returns the name of the user
+func (user IAMUser) GetName() string {
+	return user.Name
+}
+
+// GetUsers returns an empty string slice
+func (user IAMUser) GetUsers() []string {
+	return []string{}
+}
+
+// GetGroups returns the list of groups the user has
+func (user IAMUser) GetGroups() []string {
+	return user.Groups
+}
+
+// GetObjectType returns the type of IAM object
+func (user IAMUser) GetObjectType() string {
+	return "User"
 }
 
 // GetAllPolicies retrieves a map of all the users policies
@@ -312,6 +377,67 @@ func (user IAMUser) GetAllPolicies() map[string]string {
 		result[k] = v
 	}
 	return result
+}
+
+// GetDirectPolicies retrieves all directly attached policies for the user
+func (user IAMUser) GetDirectPolicies() map[string]string {
+	result := make(map[string]string)
+	for k, v := range user.InlinePolicies {
+		result[k] = v
+	}
+	for k, v := range user.AttachedPolicies {
+		result[k] = v
+	}
+	return result
+}
+
+// GetInheritedPolicies retrieves all inherited policies for the user
+func (user IAMUser) GetInheritedPolicies() map[string]string {
+	result := make(map[string]string)
+	for k, v := range user.InlineGroupPolicies {
+		result[k] = v
+	}
+	for k, v := range user.AttachedGroupPolicies {
+		result[k] = v
+	}
+	return result
+}
+
+// GetUsers returns the users attached to the Group
+func (group IAMGroup) GetUsers() []string {
+	return []string{}
+}
+
+// GetGroups returns an empty string slice
+func (group IAMGroup) GetGroups() []string {
+	return []string{}
+}
+
+// GetName returns the name of the group
+func (group IAMGroup) GetName() string {
+	return group.Name
+}
+
+// GetObjectType returns the type of IAM object
+func (group IAMGroup) GetObjectType() string {
+	return "Group"
+}
+
+// GetDirectPolicies retrieves all directly attached policies for the group
+func (group IAMGroup) GetDirectPolicies() map[string]string {
+	result := make(map[string]string)
+	for k, v := range group.InlinePolicies {
+		result[k] = v
+	}
+	for k, v := range group.AttachedPolicies {
+		result[k] = v
+	}
+	return result
+}
+
+// GetInheritedPolicies retrieves all inherited policies for the group (none)
+func (group IAMGroup) GetInheritedPolicies() map[string]string {
+	return make(map[string]string)
 }
 
 // GetAccountAlias returns the account alias in a map of [accountid]accountalias
