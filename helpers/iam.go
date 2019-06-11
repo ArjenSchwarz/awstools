@@ -11,6 +11,7 @@ import (
 )
 
 var iamSession = iam.New(session.New())
+var cachedUsers []*iam.User
 
 // IAMObject interface for IAM objects
 type IAMObject interface {
@@ -284,17 +285,25 @@ func GetAccountSummary() (map[string]*int64, error) {
 	return result.SummaryMap, nil
 }
 
+func getUserList() []*iam.User {
+	if cachedUsers == nil {
+		svc := IAMSession()
+		resp, err := svc.ListUsers(&iam.ListUsersInput{})
+		if err != nil {
+			panic(err)
+		}
+		cachedUsers = resp.Users
+	}
+	return cachedUsers
+}
+
 // GetUserDetails collects detailed information about a user, consisting mostly
 // of the groups and policies it follows.
 func GetUserDetails() []IAMUser {
-	svc := IAMSession()
-	resp, err := svc.ListUsers(&iam.ListUsersInput{})
-	if err != nil {
-		panic(err)
-	}
+	users := getUserList()
 	c := make(chan IAMUser)
-	userlist := make([]IAMUser, len(resp.Users))
-	for _, user := range resp.Users {
+	userlist := make([]IAMUser, len(users))
+	for _, user := range users {
 		go func(user *iam.User) {
 			userStruct := IAMUser{
 				Name: *user.UserName,
@@ -308,10 +317,26 @@ func GetUserDetails() []IAMUser {
 			c <- userStruct
 		}(user)
 	}
-	for i := 0; i < len(resp.Users); i++ {
+	for i := 0; i < len(users); i++ {
 		userlist[i] = <-c
 	}
 	return userlist
+}
+
+func getAllUsersInGroup(groupname string) []string {
+	svc := IAMSession()
+	input := iam.GetGroupInput{
+		GroupName: &groupname,
+	}
+	resp, err := svc.GetGroup(&input)
+	if err != nil {
+		panic(err)
+	}
+	result := []string{}
+	for _, user := range resp.Users {
+		result = append(result, *user.UserName)
+	}
+	return result
 }
 
 // GetGroupDetails collects detailed information about a group, consisting mostly
@@ -332,6 +357,7 @@ func GetGroupDetails() []IAMGroup {
 			}
 			groupStruct.InlinePolicies = GetGroupPoliciesMapForGroups([]string{*group.GroupName})
 			groupStruct.AttachedPolicies = GetAttachedPoliciesMapForGroups([]string{*group.GroupName})
+			groupStruct.Users = getAllUsersInGroup(*group.GroupName)
 			c <- groupStruct
 		}(group)
 	}
@@ -405,7 +431,7 @@ func (user IAMUser) GetInheritedPolicies() map[string]string {
 
 // GetUsers returns the users attached to the Group
 func (group IAMGroup) GetUsers() []string {
-	return []string{}
+	return group.Users
 }
 
 // GetGroups returns an empty string slice
