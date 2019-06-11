@@ -10,13 +10,26 @@ const defaultConnectionStyle = "curved=1;endArrow=blockThin;endFill=1;fontSize=1
 const defaultLabel = "%Name%"
 const defaultStyle = "%Image%"
 const defaultIgnore = "id"
+const headerComment = "##"
+
+// Standard layout styles for draw.io
+const (
+	LayoutAuto           = "auto"
+	LayoutNone           = "none"
+	LayoutHorizontalFlow = "horizontalflow"
+	LayoutVerticalFlow   = "verticalflow"
+	LayoutHorizontalTree = "horizontaltree"
+	LayoutVerticalTree   = "verticaltree"
+	LayoutOrganic        = "organic"
+	LayoutCircle         = "circle"
+)
 
 const basicHeader = `# label: %s
 # style: %s
-# parentstyle: swimlane;whiteSpace=wrap;html=1;childLayout=stackLayout;horizontal=1;horizontalStack=0;resizeParent=1;resizeLast=0;collapsible=1;
 # identity: -
 # parent: -
-# namespace: csvimport-
+# parentstyle: swimlane;whiteSpace=wrap;html=1;childLayout=stackLayout;horizontal=1;horizontalStack=0;resizeParent=1;resizeLast=0;collapsible=1;
+# namespace: awstools-
 %s
 # left:
 # top:
@@ -24,11 +37,11 @@ const basicHeader = `# label: %s
 # height: 78
 # padding: 0
 # ignore: %s
-# link: url
+%s
 # nodespacing: 40
 # levelspacing: 100
 # edgespacing: 40
-# layout: auto
+# layout: %s
 ## ---- CSV below this line. First line are column names. ----
 `
 
@@ -47,6 +60,8 @@ type Header struct {
 	style       string
 	ignore      string
 	connections []Connection
+	link        string
+	layout      string
 }
 
 // NewHeader returns a header with the provided label, style, and ignore
@@ -55,6 +70,8 @@ func NewHeader(label string, style string, ignore string) Header {
 		label:  label,
 		style:  style,
 		ignore: ignore,
+		layout: LayoutAuto,
+		link:   headerComment,
 	}
 }
 
@@ -82,9 +99,27 @@ func (header *Header) AddConnection(connection Connection) {
 	header.connections = append(connections, connection)
 }
 
+// SetLayout sets the layout
+func (header *Header) SetLayout(layout string) {
+	header.layout = layout
+}
+
+// SetLink sets the column to be renamed to link attribute (used as link)
+func (header *Header) SetLink(columnname string) {
+	header.link = "# link: " + columnname
+}
+
 // String returns a formatted string for the header
 func (header *Header) String() string {
-	return fmt.Sprintf(basicHeader, header.label, header.style, header.connectionlist(), header.ignore)
+	return fmt.Sprintf(
+		basicHeader,
+		header.label,
+		header.style,
+		header.connectionlist(),
+		header.ignore,
+		header.link,
+		header.layout,
+	)
 }
 
 func (header *Header) connectionlist() string {

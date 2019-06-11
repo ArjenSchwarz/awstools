@@ -43,6 +43,23 @@ type IAMGroup struct {
 	Group            *iam.Group
 }
 
+// AttachedIAMPolicy is used to connect usernames, groups, and policy names
+type AttachedIAMPolicy struct {
+	Name   string
+	Users  []string
+	Groups []string
+}
+
+// AddObject adds an IAMObject (user or group) to the AttachedIAMPolicy
+func (policy *AttachedIAMPolicy) AddObject(object IAMObject) {
+	switch object.GetObjectType() {
+	case "Group":
+		policy.Groups = append(policy.Groups, object.GetName())
+	case "User":
+		policy.Users = append(policy.Users, object.GetName())
+	}
+}
+
 // IAMSession returns a shared IAMSession
 func IAMSession() *iam.IAM {
 	return iamSession

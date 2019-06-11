@@ -27,7 +27,6 @@ func init() {
 
 func peerings(cmd *cobra.Command, args []string) {
 	resultTitle := "VPC Peerings for account " + getName(helpers.GetAccountID())
-	setPeeringConfigs()
 	svc := helpers.Ec2Session()
 	peerings := helpers.GetAllVpcPeers(svc)
 	keys := []string{"ID", "Name", "AccountID", "PeeringIDs"}
@@ -35,6 +34,16 @@ func peerings(cmd *cobra.Command, args []string) {
 		keys = append(keys, "Image")
 	}
 	output := helpers.OutputArray{Keys: keys, Title: resultTitle}
+	switch settings.GetOutputFormat() {
+	case "drawio":
+		output.DrawIOHeader = createVpcPeeringsDrawIOHeader()
+	case "dot":
+		dotcolumns := config.DotColumns{
+			From: "ID",
+			To:   "PeeringIDs",
+		}
+		settings.DotColumns = &dotcolumns
+	}
 	vpcs := make(map[string]helpers.VPCHolder)
 	sorted := make(map[string][]string)
 	if settings.ShouldCombineAndAppend() {
@@ -95,25 +104,15 @@ func peerings(cmd *cobra.Command, args []string) {
 	output.Write(*settings)
 }
 
-func setPeeringConfigs() {
-	switch settings.GetOutputFormat() {
-	case "drawio":
-		drawioheader := drawio.NewHeader("%Name%", "%Image%", "Image")
-		connection := drawio.NewConnection()
-		connection.From = "PeeringIDs"
-		connection.To = "ID"
-		connection.Invert = false
-		connection.Style = "curved=1;endArrow=none;endFill=1;fontSize=11;"
-		drawioheader.AddConnection(connection)
-		header := drawioheader.String()
-		settings.OutputHeaders = &header
-	case "dot":
-		dotcolumns := config.DotColumns{
-			From: "ID",
-			To:   "PeeringIDs",
-		}
-		settings.DotColumns = &dotcolumns
-	}
+func createVpcPeeringsDrawIOHeader() drawio.Header {
+	drawioheader := drawio.NewHeader("%Name%", "%Image%", "Image")
+	connection := drawio.NewConnection()
+	connection.From = "PeeringIDs"
+	connection.To = "ID"
+	connection.Invert = false
+	connection.Style = "curved=1;endArrow=none;endFill=1;fontSize=11;"
+	drawioheader.AddConnection(connection)
+	return drawioheader
 }
 
 func unique(stringSlice []string) []string {

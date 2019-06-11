@@ -31,18 +31,16 @@ func init() {
 func showmesh(cmd *cobra.Command, args []string) {
 	resultTitle := "Virtual node connections for mesh " + *meshname
 	svc := helpers.AppmeshSession()
+	nodes := helpers.GetAllAppMeshNodeConnections(meshname, svc)
+	keys := []string{"Name", "Endpoints"}
+	if settings.IsDrawIO() {
+		keys = append(keys, "Image")
+	}
+	output := helpers.OutputArray{Keys: keys, Title: resultTitle}
 	// Set output specific config
 	switch settings.GetOutputFormat() {
 	case "drawio":
-		drawioheader := drawio.NewHeader("%Name%", "%Image%", "Image")
-		connection := drawio.NewConnection()
-		connection.From = "Endpoints"
-		connection.To = "Name"
-		connection.Invert = false
-		connection.Label = "Calls"
-		drawioheader.AddConnection(connection)
-		header := drawioheader.String()
-		settings.OutputHeaders = &header
+		output.DrawIOHeader = createAppmeshShowmeshDrawIOHeader()
 	case "dot":
 		dotcolumns := config.DotColumns{
 			From: "Name",
@@ -50,12 +48,7 @@ func showmesh(cmd *cobra.Command, args []string) {
 		}
 		settings.DotColumns = &dotcolumns
 	}
-	nodes := helpers.GetAllAppMeshNodeConnections(meshname, svc)
-	keys := []string{"Name", "Endpoints"}
-	if settings.IsDrawIO() {
-		keys = append(keys, "Image")
-	}
-	output := helpers.OutputArray{Keys: keys, Title: resultTitle}
+
 	for _, node := range nodes {
 		content := make(map[string]string)
 		content["Name"] = node.VirtualNodeName
@@ -71,4 +64,15 @@ func showmesh(cmd *cobra.Command, args []string) {
 		output.AddHolder(holder)
 	}
 	output.Write(*settings)
+}
+
+func createAppmeshShowmeshDrawIOHeader() drawio.Header {
+	drawioheader := drawio.NewHeader("%Name%", "%Image%", "Image")
+	connection := drawio.NewConnection()
+	connection.From = "Endpoints"
+	connection.To = "Name"
+	connection.Invert = false
+	connection.Label = "Calls"
+	drawioheader.AddConnection(connection)
+	return drawioheader
 }

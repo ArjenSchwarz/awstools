@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"encoding/csv"
 	"encoding/json"
-	"fmt"
 	"html/template"
 	"io"
 	"io/ioutil"
@@ -16,6 +15,7 @@ import (
 	"github.com/emicklei/dot"
 
 	"github.com/ArjenSchwarz/awstools/config"
+	"github.com/ArjenSchwarz/awstools/drawio"
 	"github.com/ArjenSchwarz/awstools/templates"
 )
 
@@ -27,23 +27,36 @@ type OutputHolder struct {
 // OutputArray holds all the different OutputHolders that will be provided as
 // output, as well as the keys (headers) that will actually need to be printed
 type OutputArray struct {
-	Title    string
-	Contents []OutputHolder
-	Keys     []string
+	Title        string
+	DrawIOHeader drawio.Header
+	Contents     []OutputHolder
+	Keys         []string
+}
+
+// GetContentsMap returns a stringmap of the output contents
+func (output OutputArray) GetContentsMap() []map[string]string {
+	total := make([]map[string]string, 0, len(output.Contents))
+	for _, holder := range output.Contents {
+		values := make(map[string]string)
+		for _, key := range output.Keys {
+			if val, ok := holder.Contents[key]; ok {
+				values[key] = val
+			}
+		}
+		total = append(total, values)
+	}
+	return total
 }
 
 // Write will provide the output as configured in the configuration
 func (output OutputArray) Write(settings config.Config) {
 	switch settings.GetOutputFormat() {
 	case "csv":
-		output.toCSV(*settings.OutputFile, "")
+		output.toCSV(*settings.OutputFile)
 	case "html":
 		output.toHTML(*settings.OutputFile, settings.ShouldAppend())
 	case "drawio":
-		if settings.OutputHeaders == nil {
-			log.Fatal("This command doesn't currently support the drawio output format")
-		}
-		output.toCSV(*settings.OutputFile, *settings.OutputHeaders)
+		drawio.CreateOutputFromCSV(output.DrawIOHeader, output.Keys, output.GetContentsMap(), *settings.OutputFile)
 	case "dot":
 		if settings.DotColumns == nil {
 			log.Fatal("This command doesn't currently support the dot output format")
@@ -54,7 +67,7 @@ func (output OutputArray) Write(settings config.Config) {
 	}
 }
 
-func (output OutputArray) toCSV(outputFile string, metadata string) {
+func (output OutputArray) toCSV(outputFile string) {
 	total := [][]string{}
 	total = append(total, output.Keys)
 	for _, holder := range output.Contents {
@@ -77,9 +90,6 @@ func (output OutputArray) toCSV(outputFile string, metadata string) {
 		defer file.Close()
 		target = bufio.NewWriter(file)
 	}
-	buf := new(bytes.Buffer)
-	fmt.Fprintf(buf, "%s", metadata)
-	buf.WriteTo(target)
 	w := csv.NewWriter(target)
 
 	for _, record := range total {
@@ -96,17 +106,7 @@ func (output OutputArray) toCSV(outputFile string, metadata string) {
 }
 
 func (output OutputArray) toJSON(outputFile string) {
-	total := make([]map[string]string, 0, len(output.Contents))
-	for _, holder := range output.Contents {
-		values := make(map[string]string)
-		for _, key := range output.Keys {
-			if val, ok := holder.Contents[key]; ok {
-				values[key] = val
-			}
-		}
-		total = append(total, values)
-	}
-	jsonString, _ := json.Marshal(total)
+	jsonString, _ := json.Marshal(output.GetContentsMap())
 
 	err := PrintByteSlice(jsonString, outputFile)
 	if err != nil {

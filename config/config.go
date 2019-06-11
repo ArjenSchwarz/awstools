@@ -7,7 +7,6 @@ type Config struct {
 	Verbose        *bool
 	OutputFile     *string
 	OutputFormat   *string
-	OutputHeaders  *string
 	AppendToOutput *bool
 	NameFile       *string
 	DotColumns     *DotColumns
