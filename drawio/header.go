@@ -14,13 +14,13 @@ const DefaultParentStyle = "swimlane;whiteSpace=wrap;html=1;childLayout=stackLay
 
 const defaultLabel = "%Name%"
 const defaultStyle = "%Image%"
-const defaultIgnore = "Id"
+const defaultIgnore = "Image"
 const headerComment = "##"
 const defaultEdgeSpacing = 40
 const defaultLevelSpacing = 100
 const defaultNodeSpacing = 40
-const defaultWidth = "78"
-const defaultHeight = "78"
+const defaultWidth = "auto"
+const defaultHeight = "auto"
 const defaultNamespace = "csvimport-"
 
 // Standard layout styles for draw.io
@@ -34,28 +34,6 @@ const (
 	LayoutOrganic        = "organic"
 	LayoutCircle         = "circle"
 )
-
-const basicHeader = `# label: %s
-# style: %s
-# identity: %s
-## Parent
-%s
-# namespace: %s
-%s
-# height: %s
-# width: %s
-# ignore: %s
-## Connectionlist
-%s
-## Spacing
-%s
-## Padding
-%s
-## Left and Top (only if layout is none)
-%s
-# layout: %s
-## ---- CSV below this line. First line are column names. ----
-`
 
 // Connection is a representation Draw.IO CSV import connection value
 type Connection struct {
@@ -89,20 +67,23 @@ type Header struct {
 }
 
 // NewHeader returns a header with the provided label, style, and ignore
+// label: Node label with placeholders and HTML.
+// style: Node style (placeholders are replaced once).
+// ignore: Comma-separated list of ignored columns for metadata. (These can be
+// used for connections and styles but will not be added as metadata.)
 func NewHeader(label string, style string, ignore string) Header {
 	header := Header{
 		label:  label,
 		style:  style,
 		ignore: ignore,
 		layout: LayoutAuto,
-		link:   headerComment,
 	}
 	header.SetSpacing(defaultNodeSpacing, defaultLevelSpacing, defaultEdgeSpacing)
 	header.SetHeightAndWidth(defaultHeight, defaultWidth)
 	return header
 }
 
-// DefaultHeader returns a header with: label: %Name%, style: %Image%, ignore: id
+// DefaultHeader returns a header with: label: %Name%, style: %Image%, ignore: Image
 func DefaultHeader() Header {
 	return NewHeader(defaultLabel, defaultStyle, defaultIgnore)
 }
@@ -131,11 +112,6 @@ func (header *Header) SetLayout(layout string) {
 	header.layout = layout
 }
 
-// SetLink sets the column to be renamed to link attribute (used as link)
-func (header *Header) SetLink(columnname string) {
-	header.link = "# link: " + columnname
-}
-
 // SetIdentity uses the given column name as the identity for cells (updates existing cells).
 func (header *Header) SetIdentity(columnname string) {
 	header.identity = columnname
@@ -143,6 +119,8 @@ func (header *Header) SetIdentity(columnname string) {
 
 // SetNamespace adds a prefix to the identity of cells to make sure they do not collide with existing cells (whose
 // IDs are numbers from 0..n, sometimes with a GUID prefix in the context of realtime collaboration).
+// This should be ignored by draw.io when identity is used, but regardless it is always ignored.
+// Only left in here in case it is fixed.
 // Default is csvimport-
 func (header *Header) SetNamespace(namespace string) {
 	header.namespace = namespace
@@ -169,42 +147,19 @@ func (header *Header) GetSpacing() (nodespacing, levelspacing, edgespacing int) 
 	return
 }
 
-// getSpacingString retrieves the string version of the spacing block for the header output
-func (header *Header) getSpacingString() string {
-	return fmt.Sprintf(
-		`# nodespacing: %v
-# levelspacing: %v
-# edgespacing: %v`,
-		header.nodespacing,
-		header.levelspacing,
-		header.edgespacing,
-	)
-}
-
 // SetParent sets the parent information. Requires identity to be set as well
 // parent: Uses the given column name as the parent reference for cells (refers to the identity column).
 // Set to - to remove. Default is unused
 // parentStyle: Parent style for nodes with child nodes (placeholders defined with %columnname% are replaced once).
+// Only used when parent is defined. Default is value of DefaultParentStyle
 func (header *Header) SetParent(parent, parentStyle string) {
 	header.parent = parent
 	header.parentStyle = parentStyle
 }
 
-// getParentBlock retrieves a string for the header containing both the parent and parentstyle values
-func (header *Header) getParentBlock() string {
-	if header.parent != "" {
-		return fmt.Sprintf(`# parent: %s
-# parentStyle: %s`,
-			header.parent,
-			header.parentStyle,
-		)
-	}
-	return headerComment
-}
-
 // SetHeightAndWidth sets the height and width values of the nodes
 // Possible values are a number (in px), auto or an @ sign followed by a column
-// name that contains the value for the width. Default for both is 78.
+// name that contains the value for the width. Default for both is auto.
 func (header *Header) SetHeightAndWidth(height, width string) {
 	header.height = height
 	header.width = width
@@ -215,14 +170,6 @@ func (header *Header) SetPadding(padding int) {
 	header.padding = padding
 }
 
-// getPaddingString returns a string for the header for the padding
-func (header *Header) getPaddingString() string {
-	if header.padding != 0 {
-		return fmt.Sprintf("# padding: %v", header.padding)
-	}
-	return headerComment
-}
-
 // SetLeftAndTopColumns lets you set the column names storing x (left) and y (top) coordinates
 // When using anything other than none for layout, this will be ignored
 func (header *Header) SetLeftAndTopColumns(left, top string) {
@@ -230,40 +177,24 @@ func (header *Header) SetLeftAndTopColumns(left, top string) {
 	header.top = top
 }
 
-// getLeftAndTopString returns the left and top values for the header
-func (header *Header) getLeftAndTopString() string {
-	if header.layout != LayoutNone {
-		return headerComment
-	}
-	return fmt.Sprintf(`# left: %v
-# top: %v`,
-		header.left,
-		header.top,
-	)
-}
-
 // String returns a formatted string for the header
 func (header *Header) String() string {
-	return fmt.Sprintf(
-		basicHeader,
-		header.label,
-		header.style,
-		header.identity,
-		header.getParentBlock(),
-		header.namespace,
-		header.connectionlist(),
-		header.height,
-		header.width,
-		header.ignore,
-		header.getSpacingString(),
-		header.getPaddingString(),
-		header.link,
-		header.getLeftAndTopString(),
-		header.layout,
-	)
+	headerArray := append(header.getLabel(), header.getStyle()...)
+	headerArray = append(headerArray, header.getIdentity()...)
+	headerArray = append(headerArray, header.getParent()...)
+	headerArray = append(headerArray, header.getNamespace()...)
+	headerArray = append(headerArray, header.connectionlist()...)
+	headerArray = append(headerArray, header.getHeightAndWidth()...)
+	headerArray = append(headerArray, header.getIgnore()...)
+	headerArray = append(headerArray, header.getSpacing()...)
+	headerArray = append(headerArray, header.getPadding()...)
+	headerArray = append(headerArray, header.getLink()...)
+	headerArray = append(headerArray, header.getLeftAndTop()...)
+	headerArray = append(headerArray, header.getLayout()...)
+	return strings.Join(headerArray, "\n") + "\n"
 }
 
-func (header *Header) connectionlist() string {
+func (header *Header) connectionlist() []string {
 	var result []string
 	for _, connection := range header.connections {
 		jsonstring, err := json.Marshal(connection)
@@ -272,5 +203,96 @@ func (header *Header) connectionlist() string {
 		}
 		result = append(result, "# connect: "+string(jsonstring))
 	}
-	return strings.Join(result, "\n")
+	return result
+}
+
+func (header *Header) getLabel() []string {
+	label := fmt.Sprintf("# label: %s", header.label)
+	return []string{label}
+}
+
+func (header *Header) getStyle() []string {
+	style := fmt.Sprintf("# style: %s", header.style)
+	return []string{style}
+}
+
+func (header *Header) getIgnore() []string {
+	ignore := fmt.Sprintf("# ignore: %s", header.ignore)
+	return []string{ignore}
+}
+
+func (header *Header) getLayout() []string {
+	layout := fmt.Sprintf("# layout: %s", header.layout)
+	return []string{layout}
+}
+
+// SetLink sets the column to be renamed to link attribute (used as link)
+func (header *Header) SetLink(columnname string) {
+	header.link = columnname
+}
+
+func (header *Header) getLink() []string {
+	if header.link != "" {
+		link := fmt.Sprintf("# link: %s", header.link)
+		return []string{link}
+	}
+	return []string{}
+}
+
+func (header *Header) getIdentity() []string {
+	if header.identity != "" {
+		identity := fmt.Sprintf("# identity: %s", header.identity)
+		return []string{identity}
+	}
+	return []string{}
+}
+
+func (header *Header) getLeftAndTop() []string {
+	if header.layout != LayoutNone {
+		return []string{}
+	}
+	left := fmt.Sprintf("# left: %v", header.left)
+	top := fmt.Sprintf("# top: %v", header.top)
+	return []string{left, top}
+}
+
+func (header *Header) getNamespace() []string {
+	if header.namespace != "" {
+		namespace := fmt.Sprintf("# namespace: %s", header.namespace)
+		return []string{namespace}
+	}
+	return []string{}
+}
+
+func (header *Header) getPadding() []string {
+	if header.padding != 0 {
+		padding := fmt.Sprintf("# padding: %v", header.padding)
+		return []string{padding}
+	}
+	return []string{}
+}
+
+func (header *Header) getHeightAndWidth() []string {
+	height := fmt.Sprintf("# height: %v", header.height)
+	width := fmt.Sprintf("# width: %v", header.width)
+	return []string{height, width}
+}
+
+func (header *Header) getParent() []string {
+	if header.parent == "" || header.parent == "-" {
+		return []string{}
+	}
+	parent := fmt.Sprintf("# parent: %s", header.parent)
+	if header.parentStyle == "" {
+		header.parentStyle = DefaultParentStyle
+	}
+	parentStyle := fmt.Sprintf("# parentstyle: %s", header.parentStyle)
+	return []string{parent, parentStyle}
+}
+
+func (header *Header) getSpacing() []string {
+	nodespacing := fmt.Sprintf("# nodespacing: %v", header.nodespacing)
+	levelspacing := fmt.Sprintf("# levelspacing: %v", header.levelspacing)
+	edgespacing := fmt.Sprintf("# edgespacing: %v", header.edgespacing)
+	return []string{nodespacing, levelspacing, edgespacing}
 }

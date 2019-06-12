@@ -70,6 +70,7 @@ func traverseOrgStructureEntry(entry helpers.OrganizationEntry, output *helpers.
 
 func createOrganizationsStructureDrawIOHeader() drawio.Header {
 	drawioheader := drawio.DefaultHeader()
+	drawioheader.SetHeightAndWidth("78", "78")
 	drawioheader.SetLayout(drawio.LayoutVerticalTree)
 	connection := drawio.NewConnection()
 	connection.Invert = false

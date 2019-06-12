@@ -106,6 +106,7 @@ func peerings(cmd *cobra.Command, args []string) {
 
 func createVpcPeeringsDrawIOHeader() drawio.Header {
 	drawioheader := drawio.NewHeader("%Name%", "%Image%", "Image")
+	drawioheader.SetHeightAndWidth("78", "78")
 	connection := drawio.NewConnection()
 	connection.From = "PeeringIDs"
 	connection.To = "ID"

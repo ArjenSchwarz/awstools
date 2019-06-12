@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"log"
+	"regexp"
 	"strings"
 
 	"github.com/ArjenSchwarz/awstools/config"
@@ -33,11 +35,14 @@ func detailUsers(cmd *cobra.Command, args []string) {
 		objectlist = append(objectlist, group)
 	}
 	keys := []string{"Name", "Type", "Groups", "Users", "PolicyNames", "InheritedPolicyNames"}
+	stringSeparator := ", "
 	if settings.IsDrawIO() {
 		keys = append(keys, "Image")
+		stringSeparator = ","
 		if *settings.Verbose {
 			keys = append(keys, "AttachedToGroups")
 			keys = append(keys, "AttachedToUsers")
+			keys = append(keys, "DrawioID")
 		}
 	}
 	output := helpers.OutputArray{Keys: keys, Title: resultTitle}
@@ -73,14 +78,14 @@ func detailUsers(cmd *cobra.Command, args []string) {
 				policylist[policyname] = policy
 			}
 		}
-		content["PolicyNames"] = strings.Join(directPolicyNames, ",")
+		content["PolicyNames"] = strings.Join(directPolicyNames, stringSeparator)
 		inheritedPolicyNames := make([]string, 0, len(object.GetInheritedPolicies()))
 		inheritedPolicyDetails := make([]string, 0, len(object.GetInheritedPolicies()))
 		for policyname, policydetail := range object.GetInheritedPolicies() {
 			inheritedPolicyNames = append(inheritedPolicyNames, policyname)
 			inheritedPolicyDetails = append(inheritedPolicyDetails, policydetail)
 		}
-		content["InheritedPolicyNames"] = strings.Join(inheritedPolicyNames, ",")
+		content["InheritedPolicyNames"] = strings.Join(inheritedPolicyNames, stringSeparator)
 
 		if settings.IsDrawIO() {
 			if object.GetObjectType() == "User" {
@@ -88,6 +93,7 @@ func detailUsers(cmd *cobra.Command, args []string) {
 			} else {
 				content["Image"] = drawio.ShapeAWSUsers
 			}
+			content["DrawioID"] = createID(object.GetObjectType() + object.GetName())
 		}
 		holder := helpers.OutputHolder{Contents: content}
 		output.AddHolder(holder)
@@ -99,11 +105,12 @@ func detailUsers(cmd *cobra.Command, args []string) {
 		content["Type"] = "Policy"
 		if settings.IsDrawIO() {
 			content["Image"] = drawio.ShapeAWSIdentityandAccessManagementIAMPermissions
-			content["AttachedToUsers"] = strings.Join(policy.Users, ",")
-			content["AttachedToGroups"] = strings.Join(policy.Groups, ",")
+			content["AttachedToUsers"] = strings.Join(policy.Users, stringSeparator)
+			content["AttachedToGroups"] = strings.Join(policy.Groups, stringSeparator)
+			content["DrawioID"] = createID("Policy" + policy.Name)
 		} else {
-			content["Users"] = strings.Join(policy.Users, ",")
-			content["Groups"] = strings.Join(policy.Groups, ",")
+			content["Users"] = strings.Join(policy.Users, stringSeparator)
+			content["Groups"] = strings.Join(policy.Groups, stringSeparator)
 
 		}
 		holder := helpers.OutputHolder{Contents: content}
@@ -115,6 +122,8 @@ func detailUsers(cmd *cobra.Command, args []string) {
 // createIamuserlistDrawIOHeader creates and configures the draw.io header settings
 func createIamuserlistDrawIOHeader() drawio.Header {
 	drawioheader := drawio.NewHeader("%Name%", "%Image%", "Image")
+	drawioheader.SetHeightAndWidth("78", "78")
+	drawioheader.SetIdentity("DrawioID")
 	drawioheader.SetLayout(drawio.LayoutHorizontalFlow)
 	connection := drawio.NewConnection()
 	connection.From = "Groups"
@@ -131,6 +140,15 @@ func createIamuserlistDrawIOHeader() drawio.Header {
 		drawioheader.AddConnection(connection2)
 	}
 	return drawioheader
+}
+
+func createID(toclean string) string {
+	// Make a Regex to say we only want letters and numbers
+	reg, err := regexp.Compile("[^a-zA-Z0-9]+")
+	if err != nil {
+		log.Fatal(err)
+	}
+	return reg.ReplaceAllString(toclean, "")
 }
 
 func init() {

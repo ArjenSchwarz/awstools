@@ -68,6 +68,7 @@ func showmesh(cmd *cobra.Command, args []string) {
 
 func createAppmeshShowmeshDrawIOHeader() drawio.Header {
 	drawioheader := drawio.NewHeader("%Name%", "%Image%", "Image")
+	drawioheader.SetHeightAndWidth("78", "78")
 	connection := drawio.NewConnection()
 	connection.From = "Endpoints"
 	connection.To = "Name"
