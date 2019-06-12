@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"log"
 	"net/url"
+	"time"
 
+	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/iam"
@@ -499,4 +501,57 @@ func GetAccountAlias() map[string]string {
 		alias[GetAccountID()] = *result.AccountAliases[0]
 	}
 	return alias
+}
+
+// HasAccessKeys checks if a user has access keys
+func (user IAMUser) HasAccessKeys() bool {
+	svc := IAMSession()
+	input := &iam.ListAccessKeysInput{
+		UserName: aws.String(user.Name),
+	}
+
+	result, err := svc.ListAccessKeys(input)
+	if err != nil {
+		panic(err)
+	}
+	return len(result.AccessKeyMetadata) > 0
+}
+
+// GetLastAccessKeyDate returns the last date an access key was used
+func (user IAMUser) GetLastAccessKeyDate() time.Time {
+	svc := IAMSession()
+	input := &iam.ListAccessKeysInput{
+		UserName: aws.String(user.Name),
+	}
+
+	result, err := svc.ListAccessKeys(input)
+	if err != nil {
+		panic(err)
+	}
+	var lastaccess time.Time
+	for _, key := range result.AccessKeyMetadata {
+		keyusage, err := svc.GetAccessKeyLastUsed(&iam.GetAccessKeyLastUsedInput{
+			AccessKeyId: key.AccessKeyId,
+		})
+		if err != nil {
+			panic(err)
+		}
+		if keyusage.AccessKeyLastUsed != nil && keyusage.AccessKeyLastUsed.LastUsedDate != nil {
+			if lastaccess.IsZero() || lastaccess.Before(*keyusage.AccessKeyLastUsed.LastUsedDate) {
+				lastaccess = *keyusage.AccessKeyLastUsed.LastUsedDate
+			}
+		}
+	}
+
+	return lastaccess
+}
+
+// HasUsedPassword checks if the user has used their password
+func (user IAMUser) HasUsedPassword() bool {
+	return user.User.PasswordLastUsed != nil
+}
+
+// GetLastPasswordDate returns the last date the user's password was used
+func (user IAMUser) GetLastPasswordDate() time.Time {
+	return *user.User.PasswordLastUsed
 }

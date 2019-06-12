@@ -34,15 +34,15 @@ func detailUsers(cmd *cobra.Command, args []string) {
 	for _, group := range grouplist {
 		objectlist = append(objectlist, group)
 	}
-	keys := []string{"Name", "Type", "Groups", "Users", "PolicyNames", "InheritedPolicyNames"}
+	keys := []string{"Name", "Type", "Groups", "Users", "PolicyNames", "InheritedPolicyNames", "Console", "API"}
 	stringSeparator := ", "
 	if settings.IsDrawIO() {
 		keys = append(keys, "Image")
+		keys = append(keys, "DrawioID")
 		stringSeparator = ","
 		if *settings.Verbose {
 			keys = append(keys, "AttachedToGroups")
 			keys = append(keys, "AttachedToUsers")
-			keys = append(keys, "DrawioID")
 		}
 	}
 	output := helpers.OutputArray{Keys: keys, Title: resultTitle}
@@ -61,6 +61,14 @@ func detailUsers(cmd *cobra.Command, args []string) {
 		content := make(map[string]string)
 		content["Name"] = object.GetName()
 		content["Type"] = object.GetObjectType()
+		if user, ok := object.(helpers.IAMUser); ok {
+			if user.HasUsedPassword() {
+				content["Console"] = user.GetLastPasswordDate().String()
+			}
+			if user.HasAccessKeys() {
+				content["API"] = user.GetLastAccessKeyDate().String()
+			}
+		}
 		content["Groups"] = strings.Join(object.GetGroups(), ",")
 		content["Users"] = strings.Join(object.GetUsers(), ",")
 		directPolicyNames := make([]string, 0, len(object.GetDirectPolicies()))
