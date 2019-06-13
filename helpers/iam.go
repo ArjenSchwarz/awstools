@@ -18,6 +18,7 @@ var cachedUsers []*iam.User
 // IAMObject interface for IAM objects
 type IAMObject interface {
 	GetName() string
+	GetID() string
 	GetUsers() []string
 	GetGroups() []string
 	GetObjectType() string
@@ -28,6 +29,7 @@ type IAMObject interface {
 // IAMUser contains information about IAM Users
 type IAMUser struct {
 	Name                  string
+	ID                    string
 	AttachedPolicies      map[string]string
 	InlinePolicies        map[string]string
 	Groups                []string
@@ -39,6 +41,7 @@ type IAMUser struct {
 // IAMGroup contains information about IAM Groups
 type IAMGroup struct {
 	Name             string
+	ID               string
 	Users            []string
 	AttachedPolicies map[string]string
 	InlinePolicies   map[string]string
@@ -554,4 +557,12 @@ func (user IAMUser) HasUsedPassword() bool {
 // GetLastPasswordDate returns the last date the user's password was used
 func (user IAMUser) GetLastPasswordDate() time.Time {
 	return *user.User.PasswordLastUsed
+}
+
+func (user IAMUser) GetID() string {
+	return user.ID
+}
+
+func (group IAMGroup) GetID() string {
+	return group.ID
 }

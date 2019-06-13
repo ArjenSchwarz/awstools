@@ -101,7 +101,7 @@ func detailUsers(cmd *cobra.Command, args []string) {
 			} else {
 				content["Image"] = drawio.ShapeAWSUsers
 			}
-			content["DrawioID"] = createID(object.GetObjectType() + object.GetName())
+			content["DrawioID"] = object.GetID()
 		}
 		holder := helpers.OutputHolder{Contents: content}
 		output.AddHolder(holder)
