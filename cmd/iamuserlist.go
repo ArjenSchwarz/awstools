@@ -129,7 +129,7 @@ func detailUsers(cmd *cobra.Command, args []string) {
 
 // createIamuserlistDrawIOHeader creates and configures the draw.io header settings
 func createIamuserlistDrawIOHeader() drawio.Header {
-	drawioheader := drawio.NewHeader("%Name%", "%Image%", "Image")
+	drawioheader := drawio.NewHeader("%Name%", "%Image%", "Image,DrawioID")
 	drawioheader.SetHeightAndWidth("78", "78")
 	drawioheader.SetIdentity("DrawioID")
 	drawioheader.SetLayout(drawio.LayoutHorizontalFlow)
