@@ -39,7 +39,7 @@ func iamrolelist(cmd *cobra.Command, args []string) {
 	resultTitle := "IAM Role overview for account " + getName(helpers.GetAccountID())
 	svc := helpers.IAMSession()
 	roles, policies := helpers.GetRolesAndPolicies(*settings.Verbose, svc)
-	keys := []string{"Name", "ID", "Type", "AssumedFrom", "Policies", "Roles"}
+	keys := []string{"Name", "Type", "AssumedFrom", "Policies", "Roles"}
 	stringSeparator := ", "
 	if settings.IsDrawIO() {
 		keys = append(keys, "Image")
