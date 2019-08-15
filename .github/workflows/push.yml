@@ -18,7 +18,7 @@ jobs:
         args: package
     - name: Deploy
       uses: ArjenSchwarz/actions/github/release@master
-      if: endsWith( github.ref, master )
+      if: endsWith( github.ref, "master" )
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         SOURCE_PATH: dist
