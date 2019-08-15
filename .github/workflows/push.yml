@@ -5,22 +5,21 @@ jobs:
     name: Build
     runs-on: ubuntu-latest
     steps:
+    - name: Set up Go 1.12
+      uses: actions/setup-go@v1
+      with:
+        go-version: 1.12
+      id: go
     - uses: actions/checkout@master
     - name: Build
-      uses: apex/actions/go@master
-      with:
-        entrypoint: make
-        args: build
+      env:
+        GOPATH: /home/runner/go
+      run: make build
     - name: Package
-      uses: ArjenSchwarz/actions/utils/zip@master
-      with:
-        entrypoint: make
-        args: package
-    - name: Production Filter
-      uses: actions/bin/filter@707718ee26483624de00bd146e073d915139a3d8
-      with:
-        args: branch master
+      if: github.ref == '/refs/head/master'
+      run: make package
     - name: Deploy
+      if: github.ref == '/refs/head/master'
       uses: ArjenSchwarz/actions/github/release@master
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
