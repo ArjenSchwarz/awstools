@@ -14,3 +14,5 @@ require (
 	golang.org/x/text v0.3.2 // indirect
 	golang.org/x/tools v0.0.0-20190814235402-ea4142463bf3 // indirect
 )
+
+replace github.com/golang/lint => golang.org/x/lint latest
