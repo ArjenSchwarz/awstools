@@ -13,7 +13,7 @@ jobs:
     - uses: actions/checkout@master
     - name: Build
       env:
-        GOPATH: $HOME/go
+        GOPATH: /home/runner/go
       run: make build
     - name: Package
       # if: contains( github.ref, '/refs/head/master' )
