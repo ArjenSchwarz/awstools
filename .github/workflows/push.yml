@@ -5,9 +5,13 @@ jobs:
     name: Build
     runs-on: ubuntu-latest
     steps:
+    - name: Set up Go 1.12
+      uses: actions/setup-go@v1
+      with:
+        go-version: 1.12
+      id: go
     - uses: actions/checkout@master
     - name: Build
-      uses: apex/actions/go@master
       with:
         entrypoint: make
         args: build
@@ -18,7 +22,7 @@ jobs:
         args: package
     - name: Deploy
       uses: ArjenSchwarz/actions/github/release@master
-      if: endsWith( github.ref, 'master' )
+      if: github.ref == '/refs/head/master'
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         SOURCE_PATH: dist
