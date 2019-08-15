@@ -16,7 +16,7 @@ jobs:
         GOPATH: /home/runner/go
       run: make build
     - name: Package
-      # if: contains( github.ref, '/refs/head/master' )
+      if: github.ref == '/refs/head/master'
       # uses: ArjenSchwarz/actions/utils/zip@master
       run: make package
       # with:
