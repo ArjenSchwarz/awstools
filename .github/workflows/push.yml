@@ -16,12 +16,9 @@ jobs:
       with:
         entrypoint: make
         args: package
-    - name: Production Filter
-      uses: actions/bin/filter@707718ee26483624de00bd146e073d915139a3d8
-      with:
-        args: branch master
     - name: Deploy
       uses: ArjenSchwarz/actions/github/release@master
+      if: endsWith( github.ref, master )
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         SOURCE_PATH: dist
