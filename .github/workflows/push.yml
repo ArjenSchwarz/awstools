@@ -17,13 +17,9 @@ jobs:
       run: make build
     - name: Package
       if: github.ref == '/refs/head/master'
-      # uses: ArjenSchwarz/actions/utils/zip@master
       run: make package
-      # with:
-      #   entrypoint: make
-      #   args: package
     - name: Deploy
-      if: contains( github.ref, '/refs/head/master' )
+      if: github.ref == '/refs/head/master'
       uses: ArjenSchwarz/actions/github/release@master
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
