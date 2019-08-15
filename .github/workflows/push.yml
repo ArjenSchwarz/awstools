@@ -12,15 +12,14 @@ jobs:
       id: go
     - uses: actions/checkout@master
     - name: Build
-      with:
-        entrypoint: make
-        args: build
+      run: make build
     - name: Package
       # if: contains( github.ref, '/refs/head/master' )
       # uses: ArjenSchwarz/actions/utils/zip@master
-      with:
-        entrypoint: make
-        args: package
+      run: make package
+      # with:
+      #   entrypoint: make
+      #   args: package
     - name: Deploy
       if: contains( github.ref, '/refs/head/master' )
       uses: ArjenSchwarz/actions/github/release@master
