@@ -1,0 +1,30 @@
+on: push
+name: Build and Deploy
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@master
+    - name: Build
+      uses: apex/actions/go@master
+      with:
+        entrypoint: make
+        args: build
+    - name: Package
+      uses: ArjenSchwarz/actions/utils/zip@master
+      with:
+        entrypoint: make
+        args: package
+    - name: Production Filter
+      uses: actions/bin/filter@707718ee26483624de00bd146e073d915139a3d8
+      with:
+        args: branch master
+    - name: Deploy
+      uses: ArjenSchwarz/actions/github/release@master
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        SOURCE_PATH: dist
+        VERSION: latest
+      with:
+        args: -delete
