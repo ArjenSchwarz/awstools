@@ -16,13 +16,14 @@ jobs:
         entrypoint: make
         args: build
     - name: Package
-      uses: ArjenSchwarz/actions/utils/zip@master
+      # if: contains( github.ref, '/refs/head/master' )
+      # uses: ArjenSchwarz/actions/utils/zip@master
       with:
         entrypoint: make
         args: package
     - name: Deploy
+      if: contains( github.ref, '/refs/head/master' )
       uses: ArjenSchwarz/actions/github/release@master
-      if: github.ref == '/refs/head/master'
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         SOURCE_PATH: dist
