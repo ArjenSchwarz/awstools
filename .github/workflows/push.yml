@@ -16,10 +16,10 @@ jobs:
         GOPATH: /home/runner/go
       run: make build
     - name: Package
-      if: github.ref == '/refs/heads/master'
+      if: github.ref == 'refs/heads/master'
       run: make package
     - name: Deploy
-      if: github.ref == '/refs/heads/master'
+      if: github.ref == 'refs/heads/master'
       uses: ArjenSchwarz/actions/github/release@master
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
