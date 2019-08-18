@@ -12,13 +12,13 @@ import (
 	"strings"
 )
 
-// CreateOutputFromCSV creates the CSV complete with the header
-func CreateOutputFromCSV(header Header, keys []string, contents []map[string]string, filename string) {
+// CreateCSV creates the CSV complete with the header
+func CreateCSV(drawIOHeader Header, headerRow []string, contents []map[string]string, filename string) {
 	total := [][]string{}
-	total = append(total, keys)
+	total = append(total, headerRow)
 	for _, holder := range contents {
-		values := make([]string, len(keys))
-		for counter, key := range keys {
+		values := make([]string, len(headerRow))
+		for counter, key := range headerRow {
 			if val, ok := holder[key]; ok {
 				values[counter] = val
 			}
@@ -37,7 +37,7 @@ func CreateOutputFromCSV(header Header, keys []string, contents []map[string]str
 		target = bufio.NewWriter(file)
 	}
 	buf := new(bytes.Buffer)
-	fmt.Fprintf(buf, "%s", header.String())
+	fmt.Fprintf(buf, "%s", drawIOHeader.String())
 	buf.WriteTo(target)
 	w := csv.NewWriter(target)
 

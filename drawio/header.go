@@ -22,6 +22,8 @@ const defaultNodeSpacing = 40
 const defaultWidth = "auto"
 const defaultHeight = "auto"
 const defaultNamespace = "csvimport-"
+const defaultConnectionFrom = "Parent"
+const defaultConnectionTo = "Name"
 
 // Standard layout styles for draw.io
 const (
@@ -68,7 +70,7 @@ type Header struct {
 
 // NewHeader returns a header with the provided label, style, and ignore
 // label: Node label with placeholders and HTML.
-// style: Node style (placeholders are replaced once).
+// style: Node style (placeholders (defined as '%name%') are replaced once).
 // ignore: Comma-separated list of ignored columns for metadata. (These can be
 // used for connections and styles but will not be added as metadata.)
 func NewHeader(label string, style string, ignore string) Header {
@@ -91,8 +93,8 @@ func DefaultHeader() Header {
 // NewConnection creates a new connection object using default values
 func NewConnection() Connection {
 	return Connection{
-		From:   "Parent",
-		To:     "Name",
+		From:   defaultConnectionFrom,
+		To:     defaultConnectionTo,
 		Invert: true,
 		Style:  DefaultConnectionStyle,
 	}
