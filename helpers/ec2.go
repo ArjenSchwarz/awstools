@@ -83,6 +83,8 @@ func GetAllEC2ResourceNames(svc *ec2.EC2) map[string]string {
 	result := make(map[string]string)
 	result = addAllVPCNames(svc, result)
 	result = addAllPeerNames(svc, result)
+	result = addAllSubnetNames(svc, result)
+	result = addAllRouteTableNames(svc, result)
 	return result
 }
 
@@ -125,6 +127,44 @@ func addAllPeerNames(svc *ec2.EC2, result map[string]string) map[string]string {
 	return result
 }
 
+func addAllSubnetNames(svc *ec2.EC2, result map[string]string) map[string]string {
+	resp, err := svc.DescribeSubnets(&ec2.DescribeSubnetsInput{})
+	if err != nil {
+		panic(err)
+	}
+	for _, subnet := range resp.Subnets {
+		result[*subnet.SubnetId] = *subnet.SubnetId
+		if subnet.Tags != nil {
+			for _, tag := range subnet.Tags {
+				if *tag.Key == "Name" {
+					result[*subnet.SubnetId] = *tag.Value
+					break
+				}
+			}
+		}
+	}
+	return result
+}
+
+func addAllRouteTableNames(svc *ec2.EC2, result map[string]string) map[string]string {
+	resp, err := svc.DescribeRouteTables(&ec2.DescribeRouteTablesInput{})
+	if err != nil {
+		panic(err)
+	}
+	for _, resource := range resp.RouteTables {
+		result[*resource.RouteTableId] = *resource.RouteTableId
+		if resource.Tags != nil {
+			for _, tag := range resource.Tags {
+				if *tag.Key == "Name" {
+					result[*resource.RouteTableId] = *tag.Value
+					break
+				}
+			}
+		}
+	}
+	return result
+}
+
 // VpcPeering represents a VPC Peering object
 type VpcPeering struct {
 	RequesterVpc VPCHolder
@@ -154,6 +194,84 @@ func GetAllVpcPeers(svc *ec2.EC2) []VpcPeering {
 			PeeringID: *connection.VpcPeeringConnectionId,
 		}
 		result = append(result, peering)
+	}
+	return result
+}
+
+// VPCRouteTable contains the relevant information for a Route Table
+type VPCRouteTable struct {
+	Vpc     VPCHolder
+	ID      string
+	Routes  []VPCRoute
+	Subnets []string
+	Default bool
+}
+
+// VPCRoute represents a Route object
+// DestinationTarget shows the target, regardless of the type
+type VPCRoute struct {
+	DestinationCIDR   string
+	State             string
+	DestinationTarget string
+}
+
+//GetAllVPCRouteTables returns all the Routetables in the account and region
+func GetAllVPCRouteTables(svc *ec2.EC2) []VPCRouteTable {
+	var result []VPCRouteTable
+	resp, err := svc.DescribeRouteTables(&ec2.DescribeRouteTablesInput{})
+	if err != nil {
+		panic(err)
+	}
+	for _, routetable := range resp.RouteTables {
+		var subnets []string
+		for _, assocs := range routetable.Associations {
+			if assocs.SubnetId != nil {
+				subnets = append(subnets, *assocs.SubnetId)
+			}
+		}
+		table := VPCRouteTable{
+			Vpc: VPCHolder{ID: *routetable.VpcId,
+				AccountID: *routetable.OwnerId},
+			ID:      *routetable.RouteTableId,
+			Routes:  parseVPCRoutes(routetable.Routes),
+			Subnets: subnets,
+		}
+		result = append(result, table)
+	}
+	return result
+}
+
+func parseVPCRoutes(routes []*ec2.Route) []VPCRoute {
+	var result []VPCRoute
+	for _, route := range routes {
+		rt := VPCRoute{
+			State: *route.State,
+		}
+		if route.DestinationCidrBlock != nil {
+			rt.DestinationCIDR = *route.DestinationCidrBlock
+		}
+		if route.DestinationIpv6CidrBlock != nil {
+			rt.DestinationCIDR = *route.DestinationIpv6CidrBlock
+		}
+		if route.VpcPeeringConnectionId != nil {
+			rt.DestinationTarget = *route.VpcPeeringConnectionId
+		}
+		if route.GatewayId != nil {
+			rt.DestinationTarget = *route.GatewayId
+		}
+		if route.NatGatewayId != nil {
+			rt.DestinationTarget = *route.NatGatewayId
+		}
+		if route.NetworkInterfaceId != nil {
+			rt.DestinationTarget = *route.NetworkInterfaceId
+		}
+		if route.EgressOnlyInternetGatewayId != nil {
+			rt.DestinationTarget = *route.EgressOnlyInternetGatewayId
+		}
+		if route.TransitGatewayId != nil {
+			rt.DestinationTarget = *route.TransitGatewayId
+		}
+		result = append(result, rt)
 	}
 	return result
 }
