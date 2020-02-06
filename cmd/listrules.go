@@ -1,6 +1,6 @@
 package cmd
 
-// (import (
+// import (
 // 	"fmt"
 // 	"strconv"
 
@@ -91,4 +91,4 @@ package cmd
 // 	FromPort          int64
 // 	ToPort            int64
 // 	Source            string
-// })
+// }

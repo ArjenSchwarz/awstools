@@ -15,7 +15,7 @@ var resourcesCmd = &cobra.Command{
 
 Return values are the ResourceID, Type, and Stack of the resource.
 
---verbose will add the status and logicalname (the nme within the stack) to the output;`,
+--verbose will add the status and logicalname (the nme within the stack) to the output`,
 	Run: listResources,
 }
 

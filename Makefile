@@ -8,7 +8,7 @@ deps:
 .PHONY: test
 test:
 	go get -u golang.org/x/lint/golint
-	golint ./...
+	$(GOPATH)/bin/golint ./...
 	go test ./...
 
 .PHONY: clean
@@ -32,6 +32,7 @@ package:
 	tar czf dist/awstools_linux_amd64.tgz -C pkg/linux_amd64 awstools
 	tar czf dist/awstools_linux_386.tgz -C pkg/linux_386 awstools
 
+.PHONY: local
 local:
 	golint ./...
 	go test ./...
