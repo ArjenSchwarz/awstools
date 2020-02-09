@@ -85,10 +85,11 @@ func GetAllEC2ResourceNames(svc *ec2.EC2) map[string]string {
 	result = addAllPeerNames(svc, result)
 	result = addAllSubnetNames(svc, result)
 	result = addAllRouteTableNames(svc, result)
+	result = addAllTransitGatewayNames(svc, result)
 	return result
 }
 
-//GetAllVPCNames returns the names of all vpcs in a map
+//addAllVPCNames returns the names of all vpcs in a map
 func addAllVPCNames(svc *ec2.EC2, result map[string]string) map[string]string {
 	resp, err := svc.DescribeVpcs(&ec2.DescribeVpcsInput{})
 	if err != nil {
@@ -160,6 +161,17 @@ func addAllRouteTableNames(svc *ec2.EC2, result map[string]string) map[string]st
 					break
 				}
 			}
+		}
+	}
+	return result
+}
+
+func addAllTransitGatewayNames(svc *ec2.EC2, result map[string]string) map[string]string {
+	tgws := GetAllTransitGateways(svc)
+	for _, tgw := range tgws {
+		result[tgw.ID] = tgw.Name
+		for _, rt := range tgw.RouteTables {
+			result[rt.ID] = rt.Name
 		}
 	}
 	return result
@@ -276,6 +288,141 @@ func parseVPCRoutes(routes []*ec2.Route) []VPCRoute {
 	return result
 }
 
+// TransitGateway is a struct for managing TransitGateway objects
+type TransitGateway struct {
+	ID          string
+	AccountID   string
+	Name        string
+	RouteTables map[string]TransitGatewayRouteTable
+}
+
+// TransitGatewayRouteTable is a struct for managing Transit Gateway route table objects
+type TransitGatewayRouteTable struct {
+	ID                     string
+	Name                   string
+	Routes                 []TransitGatewayRoute
+	SourceAttachments      []TransitGatewayAttachment
+	DestinationAttachments []TransitGatewayAttachment
+}
+
+// TransitGatewayRoute reflects a Transit Gateway Route object
+type TransitGatewayRoute struct {
+	State        string
+	CIDR         string
+	Attachment   TransitGatewayAttachment
+	ResourceType string
+	RouteType    string
+}
+
+// TransitGatewayAttachment reflects a Transit Gateway Attachment
+type TransitGatewayAttachment struct {
+	ID           string
+	ResourceType string
+	ResourceID   string
+}
+
+// GetAllTransitGateways returns an array of all Transit Gateways in the account
+func GetAllTransitGateways(svc *ec2.EC2) []TransitGateway {
+	var result []TransitGateway
+	resp, err := svc.DescribeTransitGateways(&ec2.DescribeTransitGatewaysInput{})
+	if err != nil {
+		panic(err)
+	}
+	for _, tgw := range resp.TransitGateways {
+		tgwobject := TransitGateway{
+			ID:          *tgw.TransitGatewayId,
+			AccountID:   *tgw.OwnerId,
+			Name:        getNameFromTags(tgw.Tags),
+			RouteTables: GetRouteTablesForTransitGateway(*tgw.TransitGatewayId, svc),
+		}
+		result = append(result, tgwobject)
+	}
+	return result
+}
+
+// GetRouteTablesForTransitGateway returns all route tables attached to a Transit Gateway
+func GetRouteTablesForTransitGateway(tgwID string, svc *ec2.EC2) map[string]TransitGatewayRouteTable {
+	result := make(map[string]TransitGatewayRouteTable)
+	params := &ec2.DescribeTransitGatewayRouteTablesInput{
+		Filters: []*ec2.Filter{
+			{
+				Name:   aws.String("transit-gateway-id"),
+				Values: []*string{&tgwID},
+			},
+		},
+	}
+	resp, err := svc.DescribeTransitGatewayRouteTables(params)
+	if err != nil {
+		panic(err)
+	}
+	for _, table := range resp.TransitGatewayRouteTables {
+		routetable := TransitGatewayRouteTable{
+			ID:   *table.TransitGatewayRouteTableId,
+			Name: getNameFromTags(table.Tags),
+		}
+		result[routetable.ID] = routetable
+	}
+	for _, routetable := range result {
+		routetable.Routes = GetActiveRoutesForTransitGatewayRouteTable(routetable.ID, svc)
+		routetable.SourceAttachments = GetSourceAttachmentsForTransitGatewayRouteTable(routetable.ID, svc)
+		result[routetable.ID] = routetable
+	}
+	return result
+}
+
+// GetSourceAttachmentsForTransitGatewayRouteTable returns all the source attachments attached to a Transit Gateway route table
+func GetSourceAttachmentsForTransitGatewayRouteTable(routetableID string, svc *ec2.EC2) []TransitGatewayAttachment {
+	var result []TransitGatewayAttachment
+	params := &ec2.GetTransitGatewayRouteTableAssociationsInput{
+		TransitGatewayRouteTableId: &routetableID,
+	}
+	resp, err := svc.GetTransitGatewayRouteTableAssociations(params)
+	if err != nil {
+		panic(err)
+	}
+	for _, attachment := range resp.Associations {
+		tgwattachment := TransitGatewayAttachment{
+			ID:           *attachment.TransitGatewayAttachmentId,
+			ResourceID:   *attachment.ResourceId,
+			ResourceType: *attachment.ResourceType,
+		}
+		result = append(result, tgwattachment)
+	}
+	return result
+}
+
+// GetActiveRoutesForTransitGatewayRouteTable returns all routes that are currently active for a Transit Gateway route table
+func GetActiveRoutesForTransitGatewayRouteTable(routetableID string, svc *ec2.EC2) []TransitGatewayRoute {
+	var result []TransitGatewayRoute
+	desiredState := "active"
+	params := &ec2.SearchTransitGatewayRoutesInput{
+		TransitGatewayRouteTableId: &routetableID,
+		Filters: []*ec2.Filter{
+			{
+				Name:   aws.String("state"),
+				Values: []*string{&desiredState},
+			},
+		},
+	}
+	resp, err := svc.SearchTransitGatewayRoutes(params)
+	if err != nil {
+		panic(err)
+	}
+	for _, route := range resp.Routes {
+		tgwroute := TransitGatewayRoute{
+			State: *route.State,
+			CIDR:  *route.DestinationCidrBlock,
+			Attachment: TransitGatewayAttachment{
+				ID:         *route.TransitGatewayAttachments[0].TransitGatewayAttachmentId,
+				ResourceID: *route.TransitGatewayAttachments[0].ResourceId,
+			},
+			RouteType: *route.Type,
+		}
+		result = append(result, tgwroute)
+	}
+	return result
+}
+
 // IsLatestInstanceFamily checks if an instance is part of the la
 // test family is running in the latest instance family.
 // TODO: Automate this to work properly
@@ -306,4 +453,13 @@ func IsLatestInstanceFamily(instanceFamily string) bool {
 	default:
 		return false
 	}
+}
+
+func getNameFromTags(tags []*ec2.Tag) string {
+	for _, tag := range tags {
+		if aws.StringValue(tag.Key) == "Name" {
+			return aws.StringValue(tag.Value)
+		}
+	}
+	return ""
 }
