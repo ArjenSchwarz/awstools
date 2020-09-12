@@ -14,6 +14,6 @@ var appmeshCmd = &cobra.Command{
 var meshname *string
 
 func init() {
-	RootCmd.AddCommand(appmeshCmd)
+	rootCmd.AddCommand(appmeshCmd)
 	meshname = appmeshCmd.PersistentFlags().StringP("meshname", "m", "", "The name of the mesh")
 }

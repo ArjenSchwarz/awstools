@@ -22,7 +22,7 @@ var namesCmd = &cobra.Command{
 }
 
 func init() {
-	RootCmd.AddCommand(namesCmd)
+	rootCmd.AddCommand(namesCmd)
 }
 
 func names(cmd *cobra.Command, args []string) {

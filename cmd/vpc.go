@@ -12,5 +12,5 @@ var vpcCmd = &cobra.Command{
 }
 
 func init() {
-	RootCmd.AddCommand(vpcCmd)
+	rootCmd.AddCommand(vpcCmd)
 }

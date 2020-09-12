@@ -13,8 +13,8 @@ import (
 
 var settings = new(config.Config)
 
-// RootCmd represents the base command when called without any subcommands
-var RootCmd = &cobra.Command{
+// rootCmd represents the base command when called without any subcommands
+var rootCmd = &cobra.Command{
 	Use:   "awstools",
 	Short: "Various tools for dealing with complex AWS comments",
 	Long: `awstools is designed to be used for more complex tasks that would take a lot of work using just the CLI.
@@ -25,7 +25,7 @@ This usually involves tasks that would require multiple calls.`,
 // Execute adds all child commands to the root command sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.
 func Execute() {
-	if err := RootCmd.Execute(); err != nil {
+	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
 		os.Exit(-1)
 	}
@@ -33,11 +33,11 @@ func Execute() {
 
 func init() {
 	// cobra.OnInitialize(initConfig)
-	settings.Verbose = RootCmd.PersistentFlags().BoolP("verbose", "v", false, "Give verbose output")
-	settings.OutputFile = RootCmd.PersistentFlags().StringP("file", "f", "", "Optional file to save the output to")
-	settings.OutputFormat = RootCmd.PersistentFlags().StringP("output", "o", "json", "Format for the output, currently supported are csv, json, html, dot, and drawio")
-	settings.AppendToOutput = RootCmd.PersistentFlags().BoolP("append", "a", false, "Add to the provided output file instead of replacing it")
-	settings.NameFile = RootCmd.PersistentFlags().StringP("namefile", "n", "", "Use this file to provide names")
+	settings.Verbose = rootCmd.PersistentFlags().BoolP("verbose", "v", false, "Give verbose output")
+	settings.OutputFile = rootCmd.PersistentFlags().StringP("file", "f", "", "Optional file to save the output to")
+	settings.OutputFormat = rootCmd.PersistentFlags().StringP("output", "o", "json", "Format for the output, currently supported are csv, json, html, dot, and drawio")
+	settings.AppendToOutput = rootCmd.PersistentFlags().BoolP("append", "a", false, "Add to the provided output file instead of replacing it")
+	settings.NameFile = rootCmd.PersistentFlags().StringP("namefile", "n", "", "Use this file to provide names")
 }
 
 // initConfig reads in config file and ENV variables if set.

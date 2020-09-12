@@ -16,7 +16,7 @@ package cmd
 // var vpc *string
 
 // func init() {
-// 	RootCmd.AddCommand(sgCmd)
+// 	rootCmd.AddCommand(sgCmd)
 // 	groupname = sgCmd.PersistentFlags().StringP("groupname", "g", "", "The name of the securitygroup")
 // 	tag = sgCmd.PersistentFlags().StringP("tag", "t", "", "key:value pair of tag value")
 // 	vpc = sgCmd.PersistentFlags().String("vpc", "", "VPC Id")

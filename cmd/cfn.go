@@ -12,6 +12,6 @@ var cfnCmd = &cobra.Command{
 var stackname *string
 
 func init() {
-	RootCmd.AddCommand(cfnCmd)
+	rootCmd.AddCommand(cfnCmd)
 	stackname = cfnCmd.PersistentFlags().StringP("stack", "s", "", "The name of the stack")
 }
