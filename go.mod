@@ -1,9 +1,9 @@
 module github.com/ArjenSchwarz/awstools
 
-go 1.13
+go 1.15
 
 require (
-	github.com/aws/aws-sdk-go v1.29.2
+	github.com/aws/aws-sdk-go v1.34.22
 	github.com/emicklei/dot v0.10.1
 	github.com/spf13/cobra v0.0.5
 	github.com/spf13/viper v1.3.2
