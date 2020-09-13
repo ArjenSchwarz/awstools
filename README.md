@@ -27,22 +27,70 @@ Available Commands:
   cfn           CloudFormation commands
   help          Help about any command
   iam           IAM commands
+  names         Get the names for the resources in the account
   organizations AWS Organizations commands
+  sso           Single Sign-On commands
+  tgw           Transit Gateway commands
+  vpc           VPC commands
 
 Flags:
-  -f, --file string     Optional file to save the output to
-  -h, --help            help for awstools
-  -o, --output string   Format for the output, currently supported are csv, json, dot, and drawio (default "json")
-  -v, --verbose         Give verbose output
+  -a, --append            Add to the provided output file instead of replacing it
+  -f, --file string       Optional file to save the output to
+  -h, --help              help for awstools
+  -n, --namefile string   Use this file to provide names
+  -o, --output string     Format for the output, currently supported are csv, json, html, dot, and drawio (default "json")
+  -v, --verbose           Give verbose output
 
 Use "awstools [command] --help" for more information about a command.
 ```
 
 Output options at the moment are csv, json, dot, or drawio with json being the default so you can easily pass it to a tool like [jq](https://stedolan.github.io/jq/). Both dot and drawio are input for graphical tools and only available for certain actions. You can also directly save the output into a file. Most commands will have a verbose option that will show some additional information that you often won't need.
 
+## Pretty names
+
+You can generate pretty names for your outputs using a naming file, which is just a JSON file full of key:value pairs. Where possible, the key will be replaced with the value if you provide the `--namefile` option.
+
+```bash
+$ awstools vpc routes --output csv
+AccountID,Account Name,ID,Name,VPC,VPC Name,Subnets,Routes
+0987654321,0987654321,rtb-3456789,rtb-3456789,vpc-2345678,vpc-2345678,,"172.31.0.0/16: local,0.0.0.0/0: igw-123456"
+$ awstools vpc routes --output csv --namefile test.json
+AccountID,Account Name,ID,Name,VPC,VPC Name,Subnets,Routes
+0987654321,Test Account,rtb-3456789,test route table,vpc-2345678,test vpc,,"172.31.0.0/16: local,0.0.0.0/0: igw-123456"
+```
+
+Creating a naming file can be done with the `names` command. This will loop over many items in your account and create the naming file with the required key-value pairs. This is currently limited both to items awstools has access to, as well as the items implemented (and what can be named).
+
+```bash
+$ awstools names --file mappings.json
+```
+
+For commands or services that cross accounts, it can be useful to append the output to an existing one.
+
+```bash
+$ awstools names --file mappings.json --append
+```
+
+### Main limitations
+
+The main limitation currently is within SSO. Due to API limitations, it is not possible to get the pretty names of the User and Group objects automatically. However, if you have an external directory you can collect that same information there and add it to your naming file.
+
+## Multi-account data
+
+If you're collating data from multiple accounts (VPC peering connections for example), you can collate this for all output formats except for the dot format. This works just as for the `names` command by adding the `--append` flag in combination with the `--file` flag.
+
+```bash
+# in account 1
+$ awstools vpc peerings --file peerings.json
+# in account 2
+$ awstools vpc peerings --file peerings.json --append
+```
+
+If you don't use the append flag, it will instead overwrite the contents of the file.
+
 ## Output formats
 
-Where everything supports CSV and JSON outputs, several commands also support graphical output formats. These require a little bit more work, but can be very useful to get an overview or even incorporate the output into your diagrams.
+Where everything supports CSV, JSON, and HTML outputs, several commands also support graphical output formats. These require a little bit more work, but can be very useful to get an overview or even incorporate the output into your diagrams.
 
 ### Dot format
 
@@ -110,7 +158,7 @@ details-v1-appmesh-bookinfo,,outlineConnect=0;fontColor=#232F3E;gradientColor=no
 reviews-v2-appmesh-bookinfo,ratings-v1-appmesh-bookinfo,outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#D05C17;strokeColor=none;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;pointerEvents=1;shape=mxgraph.aws4.container_2;
 ```
 
-If you copy this output and import it into your diagram (through pasting it into the field you get via Arrange -> Insert -> CSV) that results in a diagram like the below.
+If you copy this output and import it into your diagram (through pasting it into the field you get via Arrange -> Insert -> Advanced -> CSV) that results in a diagram like the below.
 
 ![Exported png of the generated draw.io app mesh diagram](docs/drawio-mesh.png)
 
@@ -122,6 +170,14 @@ $ awstools organizations structure -o drawio
 
 ![Exported png of the generated draw.io organizations diagram](docs/drawio-orgstructure.png)
 
+Or your SSO output with
+
+```bash
+$ awstools sso by-account -o drawio
+```
+
+![Exported png of the generated draw.io SSO connections diagram](docs/drawio-sso-by-account.png)
+
 ## Installation and configuration
 
 Simply download the [latest release][latest] for your platform, and you can use it. You can place it somewhere in your $PATH to ensure you can run it from anywhere.
@@ -131,6 +187,8 @@ The AWS configuration is read from the standard locations:
 * Your environment variables (`AWS_ACCESS_KEY`, `AWS_SECRET_ACCESS_KEY`, etc.).
 * The values in your `~/.aws/credentials` file.
 * Permissions from the IAM role the application has access to (when running on AWS)
+
+Unfortunately, the Go SDK doesn't support the credentials used by the AWS CLI v2 for AWS SSO connections. If you wish to use this, you will need to export the current settings (for an example see the `awsexportcurrent` function in [this zsh config file](https://github.com/ArjenSchwarz/custom_zsh/blob/master/plugins/aws-shorts/aws-shorts.plugin.zsh)) or use a tool like [benkehoe/aws-sso-credential-process](https://github.com/benkehoe/aws-sso-credential-process).
 
 [latest]: https://github.com/ArjenSchwarz/awstools/releases
 

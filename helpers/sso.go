@@ -18,7 +18,6 @@ func SSOSession() *ssoadmin.SSOAdmin {
 func GetSSOAccountInstance(svc *ssoadmin.SSOAdmin) SSOInstance {
 	ssoInstance := getSSOInstance(svc)
 	ssoInstance.getPermissionSets(svc)
-	// fmt.Printf("%+v\n", ssoInstance.Accounts)
 	return ssoInstance
 }
 
@@ -96,7 +95,6 @@ func (instance *SSOInstance) getPermissionSets(svc *ssoadmin.SSOAdmin) []SSOPerm
 		}
 		instance.PermissionSets = permissionsets
 	}
-	// fmt.Printf("%+v\n", instance.PermissionSets)
 	return instance.PermissionSets
 }
 
@@ -198,6 +196,15 @@ func (instance *SSOInstance) addAssignmentsToAccount(account SSOAccount) {
 	}
 }
 
+//GetAccountList returns a list of the account numbers in the SSO Instance
+func (instance *SSOInstance) GetAccountList() []string {
+	accounts := []string{}
+	for _, account := range instance.Accounts {
+		accounts = append(accounts, account.AccountID)
+	}
+	return accounts
+}
+
 func (account *SSOAccount) addAssignmentToAccount(assignment SSOAccountAssignment) {
 	assignments := []SSOAccountAssignment{}
 	if len(account.AccountAssignments) != 0 {
@@ -213,4 +220,17 @@ func (permissionset *SSOPermissionSet) GetManagedPolicyNames() []string {
 		policynames = append(policynames, policy.Name)
 	}
 	return policynames
+}
+
+//GetAssignmentIdsByAccount returns the assigment's principal IDs
+func (permissionset *SSOPermissionSet) GetAssignmentIdsByAccount(accountnr string) []string {
+	result := []string{}
+	for _, account := range permissionset.Accounts {
+		if account.AccountID == accountnr {
+			for _, assignment := range account.AccountAssignments {
+				result = append(result, assignment.PrincipalID)
+			}
+		}
+	}
+	return result
 }
