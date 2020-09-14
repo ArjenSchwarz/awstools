@@ -83,8 +83,9 @@ func getSSOInstance(svc *ssoadmin.SSOAdmin) SSOInstance {
 }
 
 func (instance *SSOInstance) getPermissionSets(svc *ssoadmin.SSOAdmin) []SSOPermissionSet {
+	maxresults := int64(100)
 	if instance.PermissionSets == nil {
-		permissions, err := svc.ListPermissionSets(&ssoadmin.ListPermissionSetsInput{InstanceArn: &instance.Arn})
+		permissions, err := svc.ListPermissionSets(&ssoadmin.ListPermissionSetsInput{InstanceArn: &instance.Arn, MaxResults: &maxresults})
 		if err != nil {
 			panic(err)
 		}
