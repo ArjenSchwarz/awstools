@@ -141,9 +141,11 @@ func (instance *SSOInstance) getPermissionSetDetails(permissionsetarn string, sv
 }
 
 func (permissionset *SSOPermissionSet) addAccountInfo(svc *ssoadmin.SSOAdmin) []SSOAccount {
+	maxresults := int64(100)
 	provisionedaccounts, err := svc.ListAccountsForProvisionedPermissionSet(&ssoadmin.ListAccountsForProvisionedPermissionSetInput{
 		InstanceArn:      &permissionset.Instance.Arn,
 		PermissionSetArn: &permissionset.Arn,
+		MaxResults:       &maxresults,
 	})
 	if err != nil {
 		panic(err)
@@ -157,6 +159,7 @@ func (permissionset *SSOPermissionSet) addAccountInfo(svc *ssoadmin.SSOAdmin) []
 			InstanceArn:      &permissionset.Instance.Arn,
 			PermissionSetArn: &permissionset.Arn,
 			AccountId:        accountnr,
+			MaxResults:       &maxresults,
 		})
 		if err != nil {
 			panic(err)
