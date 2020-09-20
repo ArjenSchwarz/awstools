@@ -42,6 +42,7 @@ func ssoOverviewByAccount(cmd *cobra.Command, args []string) {
 		keys = append(keys, "ManagedPolicies", "InlinePolicy")
 	}
 	output := helpers.OutputArray{Keys: keys, Title: resultTitle}
+	output.SortKey = "AccountID"
 	stringSeparator := ", "
 	switch settings.GetOutputFormat() {
 	case "drawio":

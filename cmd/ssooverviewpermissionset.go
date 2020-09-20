@@ -41,6 +41,7 @@ func ssoOverviewByPermissionSet(cmd *cobra.Command, args []string) {
 		keys = append(keys, "ManagedPolicies", "InlinePolicy")
 	}
 	output := helpers.OutputArray{Keys: keys, Title: resultTitle}
+	output.SortKey = "PermissionSet"
 	stringSeparator := ", "
 	switch settings.GetOutputFormat() {
 	case "drawio":
@@ -61,8 +62,8 @@ func ssoOverviewByPermissionSet(cmd *cobra.Command, args []string) {
 			for _, account := range permissionset.Accounts {
 				for _, assignment := range account.AccountAssignments {
 					content := make(map[string]string)
-					content["AccountID"] = getName(account.AccountID)
 					content["PermissionSet"] = assignment.PermissionSet.Name
+					content["AccountID"] = getName(account.AccountID)
 					content["Principal"] = getName(assignment.PrincipalID)
 					if *settings.Verbose {
 						content["ManagedPolicies"] = strings.Join(assignment.PermissionSet.GetManagedPolicyNames(), stringSeparator)
