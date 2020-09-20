@@ -16,6 +16,9 @@ var ssoOverviewByAccountCmd = &cobra.Command{
 	Long: `Provides an overview of all the permission sets and assignments attached to an account,
 	grouped by account.
 
+	You can filter the output to a single account by supplying the --resource-id (-r) flag with the
+	account ID or, if you use a name file, the account alias from the name file.
+
 	Verbose mode will add the policies for the permissionsets in the textual output formats
 	drawio output will generate a graph that goes SSO Instance -> Accounts -> Permission Sets -> User/Group
 	You may notice the same permission sets shown multiple times, this is to improve readability not a bug.
@@ -26,6 +29,8 @@ var ssoOverviewByAccountCmd = &cobra.Command{
 
 func init() {
 	ssoCmd.AddCommand(ssoOverviewByAccountCmd)
+	ssoOverviewByAccountCmd.Flags().StringVarP(&ssoresourceid, "resource-id", "r", "", "The account id (or account alias) you want to limit to")
+
 }
 
 func ssoOverviewByAccount(cmd *cobra.Command, args []string) {
@@ -51,21 +56,32 @@ func ssoOverviewByAccount(cmd *cobra.Command, args []string) {
 		createSSOAccountDrawIOContents(ssoInstance, &output)
 	default:
 		for _, account := range ssoInstance.Accounts {
-			for _, assignment := range account.AccountAssignments {
-				content := make(map[string]string)
-				content["AccountID"] = getName(account.AccountID)
-				content["PermissionSet"] = assignment.PermissionSet.Name
-				content["Principal"] = getName(assignment.PrincipalID)
-				if *settings.Verbose {
-					content["ManagedPolicies"] = strings.Join(assignment.PermissionSet.GetManagedPolicyNames(), stringSeparator)
-					content["InlinePolicy"] = assignment.PermissionSet.InlinePolicy
+			if filteredSSOAccount(account) {
+				for _, assignment := range account.AccountAssignments {
+					content := make(map[string]string)
+					content["AccountID"] = getName(account.AccountID)
+					content["PermissionSet"] = assignment.PermissionSet.Name
+					content["Principal"] = getName(assignment.PrincipalID)
+					if *settings.Verbose {
+						content["ManagedPolicies"] = strings.Join(assignment.PermissionSet.GetManagedPolicyNames(), stringSeparator)
+						content["InlinePolicy"] = assignment.PermissionSet.InlinePolicy
+					}
+					holder := helpers.OutputHolder{Contents: content}
+					output.AddHolder(holder)
 				}
-				holder := helpers.OutputHolder{Contents: content}
-				output.AddHolder(holder)
 			}
 		}
 	}
 	output.Write(*settings)
+}
+
+func filteredSSOAccount(account helpers.SSOAccount) bool {
+	if ssoresourceid == "" ||
+		ssoresourceid == account.AccountID ||
+		ssoresourceid == getName(account.AccountID) {
+		return true
+	}
+	return false
 }
 
 func createSSOAccountsDrawIOHeader() drawio.Header {
@@ -93,6 +109,9 @@ func createSSOAccountDrawIOContents(instance helpers.SSOInstance, output *helper
 	output.AddHolder(holder)
 	uniquefilter := []string{}
 	for _, account := range instance.Accounts {
+		if !filteredSSOAccount(account) {
+			continue
+		}
 		accountchildren := []string{}
 		content := make(map[string]string)
 		content["Name"] = getName(account.AccountID)

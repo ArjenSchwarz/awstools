@@ -16,6 +16,9 @@ var ssoOverviewByPermissionSetCmd = &cobra.Command{
 	Long: `Provides an overview of all the permission sets and assignments attached to an account,
 	grouped by permission set.
 
+	You can filter the output to a single permission set by supplying the --resource-id (-r) flag with the
+	permission set name or arn.
+
 	Verbose mode will add the policies for the permissionsets in the textual output formats
 	drawio output will generate a graph that goes SSO Instance -> Permission Sets -> Accounts -> User/Group.
 	You may notice the same accounts shown multiple times, this is to improve readability not a bug.
@@ -26,6 +29,7 @@ var ssoOverviewByPermissionSetCmd = &cobra.Command{
 
 func init() {
 	ssoCmd.AddCommand(ssoOverviewByPermissionSetCmd)
+	ssoOverviewByPermissionSetCmd.Flags().StringVarP(&ssoresourceid, "resource-id", "r", "", "The permission set name or arn you want to limit to")
 }
 
 func ssoOverviewByPermissionSet(cmd *cobra.Command, args []string) {
@@ -51,6 +55,9 @@ func ssoOverviewByPermissionSet(cmd *cobra.Command, args []string) {
 		createSSOPermissionsetsDrawIOContents(ssoInstance, &output)
 	default:
 		for _, permissionset := range ssoInstance.PermissionSets {
+			if !filteredSSOPermissionSet(permissionset) {
+				continue
+			}
 			for _, account := range permissionset.Accounts {
 				for _, assignment := range account.AccountAssignments {
 					content := make(map[string]string)
@@ -68,6 +75,15 @@ func ssoOverviewByPermissionSet(cmd *cobra.Command, args []string) {
 		}
 	}
 	output.Write(*settings)
+}
+
+func filteredSSOPermissionSet(permissionset helpers.SSOPermissionSet) bool {
+	if ssoresourceid == "" ||
+		ssoresourceid == permissionset.Arn ||
+		ssoresourceid == permissionset.Name {
+		return true
+	}
+	return false
 }
 
 func createSSOPermissionsetsDrawIOHeader() drawio.Header {
@@ -95,6 +111,9 @@ func createSSOPermissionsetsDrawIOContents(instance helpers.SSOInstance, output 
 	output.AddHolder(holder)
 	uniquefilter := []string{}
 	for _, permissionset := range instance.PermissionSets {
+		if !filteredSSOPermissionSet(permissionset) {
+			continue
+		}
 		permchildren := []string{}
 		content := make(map[string]string)
 		content["Name"] = getName(permissionset.Name)

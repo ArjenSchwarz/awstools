@@ -14,3 +14,5 @@ var ssoCmd = &cobra.Command{
 func init() {
 	rootCmd.AddCommand(ssoCmd)
 }
+
+var ssoresourceid string
