@@ -27,11 +27,12 @@ func ssoListPermissionSets(cmd *cobra.Command, args []string) {
 	resultTitle := "SSO Overview per permission set"
 	svc := helpers.SSOSession()
 	ssoInstance := helpers.GetSSOAccountInstance(svc)
-	keys := []string{"PermissionSet", "AccountIDs", "Principal", "ManagedPolicies", "InlinePolicy"}
+	keys := []string{"PermissionSet", "AccountIDs", "ManagedPolicies", "InlinePolicy"}
 	if *settings.Verbose {
 		keys = append(keys, "ManagedPolicies", "InlinePolicy")
 	}
 	output := helpers.OutputArray{Keys: keys, Title: resultTitle}
+	output.SortKey = "PermissionSet"
 	stringSeparator := ", "
 
 	for _, permissionset := range ssoInstance.PermissionSets {

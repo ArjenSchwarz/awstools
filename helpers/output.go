@@ -10,6 +10,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"sort"
 	"strings"
 
 	"github.com/emicklei/dot"
@@ -28,6 +29,7 @@ type OutputHolder struct {
 // output, as well as the keys (headers) that will actually need to be printed
 type OutputArray struct {
 	Title        string
+	SortKey      string
 	DrawIOHeader drawio.Header
 	Contents     []OutputHolder
 	Keys         []string
@@ -208,5 +210,12 @@ func (output *OutputArray) AddHolder(holder OutputHolder) {
 	if output.Contents != nil {
 		contents = output.Contents
 	}
-	output.Contents = append(contents, holder)
+	contents = append(contents, holder)
+	if output.SortKey != "" {
+		sort.Slice(contents,
+			func(i, j int) bool {
+				return contents[i].Contents[output.SortKey] < contents[j].Contents[output.SortKey]
+			})
+	}
+	output.Contents = contents
 }
