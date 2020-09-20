@@ -18,6 +18,7 @@ var ssoOverviewByAccountCmd = &cobra.Command{
 
 	Verbose mode will add the policies for the permissionsets in the textual output formats
 	drawio output will generate a graph that goes SSO Instance -> Accounts -> Permission Sets -> User/Group
+	You may notice the same permission sets shown multiple times, this is to improve readability not a bug.
 	dot output is currently limited as it shows internal names only
 	`,
 	Run: ssoOverviewByAccount,
@@ -70,7 +71,7 @@ func ssoOverviewByAccount(cmd *cobra.Command, args []string) {
 func createSSOAccountsDrawIOHeader() drawio.Header {
 	drawioheader := drawio.DefaultHeader()
 	drawioheader.SetHeightAndWidth("78", "78")
-	drawioheader.SetLayout(drawio.LayoutVerticalTree)
+	drawioheader.SetLayout(drawio.LayoutHorizontalTree)
 	connection := drawio.NewConnection()
 	connection.Invert = false
 	connection.From = "Children"

@@ -209,12 +209,32 @@ func (instance *SSOInstance) GetAccountList() []string {
 	return accounts
 }
 
+//GetPermissionSetList returns a list of the permission sets in the SSO Instance
+func (instance *SSOInstance) GetPermissionSetList() []string {
+	permissionsets := []string{}
+	for _, permissionset := range instance.PermissionSets {
+		permissionsets = append(permissionsets, permissionset.Name)
+	}
+	return permissionsets
+}
+
 func (account *SSOAccount) addAssignmentToAccount(assignment SSOAccountAssignment) {
 	assignments := []SSOAccountAssignment{}
 	if len(account.AccountAssignments) != 0 {
 		assignments = account.AccountAssignments
 	}
 	account.AccountAssignments = append(assignments, assignment)
+}
+
+//GetPrincipalIdsForPermissionSet returns the ids of the principals that have been assigned to the provided permission set
+func (account *SSOAccount) GetPrincipalIdsForPermissionSet(permissionset SSOPermissionSet) []string {
+	accountchildren := []string{}
+	for _, assignment := range account.AccountAssignments {
+		if assignment.PermissionSet.Name == permissionset.Name {
+			accountchildren = append(accountchildren, assignment.PrincipalID)
+		}
+	}
+	return accountchildren
 }
 
 //GetManagedPolicyNames returns a slice containing the names of the policies attached to the permission set
