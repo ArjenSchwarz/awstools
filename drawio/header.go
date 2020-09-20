@@ -196,6 +196,14 @@ func (header *Header) String() string {
 	return strings.Join(headerArray, "\n") + "\n"
 }
 
+//IsSet checks if a header is configured
+func (header *Header) IsSet() bool {
+	if header.label == "" {
+		return false
+	}
+	return true
+}
+
 func (header *Header) connectionlist() []string {
 	var result []string
 	for _, connection := range header.connections {

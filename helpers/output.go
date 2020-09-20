@@ -56,6 +56,9 @@ func (output OutputArray) Write(settings config.Config) {
 	case "html":
 		output.toHTML(*settings.OutputFile, settings.ShouldAppend())
 	case "drawio":
+		if !output.DrawIOHeader.IsSet() {
+			log.Fatal("This command doesn't currently support the drawio output format")
+		}
 		drawio.CreateCSV(output.DrawIOHeader, output.Keys, output.GetContentsMap(), *settings.OutputFile)
 	case "dot":
 		if settings.DotColumns == nil {
