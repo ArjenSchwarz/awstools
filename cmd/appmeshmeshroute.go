@@ -3,6 +3,7 @@ package cmd
 import (
 	"strconv"
 
+	"github.com/ArjenSchwarz/awstools/config"
 	"github.com/ArjenSchwarz/awstools/helpers"
 	"github.com/spf13/cobra"
 )
@@ -21,7 +22,7 @@ func init() {
 
 func meshroute(cmd *cobra.Command, args []string) {
 	resultTitle := "Overview of the routes in the mesh"
-	svc := helpers.AppmeshSession()
+	svc := helpers.AppmeshSession(config.DefaultAwsConfig())
 	routes := helpers.GetAllAppMeshPaths(meshname, svc)
 	keys := []string{"Service", "Path", "Node"}
 	if *settings.Verbose {

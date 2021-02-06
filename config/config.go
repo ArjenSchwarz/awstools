@@ -1,6 +1,12 @@
 package config
 
-import "strings"
+import (
+	"context"
+	"strings"
+
+	"github.com/aws/aws-sdk-go-v2/aws"
+	external "github.com/aws/aws-sdk-go-v2/config"
+)
 
 // Config holds the global configuration settings
 type Config struct {
@@ -42,4 +48,13 @@ func (config *Config) ShouldCombineAndAppend() bool {
 		return false
 	}
 	return true
+}
+
+// DefaultAwsConfig loads default AWS Config
+func DefaultAwsConfig() aws.Config {
+	cfg, err := external.LoadDefaultConfig(context.TODO())
+	if err != nil {
+		panic(err)
+	}
+	return cfg
 }
