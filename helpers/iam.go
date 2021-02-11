@@ -1,32 +1,30 @@
 package helpers
 
 import (
-	"fmt"
+	"context"
+	"errors"
 	"log"
 	"net/url"
 
-	"github.com/aws/aws-sdk-go/aws/awserr"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/iam"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/iam"
+	"github.com/aws/aws-sdk-go-v2/service/iam/types"
 )
 
-var iamSession = iam.New(session.New())
-var cachedUsers []*iam.User
+var cachedUsers []types.User
 
 // IAMSession returns a shared IAMSession
-func IAMSession() *iam.IAM {
-	return iamSession
+func IAMSession(config aws.Config) *iam.Client {
+	return iam.NewFromConfig(config)
 }
 
 // GetPoliciesMap retrieves a map of policies with the policy name as the key
 // and the actual policy object as the value
-func GetPoliciesMap() map[string]*iam.Policy {
-	svc := IAMSession()
-
-	result := make(map[string]*iam.Policy)
+func GetPoliciesMap(svc *iam.Client) map[string]types.Policy {
+	result := make(map[string]types.Policy)
 
 	params := &iam.ListPoliciesInput{}
-	resp, err := svc.ListPolicies(params)
+	resp, err := svc.ListPolicies(context.TODO(), params)
 	if err != nil {
 		panic(err)
 	}
@@ -39,23 +37,22 @@ func GetPoliciesMap() map[string]*iam.Policy {
 // GetUserPoliciesMapForUser retrieves a map of policies for the provided IAM
 // username where the key is the name of the policy and the value is the actual
 // json policy document
-func GetUserPoliciesMapForUser(username *string) map[string]string {
-	svc := IAMSession()
+func GetUserPoliciesMapForUser(username *string, svc *iam.Client) map[string]string {
 	result := make(map[string]string)
 	params := &iam.ListUserPoliciesInput{
 		UserName: username,
 	}
-	resp, err := svc.ListUserPolicies(params)
+	resp, err := svc.ListUserPolicies(context.TODO(), params)
 	if err != nil {
 		panic(err)
 	}
 	if len(resp.PolicyNames) > 0 {
 		for _, policyname := range resp.PolicyNames {
 			params := &iam.GetUserPolicyInput{
-				PolicyName: policyname,
+				PolicyName: aws.String(policyname),
 				UserName:   username,
 			}
-			resp, err := svc.GetUserPolicy(params)
+			resp, err := svc.GetUserPolicy(context.TODO(), params)
 			if err != nil {
 				panic(err)
 			}
@@ -63,7 +60,7 @@ func GetUserPoliciesMapForUser(username *string) map[string]string {
 			if err != nil {
 				panic(err)
 			}
-			result[*policyname] = policyDocument
+			result[policyname] = policyDocument
 		}
 	}
 	return result
@@ -72,23 +69,22 @@ func GetUserPoliciesMapForUser(username *string) map[string]string {
 // GetGroupPoliciesMapForGroup retrieves a map of policies for the provided IAM
 // groupname where the key is the name of the policy and the value is the actual
 // json policy document
-func GetGroupPoliciesMapForGroup(groupname *string) map[string]string {
-	svc := IAMSession()
+func GetGroupPoliciesMapForGroup(groupname *string, svc *iam.Client) map[string]string {
 	result := make(map[string]string)
 	params := &iam.ListGroupPoliciesInput{
 		GroupName: groupname,
 	}
-	resp, err := svc.ListGroupPolicies(params)
+	resp, err := svc.ListGroupPolicies(context.TODO(), params)
 	if err != nil {
 		panic(err)
 	}
 	if len(resp.PolicyNames) > 0 {
 		for _, policyname := range resp.PolicyNames {
 			params := &iam.GetGroupPolicyInput{
-				PolicyName: policyname,
+				PolicyName: aws.String(policyname),
 				GroupName:  groupname,
 			}
-			resp, err := svc.GetGroupPolicy(params)
+			resp, err := svc.GetGroupPolicy(context.TODO(), params)
 			if err != nil {
 				panic(err)
 			}
@@ -96,7 +92,7 @@ func GetGroupPoliciesMapForGroup(groupname *string) map[string]string {
 			if err != nil {
 				panic(err)
 			}
-			result[*policyname] = policyDocument
+			result[policyname] = policyDocument
 		}
 	}
 	return result
@@ -105,10 +101,10 @@ func GetGroupPoliciesMapForGroup(groupname *string) map[string]string {
 // GetGroupPoliciesMapForGroups retrieves all of the policies for the provided
 // slice of groups, where the key is the name of the policy and the value is the
 // json policy document
-func GetGroupPoliciesMapForGroups(groups []string) map[string]string {
+func GetGroupPoliciesMapForGroups(groups []string, svc *iam.Client) map[string]string {
 	result := make(map[string]string)
 	for _, group := range groups {
-		groupmap := GetGroupPoliciesMapForGroup(&group)
+		groupmap := GetGroupPoliciesMapForGroup(&group, svc)
 		for k, v := range groupmap {
 			result[k] = v
 		}
@@ -119,13 +115,12 @@ func GetGroupPoliciesMapForGroups(groups []string) map[string]string {
 // GetAttachedPoliciesMapForUser retrieves a map of attached policies for the
 // provided IAM username where the key is the name of the policy and the value
 // is the actual json policy document
-func GetAttachedPoliciesMapForUser(username *string) map[string]string {
-	svc := IAMSession()
+func GetAttachedPoliciesMapForUser(username *string, svc *iam.Client) map[string]string {
 	result := make(map[string]string)
 	params := &iam.ListAttachedUserPoliciesInput{
 		UserName: username,
 	}
-	resp, err := svc.ListAttachedUserPolicies(params)
+	resp, err := svc.ListAttachedUserPolicies(context.TODO(), params)
 	if err != nil {
 		panic(err)
 	}
@@ -140,13 +135,12 @@ func GetAttachedPoliciesMapForUser(username *string) map[string]string {
 // GetAttachedPoliciesMapForGroup retrieves a map of attached policies for the
 // provided IAM groupname where the key is the name of the policy and the value
 // is the actual json policy document
-func GetAttachedPoliciesMapForGroup(groupname *string) map[string]string {
-	svc := IAMSession()
+func GetAttachedPoliciesMapForGroup(groupname *string, svc *iam.Client) map[string]string {
 	result := make(map[string]string)
 	params := &iam.ListAttachedGroupPoliciesInput{
 		GroupName: groupname,
 	}
-	resp, err := svc.ListAttachedGroupPolicies(params)
+	resp, err := svc.ListAttachedGroupPolicies(context.TODO(), params)
 	if err != nil {
 		panic(err)
 	}
@@ -161,10 +155,10 @@ func GetAttachedPoliciesMapForGroup(groupname *string) map[string]string {
 // GetAttachedPoliciesMapForGroups retrieves a map of attached policies for the
 // slice of IAM groupnames where the key is the name of the policy and the value
 // is the actual json policy document
-func GetAttachedPoliciesMapForGroups(groups []string) map[string]string {
+func GetAttachedPoliciesMapForGroups(groups []string, svc *iam.Client) map[string]string {
 	result := make(map[string]string)
 	for _, group := range groups {
-		groupmap := GetAttachedPoliciesMapForGroup(&group)
+		groupmap := GetAttachedPoliciesMapForGroup(&group, svc)
 		for k, v := range groupmap {
 			result[k] = v
 		}
@@ -174,12 +168,11 @@ func GetAttachedPoliciesMapForGroups(groups []string) map[string]string {
 
 // GetGroupNameSliceForUser retrieves a slice of all the groups the provided
 // IAM username belongs to
-func GetGroupNameSliceForUser(username *string) []string {
-	svc := IAMSession()
+func GetGroupNameSliceForUser(username *string, svc *iam.Client) []string {
 	params := &iam.ListGroupsForUserInput{
 		UserName: username,
 	}
-	resp, err := svc.ListGroupsForUser(params)
+	resp, err := svc.ListGroupsForUser(context.TODO(), params)
 
 	if err != nil {
 		panic(err)
@@ -195,32 +188,23 @@ func GetGroupNameSliceForUser(username *string) []string {
 
 // GetAccountSummary retrieves the account summary map which contains high level
 // information about the root account
-func GetAccountSummary() (map[string]*int64, error) {
-	svc := IAMSession()
+func GetAccountSummary(svc *iam.Client) (map[string]int32, error) {
 	input := &iam.GetAccountSummaryInput{}
 
-	result, err := svc.GetAccountSummary(input)
+	result, err := svc.GetAccountSummary(context.TODO(), input)
 	if err != nil {
-		if aerr, ok := err.(awserr.Error); ok {
-			switch aerr.Code() {
-			case iam.ErrCodeServiceFailureException:
-				fmt.Println(iam.ErrCodeServiceFailureException, aerr.Error())
-				panic(aerr)
-			default:
-				fmt.Println(aerr.Error())
-				panic(aerr)
-			}
-		} else {
-			panic(err)
+		var authexc *types.InvalidAuthenticationCodeException
+		if errors.As(err, &authexc) {
+			log.Println("error:", authexc)
 		}
+		panic(err)
 	}
 	return result.SummaryMap, nil
 }
 
-func getUserList() []*iam.User {
+func getUserList(svc *iam.Client) []types.User {
 	if cachedUsers == nil {
-		svc := IAMSession()
-		resp, err := svc.ListUsers(&iam.ListUsersInput{})
+		resp, err := svc.ListUsers(context.TODO(), &iam.ListUsersInput{})
 		if err != nil {
 			panic(err)
 		}
@@ -231,21 +215,21 @@ func getUserList() []*iam.User {
 
 // GetUserDetails collects detailed information about a user, consisting mostly
 // of the groups and policies it follows.
-func GetUserDetails() []IAMUser {
-	users := getUserList()
+func GetUserDetails(svc *iam.Client) []IAMUser {
+	users := getUserList(svc)
 	c := make(chan IAMUser)
 	userlist := make([]IAMUser, len(users))
 	for _, user := range users {
-		go func(user *iam.User) {
+		go func(user types.User) {
 			userStruct := IAMUser{
 				Name: *user.UserName,
-				User: user,
+				User: &user,
 			}
-			userStruct.Groups = GetGroupNameSliceForUser(user.UserName)
-			userStruct.InlinePolicies = GetUserPoliciesMapForUser(user.UserName)
-			userStruct.AttachedPolicies = GetAttachedPoliciesMapForUser(user.UserName)
-			userStruct.InlineGroupPolicies = GetGroupPoliciesMapForGroups(userStruct.Groups)
-			userStruct.AttachedGroupPolicies = GetAttachedPoliciesMapForGroups(userStruct.Groups)
+			userStruct.Groups = GetGroupNameSliceForUser(user.UserName, svc)
+			userStruct.InlinePolicies = GetUserPoliciesMapForUser(user.UserName, svc)
+			userStruct.AttachedPolicies = GetAttachedPoliciesMapForUser(user.UserName, svc)
+			userStruct.InlineGroupPolicies = GetGroupPoliciesMapForGroups(userStruct.Groups, svc)
+			userStruct.AttachedGroupPolicies = GetAttachedPoliciesMapForGroups(userStruct.Groups, svc)
 			c <- userStruct
 		}(user)
 	}
@@ -255,12 +239,11 @@ func GetUserDetails() []IAMUser {
 	return userlist
 }
 
-func getAllUsersInGroup(groupname string) []string {
-	svc := IAMSession()
+func getAllUsersInGroup(groupname string, svc *iam.Client) []string {
 	input := iam.GetGroupInput{
 		GroupName: &groupname,
 	}
-	resp, err := svc.GetGroup(&input)
+	resp, err := svc.GetGroup(context.TODO(), &input)
 	if err != nil {
 		panic(err)
 	}
@@ -273,23 +256,22 @@ func getAllUsersInGroup(groupname string) []string {
 
 // GetGroupDetails collects detailed information about a group, consisting mostly
 // of the users and policies it follows.
-func GetGroupDetails() []IAMGroup {
-	svc := IAMSession()
-	resp, err := svc.ListGroups(&iam.ListGroupsInput{})
+func GetGroupDetails(svc *iam.Client) []IAMGroup {
+	resp, err := svc.ListGroups(context.TODO(), &iam.ListGroupsInput{})
 	if err != nil {
 		panic(err)
 	}
 	c := make(chan IAMGroup)
 	grouplist := make([]IAMGroup, len(resp.Groups))
 	for _, group := range resp.Groups {
-		go func(group *iam.Group) {
+		go func(group types.Group) {
 			groupStruct := IAMGroup{
 				Name:  *group.GroupName,
-				Group: group,
+				Group: &group,
 			}
-			groupStruct.InlinePolicies = GetGroupPoliciesMapForGroups([]string{*group.GroupName})
-			groupStruct.AttachedPolicies = GetAttachedPoliciesMapForGroups([]string{*group.GroupName})
-			groupStruct.Users = getAllUsersInGroup(*group.GroupName)
+			groupStruct.InlinePolicies = GetGroupPoliciesMapForGroups([]string{*group.GroupName}, svc)
+			groupStruct.AttachedPolicies = GetAttachedPoliciesMapForGroups([]string{*group.GroupName}, svc)
+			groupStruct.Users = getAllUsersInGroup(*group.GroupName, svc)
 			c <- groupStruct
 		}(group)
 	}
@@ -319,27 +301,26 @@ func (user IAMUser) GetAllPolicies() map[string]string {
 
 // GetAccountAlias returns the account alias in a map of [accountid]accountalias
 // If no alias is present, it will return the account ID instead
-func GetAccountAlias() map[string]string {
-	svc := IAMSession()
+func GetAccountAlias(svc *iam.Client) map[string]string {
 	alias := make(map[string]string)
 	alias[GetAccountID()] = GetAccountID()
 
 	input := &iam.ListAccountAliasesInput{}
-	result, err := svc.ListAccountAliases(input)
+	result, err := svc.ListAccountAliases(context.TODO(), input)
 	if err != nil {
 		log.Fatal(err.Error())
 	}
 	if len(result.AccountAliases) > 0 {
-		alias[GetAccountID()] = *result.AccountAliases[0]
+		alias[GetAccountID()] = result.AccountAliases[0]
 	}
 	return alias
 }
 
-func getAttachedPolicy(policyArn *string, svc *iam.IAM) string {
+func getAttachedPolicy(policyArn *string, svc *iam.Client) string {
 	params := &iam.GetPolicyInput{
 		PolicyArn: policyArn,
 	}
-	resp, err := svc.GetPolicy(params)
+	resp, err := svc.GetPolicy(context.TODO(), params)
 	if err != nil {
 		panic(err)
 	}
@@ -347,7 +328,7 @@ func getAttachedPolicy(policyArn *string, svc *iam.IAM) string {
 		PolicyArn: policyArn,                    // Required
 		VersionId: resp.Policy.DefaultVersionId, // Required
 	}
-	resp2, err := svc.GetPolicyVersion(params2)
+	resp2, err := svc.GetPolicyVersion(context.TODO(), params2)
 	if err != nil {
 		panic(err)
 	}

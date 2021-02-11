@@ -37,7 +37,7 @@ var rolelistCmd = &cobra.Command{
 
 func iamrolelist(cmd *cobra.Command, args []string) {
 	resultTitle := "IAM Role overview for account " + getName(helpers.GetAccountID())
-	svc := helpers.IAMSession()
+	svc := helpers.IAMSession(config.DefaultAwsConfig())
 	roles, policies := helpers.GetRolesAndPolicies(*settings.Verbose, svc)
 	keys := []string{"Name", "Type", "AssumedFrom", "Policies", "Roles"}
 	stringSeparator := ", "

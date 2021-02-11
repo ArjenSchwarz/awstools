@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log"
 
+	"github.com/ArjenSchwarz/awstools/config"
 	"github.com/ArjenSchwarz/awstools/helpers"
 	"github.com/spf13/cobra"
 )
@@ -30,8 +31,8 @@ func names(cmd *cobra.Command, args []string) {
 	if settings.ShouldCombineAndAppend() {
 		names = append(names, helpers.GetStringMapFromJSONFile(*settings.OutputFile))
 	}
-	names = append(names, helpers.GetAllEC2ResourceNames(helpers.Ec2Session()))
-	names = append(names, helpers.GetAccountAlias())
+	names = append(names, helpers.GetAllEC2ResourceNames(helpers.Ec2Session(config.DefaultAwsConfig())))
+	names = append(names, helpers.GetAccountAlias(helpers.IAMSession(config.DefaultAwsConfig())))
 	allNames := helpers.FlattenStringMaps(names)
 	jsonString, _ := json.Marshal(allNames)
 	err := helpers.PrintByteSlice(jsonString, *settings.OutputFile)

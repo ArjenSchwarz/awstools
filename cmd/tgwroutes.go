@@ -35,7 +35,7 @@ func init() {
 
 func tgwroutes(cmd *cobra.Command, args []string) {
 	resultTitle := "Overview of all routes"
-	svc := helpers.Ec2Session()
+	svc := helpers.Ec2Session(config.DefaultAwsConfig())
 	gateways := helpers.GetAllTransitGateways(svc)
 	keys := []string{"ID", "Name", "Destinations", "TargetGateway"}
 	if settings.IsDrawIO() {

@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"github.com/ArjenSchwarz/awstools/config"
 	"github.com/ArjenSchwarz/awstools/helpers"
 	"github.com/spf13/cobra"
 )
@@ -23,7 +24,7 @@ func init() {
 
 func tgwdangling(cmd *cobra.Command, args []string) {
 	resultTitle := "Transit Gateway uni-directional routes"
-	svc := helpers.Ec2Session()
+	svc := helpers.Ec2Session(config.DefaultAwsConfig())
 	gateways := helpers.GetAllTransitGateways(svc)
 	keys := []string{"VPC", "VPCName", "DestinationVPC", "DestinationName"}
 	output := helpers.OutputArray{Keys: keys, Title: resultTitle}

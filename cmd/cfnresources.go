@@ -52,7 +52,7 @@ func listResources(cmd *cobra.Command, args []string) {
 			// Override the resource name when there is a better name available
 			switch resourceStruct.Type {
 			case "AWS::EC2::Instance":
-				resourceStruct.ResourceName = helpers.GetEc2Name(resource.PhysicalResourceId)
+				resourceStruct.ResourceName = helpers.GetEc2Name(*resource.PhysicalResourceId, helpers.Ec2Session(config.DefaultAwsConfig()))
 			case "AWS::RDS::DBInstance":
 				resourceStruct.ResourceName = helpers.GetRDSName(resource.PhysicalResourceId)
 

@@ -1,25 +1,24 @@
 package helpers
 
 import (
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/ec2"
+	"context"
+
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/ec2"
+	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
 )
 
-var ec2Session = ec2.New(session.New())
-
 // Ec2Session returns a shared Ec2Session
-func Ec2Session() *ec2.EC2 {
-	return ec2Session
+func Ec2Session(config aws.Config) *ec2.Client {
+	return ec2.NewFromConfig(config)
 }
 
 // GetEc2Name returns the name of the provided EC2 Resource
-func GetEc2Name(ec2name *string) string {
-	svc := Ec2Session()
+func GetEc2Name(ec2name string, svc *ec2.Client) string {
 	params := &ec2.DescribeInstancesInput{
-		InstanceIds: []*string{ec2name},
+		InstanceIds: []string{ec2name},
 	}
-	resp, err := svc.DescribeInstances(params)
+	resp, err := svc.DescribeInstances(context.TODO(), params)
 
 	if err != nil {
 		panic(err)
@@ -28,8 +27,8 @@ func GetEc2Name(ec2name *string) string {
 	for _, reservation := range resp.Reservations {
 		for _, instance := range reservation.Instances {
 			for _, tag := range instance.Tags {
-				if aws.StringValue(tag.Key) == "Name" {
-					return aws.StringValue(tag.Value)
+				if aws.ToString(tag.Key) == "Name" {
+					return aws.ToString(tag.Value)
 				}
 			}
 		}
@@ -38,9 +37,8 @@ func GetEc2Name(ec2name *string) string {
 }
 
 // GetAllSecurityGroups returns a list of all securitygroups in the region
-func GetAllSecurityGroups() []*ec2.SecurityGroup {
-	svc := Ec2Session()
-	resp, err := svc.DescribeSecurityGroups(&ec2.DescribeSecurityGroupsInput{})
+func GetAllSecurityGroups(svc *ec2.Client) []types.SecurityGroup {
+	resp, err := svc.DescribeSecurityGroups(context.TODO(), &ec2.DescribeSecurityGroupsInput{})
 	if err != nil {
 		panic(err)
 	}
@@ -49,17 +47,16 @@ func GetAllSecurityGroups() []*ec2.SecurityGroup {
 }
 
 // GetEc2BySecurityGroup retrieves all instances attached to a securitygroup
-func GetEc2BySecurityGroup(securitygroupID *string) []*ec2.Reservation {
-	svc := Ec2Session()
+func GetEc2BySecurityGroup(securitygroupID *string, svc *ec2.Client) []types.Reservation {
 	input := &ec2.DescribeInstancesInput{
-		Filters: []*ec2.Filter{
+		Filters: []types.Filter{
 			{
 				Name:   aws.String("instance.group-id"),
-				Values: []*string{securitygroupID},
+				Values: []string{*securitygroupID},
 			},
 		},
 	}
-	resp, err := svc.DescribeInstances(input)
+	resp, err := svc.DescribeInstances(context.TODO(), input)
 	if err != nil {
 		panic(err)
 	}
@@ -68,9 +65,8 @@ func GetEc2BySecurityGroup(securitygroupID *string) []*ec2.Reservation {
 }
 
 // GetAllEc2Instances retrieves all EC2 instances
-func GetAllEc2Instances() []*ec2.Reservation {
-	svc := Ec2Session()
-	resp, err := svc.DescribeInstances(&ec2.DescribeInstancesInput{})
+func GetAllEc2Instances(svc *ec2.Client) []types.Reservation {
+	resp, err := svc.DescribeInstances(context.TODO(), &ec2.DescribeInstancesInput{})
 	if err != nil {
 		panic(err)
 	}
@@ -79,7 +75,7 @@ func GetAllEc2Instances() []*ec2.Reservation {
 }
 
 // GetAllEC2ResourceNames retrieves the names of EC2 related objects
-func GetAllEC2ResourceNames(svc *ec2.EC2) map[string]string {
+func GetAllEC2ResourceNames(svc *ec2.Client) map[string]string {
 	result := make(map[string]string)
 	result = addAllVPCNames(svc, result)
 	result = addAllPeerNames(svc, result)
@@ -90,8 +86,8 @@ func GetAllEC2ResourceNames(svc *ec2.EC2) map[string]string {
 }
 
 //addAllVPCNames returns the names of all vpcs in a map
-func addAllVPCNames(svc *ec2.EC2, result map[string]string) map[string]string {
-	resp, err := svc.DescribeVpcs(&ec2.DescribeVpcsInput{})
+func addAllVPCNames(svc *ec2.Client, result map[string]string) map[string]string {
+	resp, err := svc.DescribeVpcs(context.TODO(), &ec2.DescribeVpcsInput{})
 	if err != nil {
 		panic(err)
 	}
@@ -109,8 +105,8 @@ func addAllVPCNames(svc *ec2.EC2, result map[string]string) map[string]string {
 	return result
 }
 
-func addAllPeerNames(svc *ec2.EC2, result map[string]string) map[string]string {
-	resp, err := svc.DescribeVpcPeeringConnections(&ec2.DescribeVpcPeeringConnectionsInput{})
+func addAllPeerNames(svc *ec2.Client, result map[string]string) map[string]string {
+	resp, err := svc.DescribeVpcPeeringConnections(context.TODO(), &ec2.DescribeVpcPeeringConnectionsInput{})
 	if err != nil {
 		panic(err)
 	}
@@ -128,8 +124,8 @@ func addAllPeerNames(svc *ec2.EC2, result map[string]string) map[string]string {
 	return result
 }
 
-func addAllSubnetNames(svc *ec2.EC2, result map[string]string) map[string]string {
-	resp, err := svc.DescribeSubnets(&ec2.DescribeSubnetsInput{})
+func addAllSubnetNames(svc *ec2.Client, result map[string]string) map[string]string {
+	resp, err := svc.DescribeSubnets(context.TODO(), &ec2.DescribeSubnetsInput{})
 	if err != nil {
 		panic(err)
 	}
@@ -147,8 +143,8 @@ func addAllSubnetNames(svc *ec2.EC2, result map[string]string) map[string]string
 	return result
 }
 
-func addAllRouteTableNames(svc *ec2.EC2, result map[string]string) map[string]string {
-	resp, err := svc.DescribeRouteTables(&ec2.DescribeRouteTablesInput{})
+func addAllRouteTableNames(svc *ec2.Client, result map[string]string) map[string]string {
+	resp, err := svc.DescribeRouteTables(context.TODO(), &ec2.DescribeRouteTablesInput{})
 	if err != nil {
 		panic(err)
 	}
@@ -166,7 +162,7 @@ func addAllRouteTableNames(svc *ec2.EC2, result map[string]string) map[string]st
 	return result
 }
 
-func addAllTransitGatewayNames(svc *ec2.EC2, result map[string]string) map[string]string {
+func addAllTransitGatewayNames(svc *ec2.Client, result map[string]string) map[string]string {
 	tgws := GetAllTransitGateways(svc)
 	for _, tgw := range tgws {
 		result[tgw.ID] = tgw.Name
@@ -191,9 +187,9 @@ type VPCHolder struct {
 }
 
 // GetAllVpcPeers returns the peerings that are present in this region of this account
-func GetAllVpcPeers(svc *ec2.EC2) []VpcPeering {
+func GetAllVpcPeers(svc *ec2.Client) []VpcPeering {
 	var result []VpcPeering
-	resp, err := svc.DescribeVpcPeeringConnections(&ec2.DescribeVpcPeeringConnectionsInput{})
+	resp, err := svc.DescribeVpcPeeringConnections(context.TODO(), &ec2.DescribeVpcPeeringConnectionsInput{})
 	if err != nil {
 		panic(err)
 	}
@@ -228,9 +224,9 @@ type VPCRoute struct {
 }
 
 //GetAllVPCRouteTables returns all the Routetables in the account and region
-func GetAllVPCRouteTables(svc *ec2.EC2) []VPCRouteTable {
+func GetAllVPCRouteTables(svc *ec2.Client) []VPCRouteTable {
 	var result []VPCRouteTable
-	resp, err := svc.DescribeRouteTables(&ec2.DescribeRouteTablesInput{})
+	resp, err := svc.DescribeRouteTables(context.TODO(), &ec2.DescribeRouteTablesInput{})
 	if err != nil {
 		panic(err)
 	}
@@ -253,11 +249,11 @@ func GetAllVPCRouteTables(svc *ec2.EC2) []VPCRouteTable {
 	return result
 }
 
-func parseVPCRoutes(routes []*ec2.Route) []VPCRoute {
+func parseVPCRoutes(routes []types.Route) []VPCRoute {
 	var result []VPCRoute
 	for _, route := range routes {
 		rt := VPCRoute{
-			State: *route.State,
+			State: string(route.State),
 		}
 		if route.DestinationCidrBlock != nil {
 			rt.DestinationCIDR = *route.DestinationCidrBlock
@@ -322,9 +318,9 @@ type TransitGatewayAttachment struct {
 }
 
 // GetAllTransitGateways returns an array of all Transit Gateways in the account
-func GetAllTransitGateways(svc *ec2.EC2) []TransitGateway {
+func GetAllTransitGateways(svc *ec2.Client) []TransitGateway {
 	var result []TransitGateway
-	resp, err := svc.DescribeTransitGateways(&ec2.DescribeTransitGatewaysInput{})
+	resp, err := svc.DescribeTransitGateways(context.TODO(), &ec2.DescribeTransitGatewaysInput{})
 	if err != nil {
 		panic(err)
 	}
@@ -341,17 +337,17 @@ func GetAllTransitGateways(svc *ec2.EC2) []TransitGateway {
 }
 
 // GetRouteTablesForTransitGateway returns all route tables attached to a Transit Gateway
-func GetRouteTablesForTransitGateway(tgwID string, svc *ec2.EC2) map[string]TransitGatewayRouteTable {
+func GetRouteTablesForTransitGateway(tgwID string, svc *ec2.Client) map[string]TransitGatewayRouteTable {
 	result := make(map[string]TransitGatewayRouteTable)
 	params := &ec2.DescribeTransitGatewayRouteTablesInput{
-		Filters: []*ec2.Filter{
+		Filters: []types.Filter{
 			{
 				Name:   aws.String("transit-gateway-id"),
-				Values: []*string{&tgwID},
+				Values: []string{tgwID},
 			},
 		},
 	}
-	resp, err := svc.DescribeTransitGatewayRouteTables(params)
+	resp, err := svc.DescribeTransitGatewayRouteTables(context.TODO(), params)
 	if err != nil {
 		panic(err)
 	}
@@ -371,12 +367,12 @@ func GetRouteTablesForTransitGateway(tgwID string, svc *ec2.EC2) map[string]Tran
 }
 
 // GetSourceAttachmentsForTransitGatewayRouteTable returns all the source attachments attached to a Transit Gateway route table
-func GetSourceAttachmentsForTransitGatewayRouteTable(routetableID string, svc *ec2.EC2) []TransitGatewayAttachment {
+func GetSourceAttachmentsForTransitGatewayRouteTable(routetableID string, svc *ec2.Client) []TransitGatewayAttachment {
 	var result []TransitGatewayAttachment
 	params := &ec2.GetTransitGatewayRouteTableAssociationsInput{
 		TransitGatewayRouteTableId: &routetableID,
 	}
-	resp, err := svc.GetTransitGatewayRouteTableAssociations(params)
+	resp, err := svc.GetTransitGatewayRouteTableAssociations(context.TODO(), params)
 	if err != nil {
 		panic(err)
 	}
@@ -384,7 +380,7 @@ func GetSourceAttachmentsForTransitGatewayRouteTable(routetableID string, svc *e
 		tgwattachment := TransitGatewayAttachment{
 			ID:           *attachment.TransitGatewayAttachmentId,
 			ResourceID:   *attachment.ResourceId,
-			ResourceType: *attachment.ResourceType,
+			ResourceType: string(attachment.ResourceType),
 		}
 		result = append(result, tgwattachment)
 	}
@@ -392,31 +388,31 @@ func GetSourceAttachmentsForTransitGatewayRouteTable(routetableID string, svc *e
 }
 
 // GetActiveRoutesForTransitGatewayRouteTable returns all routes that are currently active for a Transit Gateway route table
-func GetActiveRoutesForTransitGatewayRouteTable(routetableID string, svc *ec2.EC2) []TransitGatewayRoute {
+func GetActiveRoutesForTransitGatewayRouteTable(routetableID string, svc *ec2.Client) []TransitGatewayRoute {
 	var result []TransitGatewayRoute
 	desiredState := "active"
 	params := &ec2.SearchTransitGatewayRoutesInput{
 		TransitGatewayRouteTableId: &routetableID,
-		Filters: []*ec2.Filter{
+		Filters: []types.Filter{
 			{
 				Name:   aws.String("state"),
-				Values: []*string{&desiredState},
+				Values: []string{desiredState},
 			},
 		},
 	}
-	resp, err := svc.SearchTransitGatewayRoutes(params)
+	resp, err := svc.SearchTransitGatewayRoutes(context.TODO(), params)
 	if err != nil {
 		panic(err)
 	}
 	for _, route := range resp.Routes {
 		tgwroute := TransitGatewayRoute{
-			State: *route.State,
+			State: string(route.State),
 			CIDR:  *route.DestinationCidrBlock,
 			Attachment: TransitGatewayAttachment{
 				ID:         *route.TransitGatewayAttachments[0].TransitGatewayAttachmentId,
 				ResourceID: *route.TransitGatewayAttachments[0].ResourceId,
 			},
-			RouteType: *route.Type,
+			RouteType: string(route.Type),
 		}
 		result = append(result, tgwroute)
 	}
@@ -455,10 +451,10 @@ func IsLatestInstanceFamily(instanceFamily string) bool {
 	}
 }
 
-func getNameFromTags(tags []*ec2.Tag) string {
+func getNameFromTags(tags []types.Tag) string {
 	for _, tag := range tags {
-		if aws.StringValue(tag.Key) == "Name" {
-			return aws.StringValue(tag.Value)
+		if aws.ToString(tag.Key) == "Name" {
+			return aws.ToString(tag.Value)
 		}
 	}
 	return ""

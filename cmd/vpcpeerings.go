@@ -27,7 +27,7 @@ func init() {
 
 func peerings(cmd *cobra.Command, args []string) {
 	resultTitle := "VPC Peerings for account " + getName(helpers.GetAccountID())
-	svc := helpers.Ec2Session()
+	svc := helpers.Ec2Session(config.DefaultAwsConfig())
 	peerings := helpers.GetAllVpcPeers(svc)
 	keys := []string{"ID", "Name", "AccountID", "PeeringIDs"}
 	if settings.IsDrawIO() {

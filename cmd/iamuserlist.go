@@ -25,8 +25,9 @@ var userlistCmd = &cobra.Command{
 
 func detailUsers(cmd *cobra.Command, args []string) {
 	resultTitle := "IAM User overview for account " + getName(helpers.GetAccountID())
-	userlist := helpers.GetUserDetails()
-	grouplist := helpers.GetGroupDetails()
+	svc := helpers.IAMSession(config.DefaultAwsConfig())
+	userlist := helpers.GetUserDetails(svc)
+	grouplist := helpers.GetGroupDetails(svc)
 	objectlist := []helpers.IAMObject{}
 	for _, user := range userlist {
 		objectlist = append(objectlist, user)
@@ -65,8 +66,8 @@ func detailUsers(cmd *cobra.Command, args []string) {
 			if user.HasUsedPassword() {
 				content["Console"] = user.GetLastPasswordDate().String()
 			}
-			if user.HasAccessKeys() {
-				content["API"] = user.GetLastAccessKeyDate().String()
+			if user.HasAccessKeys(svc) {
+				content["API"] = user.GetLastAccessKeyDate(svc).String()
 			}
 		}
 		content["Groups"] = strings.Join(object.GetGroups(), ",")
