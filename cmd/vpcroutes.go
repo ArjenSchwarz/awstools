@@ -22,7 +22,7 @@ func init() {
 }
 
 func routes(cmd *cobra.Command, args []string) {
-	resultTitle := "VPC Routes for account " + getName(helpers.GetAccountID())
+	resultTitle := "VPC Routes for account " + getName(helpers.GetAccountID(config.StsSession(config.DefaultAwsConfig())))
 	svc := helpers.Ec2Session(config.DefaultAwsConfig())
 	routes := helpers.GetAllVPCRouteTables(svc)
 	keys := []string{"AccountID", "Account Name", "ID", "Name", "VPC", "VPC Name", "Subnets", "Routes"}

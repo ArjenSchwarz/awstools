@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/url"
 
+	"github.com/ArjenSchwarz/awstools/config"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/iam"
 	"github.com/aws/aws-sdk-go-v2/service/iam/types"
@@ -303,7 +304,7 @@ func (user IAMUser) GetAllPolicies() map[string]string {
 // If no alias is present, it will return the account ID instead
 func GetAccountAlias(svc *iam.Client) map[string]string {
 	alias := make(map[string]string)
-	alias[GetAccountID()] = GetAccountID()
+	alias[GetAccountID(config.StsSession(config.DefaultAwsConfig()))] = GetAccountID(config.StsSession(config.DefaultAwsConfig()))
 
 	input := &iam.ListAccountAliasesInput{}
 	result, err := svc.ListAccountAliases(context.TODO(), input)
@@ -311,7 +312,7 @@ func GetAccountAlias(svc *iam.Client) map[string]string {
 		log.Fatal(err.Error())
 	}
 	if len(result.AccountAliases) > 0 {
-		alias[GetAccountID()] = result.AccountAliases[0]
+		alias[GetAccountID(config.StsSession(config.DefaultAwsConfig()))] = result.AccountAliases[0]
 	}
 	return alias
 }

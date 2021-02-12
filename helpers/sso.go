@@ -1,21 +1,20 @@
 package helpers
 
 import (
+	"context"
 	"time"
 
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/ssoadmin"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/ssoadmin"
 )
 
-var ssoSession = ssoadmin.New(session.New())
-
 // SSOSession returns a shared Ec2Session
-func SSOSession() *ssoadmin.SSOAdmin {
-	return ssoSession
+func SSOSession(config aws.Config) *ssoadmin.Client {
+	return ssoadmin.NewFromConfig(config)
 }
 
 // GetSSOAccountInstance retrieves the SSO Account Instance and all its data
-func GetSSOAccountInstance(svc *ssoadmin.SSOAdmin) SSOInstance {
+func GetSSOAccountInstance(svc *ssoadmin.Client) SSOInstance {
 	ssoInstance := getSSOInstance(svc)
 	ssoInstance.getPermissionSets(svc)
 	return ssoInstance
@@ -64,8 +63,8 @@ type SSOAccountAssignment struct {
 	PermissionSet *SSOPermissionSet
 }
 
-func getSSOInstance(svc *ssoadmin.SSOAdmin) SSOInstance {
-	instances, err := svc.ListInstances(&ssoadmin.ListInstancesInput{})
+func getSSOInstance(svc *ssoadmin.Client) SSOInstance {
+	instances, err := svc.ListInstances(context.TODO(), &ssoadmin.ListInstancesInput{})
 	if err != nil {
 		panic(err)
 	}
@@ -82,16 +81,19 @@ func getSSOInstance(svc *ssoadmin.SSOAdmin) SSOInstance {
 	return ssoInstance
 }
 
-func (instance *SSOInstance) getPermissionSets(svc *ssoadmin.SSOAdmin) []SSOPermissionSet {
-	maxresults := int64(100)
+func (instance *SSOInstance) getPermissionSets(svc *ssoadmin.Client) []SSOPermissionSet {
+	maxresults := int32(100)
 	if instance.PermissionSets == nil {
-		permissions, err := svc.ListPermissionSets(&ssoadmin.ListPermissionSetsInput{InstanceArn: &instance.Arn, MaxResults: &maxresults})
+		permissions, err := svc.ListPermissionSets(context.TODO(), &ssoadmin.ListPermissionSetsInput{
+			InstanceArn: &instance.Arn,
+			MaxResults:  &maxresults,
+		})
 		if err != nil {
 			panic(err)
 		}
 		permissionsets := []SSOPermissionSet{}
 		for _, permissionsetarn := range permissions.PermissionSets {
-			permissionset := instance.getPermissionSetDetails(*permissionsetarn, svc)
+			permissionset := instance.getPermissionSetDetails(permissionsetarn, svc)
 			permissionsets = append(permissionsets, permissionset)
 		}
 		instance.PermissionSets = permissionsets
@@ -99,9 +101,12 @@ func (instance *SSOInstance) getPermissionSets(svc *ssoadmin.SSOAdmin) []SSOPerm
 	return instance.PermissionSets
 }
 
-func (instance *SSOInstance) getPermissionSetDetails(permissionsetarn string, svc *ssoadmin.SSOAdmin) SSOPermissionSet {
+func (instance *SSOInstance) getPermissionSetDetails(permissionsetarn string, svc *ssoadmin.Client) SSOPermissionSet {
 	// Get metadata
-	permissionsetdescription, err := svc.DescribePermissionSet(&ssoadmin.DescribePermissionSetInput{InstanceArn: &instance.Arn, PermissionSetArn: &permissionsetarn})
+	permissionsetdescription, err := svc.DescribePermissionSet(context.TODO(), &ssoadmin.DescribePermissionSetInput{
+		InstanceArn:      &instance.Arn,
+		PermissionSetArn: &permissionsetarn,
+	})
 	if err != nil {
 		panic(err)
 	}
@@ -118,7 +123,10 @@ func (instance *SSOInstance) getPermissionSetDetails(permissionsetarn string, sv
 	// Get accounts
 	permissionset.addAccountInfo(svc)
 	// Get managed policies
-	managedpolicies, err := svc.ListManagedPoliciesInPermissionSet(&ssoadmin.ListManagedPoliciesInPermissionSetInput{InstanceArn: &instance.Arn, PermissionSetArn: &permissionsetarn})
+	managedpolicies, err := svc.ListManagedPoliciesInPermissionSet(context.TODO(), &ssoadmin.ListManagedPoliciesInPermissionSetInput{
+		InstanceArn:      &instance.Arn,
+		PermissionSetArn: &permissionsetarn,
+	})
 	if err != nil {
 		panic(err)
 	}
@@ -132,7 +140,10 @@ func (instance *SSOInstance) getPermissionSetDetails(permissionsetarn string, sv
 	}
 	permissionset.ManagedPolicies = policies
 	// Get Inline Policy
-	inlinepolicy, err := svc.GetInlinePolicyForPermissionSet(&ssoadmin.GetInlinePolicyForPermissionSetInput{InstanceArn: &instance.Arn, PermissionSetArn: &permissionsetarn})
+	inlinepolicy, err := svc.GetInlinePolicyForPermissionSet(context.TODO(), &ssoadmin.GetInlinePolicyForPermissionSetInput{
+		InstanceArn:      &instance.Arn,
+		PermissionSetArn: &permissionsetarn,
+	})
 	if err != nil {
 		panic(err)
 	}
@@ -140,9 +151,9 @@ func (instance *SSOInstance) getPermissionSetDetails(permissionsetarn string, sv
 	return permissionset
 }
 
-func (permissionset *SSOPermissionSet) addAccountInfo(svc *ssoadmin.SSOAdmin) []SSOAccount {
-	maxresults := int64(100)
-	provisionedaccounts, err := svc.ListAccountsForProvisionedPermissionSet(&ssoadmin.ListAccountsForProvisionedPermissionSetInput{
+func (permissionset *SSOPermissionSet) addAccountInfo(svc *ssoadmin.Client) []SSOAccount {
+	maxresults := int32(100)
+	provisionedaccounts, err := svc.ListAccountsForProvisionedPermissionSet(context.TODO(), &ssoadmin.ListAccountsForProvisionedPermissionSetInput{
 		InstanceArn:      &permissionset.Instance.Arn,
 		PermissionSetArn: &permissionset.Arn,
 		MaxResults:       &maxresults,
@@ -153,12 +164,12 @@ func (permissionset *SSOPermissionSet) addAccountInfo(svc *ssoadmin.SSOAdmin) []
 	accounts := []SSOAccount{}
 	for _, accountnr := range provisionedaccounts.AccountIds {
 		account := SSOAccount{
-			AccountID: *accountnr,
+			AccountID: accountnr,
 		}
-		accountassignments, err := svc.ListAccountAssignments(&ssoadmin.ListAccountAssignmentsInput{
+		accountassignments, err := svc.ListAccountAssignments(context.TODO(), &ssoadmin.ListAccountAssignmentsInput{
 			InstanceArn:      &permissionset.Instance.Arn,
 			PermissionSetArn: &permissionset.Arn,
-			AccountId:        accountnr,
+			AccountId:        aws.String(accountnr),
 			MaxResults:       &maxresults,
 		})
 		if err != nil {
@@ -166,7 +177,7 @@ func (permissionset *SSOPermissionSet) addAccountInfo(svc *ssoadmin.SSOAdmin) []
 		}
 		for _, assignmentraw := range accountassignments.AccountAssignments {
 			assignment := SSOAccountAssignment{
-				PrincipalType: *assignmentraw.PrincipalType,
+				PrincipalType: string(assignmentraw.PrincipalType),
 				PrincipalID:   *assignmentraw.PrincipalId,
 				PermissionSet: permissionset,
 			}

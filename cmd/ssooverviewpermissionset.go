@@ -34,7 +34,7 @@ func init() {
 
 func ssoOverviewByPermissionSet(cmd *cobra.Command, args []string) {
 	resultTitle := "SSO Overview per permission set"
-	svc := helpers.SSOSession()
+	svc := helpers.SSOSession(config.DefaultAwsConfig())
 	ssoInstance := helpers.GetSSOAccountInstance(svc)
 	keys := []string{"PermissionSet", "AccountID", "Principal"}
 	if *settings.Verbose {

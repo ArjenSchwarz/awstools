@@ -1,23 +1,22 @@
 package helpers
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/ArjenSchwarz/awstools/drawio"
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/organizations"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/organizations"
+	"github.com/aws/aws-sdk-go-v2/service/organizations/types"
 )
 
-var organizationsSession = organizations.New(session.New())
-
 // OrganizationsSession returns a shared organizationsSession
-func OrganizationsSession() *organizations.Organizations {
-	return organizationsSession
+func OrganizationsSession(config aws.Config) *organizations.Client {
+	return organizations.NewFromConfig(config)
 }
 
-func getOrganizationRoot(svc *organizations.Organizations) OrganizationEntry {
-	root, err := svc.ListRoots(&organizations.ListRootsInput{})
+func getOrganizationRoot(svc *organizations.Client) OrganizationEntry {
+	root, err := svc.ListRoots(context.TODO(), &organizations.ListRootsInput{})
 	if err != nil {
 		fmt.Print(err)
 	}
@@ -27,13 +26,13 @@ func getOrganizationRoot(svc *organizations.Organizations) OrganizationEntry {
 		Arn:   *rootentry.Arn,
 		Name:  *rootentry.Name,
 		Image: drawio.ShapeAWSOrganizations,
-		Type:  organizations.TargetTypeRoot,
+		Type:  string(types.TargetTypeRoot),
 	}
 	return entry
 }
 
 // GetFullOrganization returns the root entry of the organization with all children fleshed out
-func GetFullOrganization(svc *organizations.Organizations) OrganizationEntry {
+func GetFullOrganization(svc *organizations.Client) OrganizationEntry {
 	root := getOrganizationRoot(svc)
 	root.Children = root.findChildren(svc)
 	return root
@@ -49,30 +48,30 @@ type OrganizationEntry struct {
 	Children []OrganizationEntry
 }
 
-func (entry *OrganizationEntry) findChildren(svc *organizations.Organizations) []OrganizationEntry {
+func (entry *OrganizationEntry) findChildren(svc *organizations.Client) []OrganizationEntry {
 	children := []OrganizationEntry{}
 	ouinput := &organizations.ListChildrenInput{
 		ParentId:  aws.String(entry.ID),
-		ChildType: aws.String(organizations.TargetTypeOrganizationalUnit),
+		ChildType: types.ChildType(types.TargetTypeOrganizationalUnit),
 	}
-	ouchildren, err := svc.ListChildren(ouinput)
+	ouchildren, err := svc.ListChildren(context.TODO(), ouinput)
 	if err != nil {
 		fmt.Println(err)
 	}
 	for _, child := range ouchildren.Children {
-		ouchild := formatChild(*child, svc)
+		ouchild := formatChild(child, svc)
 		ouchild.Children = ouchild.findChildren(svc)
 		children = append(children, ouchild)
 	}
 	accountinput := &organizations.ListChildrenInput{
 		ParentId:  aws.String(entry.ID),
-		ChildType: aws.String(organizations.TargetTypeAccount),
+		ChildType: types.ChildType(types.TargetTypeAccount),
 	}
-	accountchildren, err := svc.ListChildren(accountinput)
+	accountchildren, err := svc.ListChildren(context.TODO(), accountinput)
 	if err != nil {
 	}
 	for _, child := range accountchildren.Children {
-		accountchild := formatChild(*child, svc)
+		accountchild := formatChild(child, svc)
 		children = append(children, accountchild)
 	}
 	return children
@@ -82,19 +81,19 @@ func (entry *OrganizationEntry) String() string {
 	return entry.Name + " (" + entry.ID + ")"
 }
 
-func formatChild(raw organizations.Child, svc *organizations.Organizations) OrganizationEntry {
-	if *raw.Type == organizations.TargetTypeOrganizationalUnit {
+func formatChild(raw types.Child, svc *organizations.Client) OrganizationEntry {
+	if raw.Type == types.ChildType(types.TargetTypeOrganizationalUnit) {
 		input := &organizations.DescribeOrganizationalUnitInput{
 			OrganizationalUnitId: raw.Id,
 		}
-		details, err := svc.DescribeOrganizationalUnit(input)
+		details, err := svc.DescribeOrganizationalUnit(context.TODO(), input)
 		if err != nil {
 			fmt.Println(err)
 		}
 		return OrganizationEntry{
 			Name:     *details.OrganizationalUnit.Name,
 			ID:       *details.OrganizationalUnit.Id,
-			Type:     *raw.Type,
+			Type:     string(raw.Type),
 			Arn:      *details.OrganizationalUnit.Arn,
 			Image:    drawio.ShapeAWSOrganizationsOrganizationalUnit,
 			Children: []OrganizationEntry{},
@@ -103,14 +102,14 @@ func formatChild(raw organizations.Child, svc *organizations.Organizations) Orga
 	input := &organizations.DescribeAccountInput{
 		AccountId: raw.Id,
 	}
-	details, err := svc.DescribeAccount(input)
+	details, err := svc.DescribeAccount(context.TODO(), input)
 	if err != nil {
 		fmt.Println(err)
 	}
 	return OrganizationEntry{
 		Name:     *details.Account.Name,
 		ID:       *details.Account.Id,
-		Type:     *raw.Type,
+		Type:     string(raw.Type),
 		Arn:      *details.Account.Arn,
 		Image:    drawio.ShapeAWSOrganizationsAccount,
 		Children: []OrganizationEntry{},
