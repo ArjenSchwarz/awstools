@@ -19,7 +19,10 @@ var rootCmd = &cobra.Command{
 	Short: "Various tools for dealing with complex AWS comments",
 	Long: `awstools is designed to be used for more complex tasks that would take a lot of work using just the CLI.
 
-This usually involves tasks that would require multiple calls.`,
+This usually involves tasks that would require multiple calls.
+
+Full documentation for all commands can be accessed using the --help flag or by reading it on https://github.com/ArjenSchwarz/awstools/blob/main/docs/awstools.md
+`,
 }
 
 // Execute adds all child commands to the root command sets flags appropriately.

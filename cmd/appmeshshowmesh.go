@@ -13,14 +13,13 @@ import (
 var showmeshCmd = &cobra.Command{
 	Use:   "showmesh",
 	Short: "Show the connections between virtual nodes",
-	Long: `You can see which nodes are allowed access to which other nodes
-	based on the current App Mesh configuration. Using the dot output format
-	you can turn this into an image, and using drawio you will get a CSV that
-	you can import into draw.io with its CSV import functionality
+	Long: `You can see which nodes are allowed access to which other nodes based on the current App Mesh configuration. Using the dot output format you can turn this into an image, and using drawio you will get a CSV that you can import into draw.io with its CSV import functionality
 
-	Example:
+Example:
+
 	awstools appmesh showmesh -m bookinfo-mesh -o dot | dot -Tpng  -o bookinfo-mesh.png
-	awstools appmesh showmesh -m bookinfo-mesh -o drawio | pbcopy`,
+	awstools appmesh showmesh -m bookinfo-mesh -o drawio | pbcopy
+`,
 	Run: showmesh,
 }
 

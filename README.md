@@ -122,7 +122,7 @@ If you pipe this output graphviz you can convert it into an image like the below
 $ awstools appmesh showmesh -m bookinfo-mesh -o dot | dot -Tpng -o mesh.png && open mesh.png
 ```
 
-![An example diagram converted from the dot output format](docs/dot-mesh.png)
+![An example diagram converted from the dot output format](docs/images/dot-mesh.png)
 
 ### Draw.io format
 
@@ -160,7 +160,7 @@ reviews-v2-appmesh-bookinfo,ratings-v1-appmesh-bookinfo,outlineConnect=0;fontCol
 
 If you copy this output and import it into your diagram (through pasting it into the field you get via Arrange -> Insert -> Advanced -> CSV) that results in a diagram like the below.
 
-![Exported png of the generated draw.io app mesh diagram](docs/drawio-mesh.png)
+![Exported png of the generated draw.io app mesh diagram](docs/images/drawio-mesh.png)
 
 You can get a similar output for your organizations structure with:
 
@@ -168,7 +168,7 @@ You can get a similar output for your organizations structure with:
 $ awstools organizations structure -o drawio
 ```
 
-![Exported png of the generated draw.io organizations diagram](docs/drawio-orgstructure.png)
+![Exported png of the generated draw.io organizations diagram](docs/images/drawio-orgstructure.png)
 
 Or your SSO output with
 
@@ -176,7 +176,7 @@ Or your SSO output with
 $ awstools sso by-account -o drawio
 ```
 
-![Exported png of the generated draw.io SSO connections diagram](docs/drawio-sso-by-account.png)
+![Exported png of the generated draw.io SSO connections diagram](docs/images/drawio-sso-by-account.png)
 
 ## Installation and configuration
 
@@ -191,6 +191,28 @@ The AWS configuration is read from the standard locations:
 Unfortunately, the Go SDK doesn't support the credentials used by the AWS CLI v2 for AWS SSO connections. If you wish to use this, you will need to export the current settings (for an example see the `awsexportcurrent` function in [this zsh config file](https://github.com/ArjenSchwarz/custom_zsh/blob/master/plugins/aws-shorts/aws-shorts.plugin.zsh)) or use a tool like [benkehoe/aws-sso-credential-process](https://github.com/benkehoe/aws-sso-credential-process).
 
 [latest]: https://github.com/ArjenSchwarz/awstools/releases
+
+## Shell completion
+
+Shell (tab) completion is available for bash, zsh, fish, and Powershell. You can do so with the [awstools gen completion](docs/awstools_gen_completion.md) command.
+
+```shell
+$ awstools
+appmesh        -- App Mesh commands
+cfn            -- CloudFormation commands
+gen            -- Generate various useful things for awstools
+help           -- Help about any command
+iam            -- IAM commands
+names          -- Get the names for the resources in the account
+organizations  -- AWS Organizations commands
+sso            -- Single Sign-On commands
+tgw            -- Transit Gateway commands
+vpc            -- VPC commands
+```
+
+## Documentation
+
+Full documentation is available using the `--help` flag, but is also automatically generated and [can be found in the docs](docs/awstools.md).
 
 ## Development
 
