@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"github.com/ArjenSchwarz/awstools/config"
 	"github.com/ArjenSchwarz/awstools/helpers"
 	"github.com/spf13/cobra"
 )
@@ -19,7 +20,8 @@ func init() {
 
 func danglingnodes(cmd *cobra.Command, args []string) {
 	resultTitle := "App Mesh Unattached Nodes for mesh " + *meshname
-	svc := helpers.AppmeshSession()
+	awsConfig := config.DefaultAwsConfig()
+	svc := awsConfig.AppmeshClient()
 	unserviced := helpers.GetAllUnservicedAppMeshNodes(meshname, svc)
 	keys := []string{"Virtual Node"}
 	output := helpers.OutputArray{Keys: keys, Title: resultTitle}

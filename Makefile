@@ -1,5 +1,5 @@
 .PHONY: all
-build: deps test clean compile
+build: test clean compile
 
 .PHONY: deps
 deps:

@@ -1,11 +1,13 @@
 package helpers
 
 import (
+	"context"
 	"fmt"
 	"time"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/service/iam"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/iam"
+	"github.com/aws/aws-sdk-go-v2/service/iam/types"
 )
 
 // IAM Role type
@@ -47,7 +49,7 @@ type IAMRole struct {
 	AssumeRolePolicy IAMPolicyDocument
 	InlinePolicies   map[string]*IAMPolicyDocument
 	AttachedPolicies map[string]*IAMPolicyDocument
-	Role             *iam.Role
+	Role             *types.Role
 	Type             string
 	Verbose          bool
 }
@@ -122,7 +124,7 @@ type IAMUser struct {
 	Groups                []string
 	AttachedGroupPolicies map[string]string
 	InlineGroupPolicies   map[string]string
-	User                  *iam.User
+	User                  *types.User
 }
 
 // GetName returns the name of the user
@@ -170,13 +172,12 @@ func (user IAMUser) GetInheritedPolicies() map[string]string {
 }
 
 // HasAccessKeys checks if a user has access keys
-func (user IAMUser) HasAccessKeys() bool {
-	svc := IAMSession()
+func (user IAMUser) HasAccessKeys(svc *iam.Client) bool {
 	input := &iam.ListAccessKeysInput{
 		UserName: aws.String(user.Name),
 	}
 
-	result, err := svc.ListAccessKeys(input)
+	result, err := svc.ListAccessKeys(context.TODO(), input)
 	if err != nil {
 		panic(err)
 	}
@@ -184,19 +185,18 @@ func (user IAMUser) HasAccessKeys() bool {
 }
 
 // GetLastAccessKeyDate returns the last date an access key was used
-func (user IAMUser) GetLastAccessKeyDate() time.Time {
-	svc := IAMSession()
+func (user IAMUser) GetLastAccessKeyDate(svc *iam.Client) time.Time {
 	input := &iam.ListAccessKeysInput{
 		UserName: aws.String(user.Name),
 	}
 
-	result, err := svc.ListAccessKeys(input)
+	result, err := svc.ListAccessKeys(context.TODO(), input)
 	if err != nil {
 		panic(err)
 	}
 	var lastaccess time.Time
 	for _, key := range result.AccessKeyMetadata {
-		keyusage, err := svc.GetAccessKeyLastUsed(&iam.GetAccessKeyLastUsedInput{
+		keyusage, err := svc.GetAccessKeyLastUsed(context.TODO(), &iam.GetAccessKeyLastUsedInput{
 			AccessKeyId: key.AccessKeyId,
 		})
 		if err != nil {
@@ -234,7 +234,7 @@ type IAMGroup struct {
 	Users            []string
 	AttachedPolicies map[string]string
 	InlinePolicies   map[string]string
-	Group            *iam.Group
+	Group            *types.Group
 }
 
 // GetUsers returns the users attached to the Group

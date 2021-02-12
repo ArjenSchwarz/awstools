@@ -1,6 +1,8 @@
 package config
 
-import "strings"
+import (
+	"strings"
+)
 
 // Config holds the global configuration settings
 type Config struct {

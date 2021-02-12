@@ -1,30 +1,19 @@
 package helpers
 
 import (
+	"context"
 	"log"
 
-	"github.com/aws/aws-sdk-go/aws/awserr"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/sts"
+	"github.com/aws/aws-sdk-go-v2/service/sts"
 )
 
 // GetAccountID returns the ID of the account the command is run from
-func GetAccountID() string {
-	svc := sts.New(session.New())
+func GetAccountID(svc *sts.Client) string {
 	input := &sts.GetCallerIdentityInput{}
 
-	result, err := svc.GetCallerIdentity(input)
+	result, err := svc.GetCallerIdentity(context.TODO(), input)
 	if err != nil {
-		if aerr, ok := err.(awserr.Error); ok {
-			switch aerr.Code() {
-			default:
-				log.Fatal(aerr.Error())
-			}
-		} else {
-			// Print the error, cast err to awserr.Error to get the Code and
-			// Message from an error.
-			log.Fatal(err.Error())
-		}
+		log.Fatal(err.Error())
 	}
 	return *result.Account
 }

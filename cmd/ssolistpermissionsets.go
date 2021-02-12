@@ -3,6 +3,7 @@ package cmd
 import (
 	"strings"
 
+	"github.com/ArjenSchwarz/awstools/config"
 	"github.com/ArjenSchwarz/awstools/helpers"
 	"github.com/spf13/cobra"
 )
@@ -24,9 +25,9 @@ func init() {
 }
 
 func ssoListPermissionSets(cmd *cobra.Command, args []string) {
+	awsConfig := config.DefaultAwsConfig()
 	resultTitle := "SSO Overview per permission set"
-	svc := helpers.SSOSession()
-	ssoInstance := helpers.GetSSOAccountInstance(svc)
+	ssoInstance := helpers.GetSSOAccountInstance(awsConfig.SsoClient())
 	keys := []string{"PermissionSet", "AccountIDs", "ManagedPolicies", "InlinePolicy"}
 	if *settings.Verbose {
 		keys = append(keys, "ManagedPolicies", "InlinePolicy")

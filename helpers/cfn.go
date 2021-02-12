@@ -1,26 +1,19 @@
 package helpers
 
 import (
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/cloudformation"
+	"context"
+
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
+	"github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
 )
 
-var cfnSession = cloudformation.New(session.New())
-
-// CfnSession returns a shared CfnSession
-func CfnSession() *cloudformation.CloudFormation {
-	return cfnSession
-}
-
 // GetResourcesByStackName returns a slice of the Stack Resources in the provided stack
-func GetResourcesByStackName(stackname *string) []*cloudformation.StackResource {
-	svc := CfnSession()
-
+func GetResourcesByStackName(stackname *string, svc *cloudformation.Client) []types.StackResource {
 	params := &cloudformation.DescribeStackResourcesInput{
 		StackName: stackname,
 	}
-	resp, err := svc.DescribeStackResources(params)
+	resp, err := svc.DescribeStackResources(context.TODO(), params)
 
 	if err != nil {
 		panic(err)
@@ -32,13 +25,13 @@ func GetResourcesByStackName(stackname *string) []*cloudformation.StackResource 
 
 // GetNestedCloudFormationResources retrieves a slice of the Stack Resources that
 // are in the provided stack or in one of its children
-func GetNestedCloudFormationResources(stackname *string) []*cloudformation.StackResource {
-	resources := GetResourcesByStackName(stackname)
-	result := make([]*cloudformation.StackResource, 0, len(resources))
+func GetNestedCloudFormationResources(stackname *string, svc *cloudformation.Client) []types.StackResource {
+	resources := GetResourcesByStackName(stackname, svc)
+	result := make([]types.StackResource, 0, len(resources))
 	for _, resource := range resources {
 		result = append(result, resource)
-		if aws.StringValue(resource.ResourceType) == "AWS::CloudFormation::Stack" {
-			for _, subresource := range GetNestedCloudFormationResources(resource.PhysicalResourceId) {
+		if aws.ToString(resource.ResourceType) == "AWS::CloudFormation::Stack" {
+			for _, subresource := range GetNestedCloudFormationResources(resource.PhysicalResourceId, svc) {
 				result = append(result, subresource)
 			}
 		}

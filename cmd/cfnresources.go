@@ -1,9 +1,10 @@
 package cmd
 
 import (
+	"github.com/ArjenSchwarz/awstools/config"
 	"github.com/ArjenSchwarz/awstools/helpers"
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/service/cloudformation"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
 	"github.com/spf13/cobra"
 )
 
@@ -33,27 +34,28 @@ func init() {
 }
 
 func listResources(cmd *cobra.Command, args []string) {
+	awsConfig := config.DefaultAwsConfig()
 	resultTitle := "CloudFormation resources for stack " + *stackname
-	unparsedResources := helpers.GetNestedCloudFormationResources(stackname)
+	unparsedResources := helpers.GetNestedCloudFormationResources(stackname, awsConfig.CloudformationClient())
 	resources := make([]cfnResource, len(unparsedResources))
 
 	c := make(chan cfnResource)
 	for _, unparsedResource := range unparsedResources {
-		go func(resource *cloudformation.StackResource) {
+		go func(resource types.StackResource) {
 			resourceStruct := cfnResource{
-				ResourceID:   aws.StringValue(resource.PhysicalResourceId),
-				Type:         aws.StringValue(resource.ResourceType),
-				Stack:        aws.StringValue(resource.StackName),
-				Status:       aws.StringValue(resource.ResourceStatus),
-				LogicalName:  aws.StringValue(resource.LogicalResourceId),
-				ResourceName: aws.StringValue(resource.PhysicalResourceId),
+				ResourceID:   aws.ToString(resource.PhysicalResourceId),
+				Type:         aws.ToString(resource.ResourceType),
+				Stack:        aws.ToString(resource.StackName),
+				Status:       string(resource.ResourceStatus),
+				LogicalName:  aws.ToString(resource.LogicalResourceId),
+				ResourceName: aws.ToString(resource.PhysicalResourceId),
 			}
 			// Override the resource name when there is a better name available
 			switch resourceStruct.Type {
 			case "AWS::EC2::Instance":
-				resourceStruct.ResourceName = helpers.GetEc2Name(resource.PhysicalResourceId)
+				resourceStruct.ResourceName = helpers.GetEc2Name(*resource.PhysicalResourceId, awsConfig.Ec2Client())
 			case "AWS::RDS::DBInstance":
-				resourceStruct.ResourceName = helpers.GetRDSName(resource.PhysicalResourceId)
+				resourceStruct.ResourceName = helpers.GetRDSName(resource.PhysicalResourceId, awsConfig.RdsClient())
 
 			}
 			c <- resourceStruct

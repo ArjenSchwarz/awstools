@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"github.com/ArjenSchwarz/awstools/config"
 	"github.com/ArjenSchwarz/awstools/helpers"
 	"github.com/spf13/cobra"
 )
@@ -20,9 +21,9 @@ func init() {
 }
 
 func tgwoverview(cmd *cobra.Command, args []string) {
-	resultTitle := "Transit Gateway Routes in account " + getName(helpers.GetAccountID())
-	svc := helpers.Ec2Session()
-	gateways := helpers.GetAllTransitGateways(svc)
+	awsConfig := config.DefaultAwsConfig()
+	resultTitle := "Transit Gateway Routes in account " + getName(helpers.GetAccountID(awsConfig.StsClient()))
+	gateways := helpers.GetAllTransitGateways(awsConfig.Ec2Client())
 	keys := []string{"Transit Gateway Account", "Transit Gateway ID", "Route Table ID", "Route Table Name", "CIDR", "Target VPC"}
 	output := helpers.OutputArray{Keys: keys, Title: resultTitle}
 	for _, gateway := range gateways {

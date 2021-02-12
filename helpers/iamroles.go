@@ -1,18 +1,20 @@
 package helpers
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/url"
 
-	"github.com/aws/aws-sdk-go/service/iam"
+	"github.com/aws/aws-sdk-go-v2/service/iam"
+	"github.com/aws/aws-sdk-go-v2/service/iam/types"
 )
 
 var cachedIAMPolicyDocuments = make(map[string]*IAMPolicyDocument)
 
 // GetRolesAndPolicies returns all the roles and and their attached policies
-func GetRolesAndPolicies(verbose bool, svc *iam.IAM) ([]IAMRole, map[string]IAMPolicyDocument) {
+func GetRolesAndPolicies(verbose bool, svc *iam.Client) ([]IAMRole, map[string]IAMPolicyDocument) {
 	roles := GetRoleDetails(verbose, svc)
 	policies := make(map[string]IAMPolicyDocument)
 	for _, role := range roles {
@@ -28,9 +30,9 @@ func GetRolesAndPolicies(verbose bool, svc *iam.IAM) ([]IAMRole, map[string]IAMP
 }
 
 // GetRoleDetails returns the list of roles in the account
-func GetRoleDetails(verbose bool, svc *iam.IAM) []IAMRole {
+func GetRoleDetails(verbose bool, svc *iam.Client) []IAMRole {
 	result := []IAMRole{}
-	resp, err := svc.ListRoles(&iam.ListRolesInput{})
+	resp, err := svc.ListRoles(context.TODO(), &iam.ListRolesInput{})
 	if err != nil {
 		log.Fatal(err.Error())
 	}
@@ -51,10 +53,10 @@ func GetRoleDetails(verbose bool, svc *iam.IAM) []IAMRole {
 			ID:               *role.RoleId,
 			AssumeRolePolicy: policydocument,
 			Path:             *role.Path,
-			Role:             role,
+			Role:             &role,
 			InlinePolicies:   inlinepolicies,
 			AttachedPolicies: attachedpolicies,
-			Type:             getRoleType(*role),
+			Type:             getRoleType(role),
 			Verbose:          verbose,
 		}
 		for _, policy := range rolestruct.InlinePolicies {
@@ -68,7 +70,7 @@ func GetRoleDetails(verbose bool, svc *iam.IAM) []IAMRole {
 	return result
 }
 
-func getRoleType(role iam.Role) string {
+func getRoleType(role types.Role) string {
 	rolePath := *role.Path
 	if rolePath == "/service-role/" || (len(rolePath) > 18 && rolePath[0:18] == "/aws-service-role/") {
 		return IAMRoleTypeServiceRole
@@ -79,26 +81,26 @@ func getRoleType(role iam.Role) string {
 	return IAMRoleTypeUserDefined
 }
 
-func getInlinePoliciesForRole(rolename string, verbose bool, svc *iam.IAM) map[string]*IAMPolicyDocument {
+func getInlinePoliciesForRole(rolename string, verbose bool, svc *iam.Client) map[string]*IAMPolicyDocument {
 	input := &iam.ListRolePoliciesInput{RoleName: &rolename}
-	resp, err := svc.ListRolePolicies(input)
+	resp, err := svc.ListRolePolicies(context.TODO(), input)
 	if err != nil {
 		log.Fatal(err.Error())
 	}
 	policies := make(map[string]*IAMPolicyDocument)
 	for _, policy := range resp.PolicyNames {
-		policyname := rolename + *policy
+		policyname := rolename + policy
 		if _, ok := cachedIAMPolicyDocuments[policyname]; !ok {
 			policydocument := IAMPolicyDocument{
-				Name: *policy,
+				Name: policy,
 				Type: IAMPolicyTypeInline,
 			}
 			if verbose {
 				detailinput := &iam.GetRolePolicyInput{
 					RoleName:   &rolename,
-					PolicyName: policy,
+					PolicyName: &policy,
 				}
-				detailresp, err := svc.GetRolePolicy(detailinput)
+				detailresp, err := svc.GetRolePolicy(context.TODO(), detailinput)
 				if err != nil {
 					log.Fatal(err.Error())
 				}
@@ -120,9 +122,9 @@ func getInlinePoliciesForRole(rolename string, verbose bool, svc *iam.IAM) map[s
 }
 
 // getAttachedPoliciesForRole(rolename string, svc *iam.IAM) map[string]
-func getAttachedPoliciesForRole(rolename string, verbose bool, svc *iam.IAM) map[string]*IAMPolicyDocument {
+func getAttachedPoliciesForRole(rolename string, verbose bool, svc *iam.Client) map[string]*IAMPolicyDocument {
 	input := &iam.ListAttachedRolePoliciesInput{RoleName: &rolename}
-	resp, err := svc.ListAttachedRolePolicies(input)
+	resp, err := svc.ListAttachedRolePolicies(context.TODO(), input)
 	if err != nil {
 		log.Fatal(err.Error())
 	}
