@@ -28,9 +28,9 @@ func init() {
 }
 
 func orgstructure(cmd *cobra.Command, args []string) {
+	awsConfig := config.DefaultAwsConfig()
 	resultTitle := "AWS Organization Structure"
-	svc := helpers.OrganizationsSession(config.DefaultAwsConfig())
-	organization := helpers.GetFullOrganization(svc)
+	organization := helpers.GetFullOrganization(awsConfig.OrganizationsClient())
 	keys := []string{"Name", "Type", "Children"}
 	if settings.IsDrawIO() {
 		keys = append(keys, "Image")

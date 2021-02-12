@@ -36,7 +36,7 @@ func init() {
 func listResources(cmd *cobra.Command, args []string) {
 	awsConfig := config.DefaultAwsConfig()
 	resultTitle := "CloudFormation resources for stack " + *stackname
-	unparsedResources := helpers.GetNestedCloudFormationResources(stackname, awsConfig)
+	unparsedResources := helpers.GetNestedCloudFormationResources(stackname, awsConfig.CloudformationClient())
 	resources := make([]cfnResource, len(unparsedResources))
 
 	c := make(chan cfnResource)
@@ -53,9 +53,9 @@ func listResources(cmd *cobra.Command, args []string) {
 			// Override the resource name when there is a better name available
 			switch resourceStruct.Type {
 			case "AWS::EC2::Instance":
-				resourceStruct.ResourceName = helpers.GetEc2Name(*resource.PhysicalResourceId, helpers.Ec2Session(awsConfig))
+				resourceStruct.ResourceName = helpers.GetEc2Name(*resource.PhysicalResourceId, awsConfig.Ec2Client())
 			case "AWS::RDS::DBInstance":
-				resourceStruct.ResourceName = helpers.GetRDSName(resource.PhysicalResourceId, helpers.RDSSession(awsConfig))
+				resourceStruct.ResourceName = helpers.GetRDSName(resource.PhysicalResourceId, awsConfig.RdsClient())
 
 			}
 			c <- resourceStruct

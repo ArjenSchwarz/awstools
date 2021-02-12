@@ -7,11 +7,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/rds"
 )
 
-// RDSSession returns a shared RDSSession
-func RDSSession(config aws.Config) *rds.Client {
-	return rds.NewFromConfig(config)
-}
-
 // GetRDSName returns the name of the provided RDS Resource
 func GetRDSName(rdsname *string, svc *rds.Client) string {
 	params := &rds.DescribeDBInstancesInput{

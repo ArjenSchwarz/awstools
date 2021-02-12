@@ -8,11 +8,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
 )
 
-// Ec2Session returns a shared Ec2Session
-func Ec2Session(config aws.Config) *ec2.Client {
-	return ec2.NewFromConfig(config)
-}
-
 // GetEc2Name returns the name of the provided EC2 Resource
 func GetEc2Name(ec2name string, svc *ec2.Client) string {
 	params := &ec2.DescribeInstancesInput{

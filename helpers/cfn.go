@@ -9,9 +9,7 @@ import (
 )
 
 // GetResourcesByStackName returns a slice of the Stack Resources in the provided stack
-func GetResourcesByStackName(stackname *string, config aws.Config) []types.StackResource {
-	svc := cloudformation.NewFromConfig(config)
-
+func GetResourcesByStackName(stackname *string, svc *cloudformation.Client) []types.StackResource {
 	params := &cloudformation.DescribeStackResourcesInput{
 		StackName: stackname,
 	}
@@ -27,13 +25,13 @@ func GetResourcesByStackName(stackname *string, config aws.Config) []types.Stack
 
 // GetNestedCloudFormationResources retrieves a slice of the Stack Resources that
 // are in the provided stack or in one of its children
-func GetNestedCloudFormationResources(stackname *string, config aws.Config) []types.StackResource {
-	resources := GetResourcesByStackName(stackname, config)
+func GetNestedCloudFormationResources(stackname *string, svc *cloudformation.Client) []types.StackResource {
+	resources := GetResourcesByStackName(stackname, svc)
 	result := make([]types.StackResource, 0, len(resources))
 	for _, resource := range resources {
 		result = append(result, resource)
 		if aws.ToString(resource.ResourceType) == "AWS::CloudFormation::Stack" {
-			for _, subresource := range GetNestedCloudFormationResources(resource.PhysicalResourceId, config) {
+			for _, subresource := range GetNestedCloudFormationResources(resource.PhysicalResourceId, svc) {
 				result = append(result, subresource)
 			}
 		}

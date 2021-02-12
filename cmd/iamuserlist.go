@@ -24,8 +24,9 @@ var userlistCmd = &cobra.Command{
 }
 
 func detailUsers(cmd *cobra.Command, args []string) {
-	resultTitle := "IAM User overview for account " + getName(helpers.GetAccountID(config.StsSession(config.DefaultAwsConfig())))
-	svc := helpers.IAMSession(config.DefaultAwsConfig())
+	awsConfig := config.DefaultAwsConfig()
+	resultTitle := "IAM User overview for account " + getName(helpers.GetAccountID(awsConfig.StsClient()))
+	svc := awsConfig.IamClient()
 	userlist := helpers.GetUserDetails(svc)
 	grouplist := helpers.GetGroupDetails(svc)
 	objectlist := []helpers.IAMObject{}

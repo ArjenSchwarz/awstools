@@ -6,18 +6,13 @@ import (
 	"log"
 	"net/url"
 
-	"github.com/ArjenSchwarz/awstools/config"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/iam"
 	"github.com/aws/aws-sdk-go-v2/service/iam/types"
+	"github.com/aws/aws-sdk-go-v2/service/sts"
 )
 
 var cachedUsers []types.User
-
-// IAMSession returns a shared IAMSession
-func IAMSession(config aws.Config) *iam.Client {
-	return iam.NewFromConfig(config)
-}
 
 // GetPoliciesMap retrieves a map of policies with the policy name as the key
 // and the actual policy object as the value
@@ -302,9 +297,9 @@ func (user IAMUser) GetAllPolicies() map[string]string {
 
 // GetAccountAlias returns the account alias in a map of [accountid]accountalias
 // If no alias is present, it will return the account ID instead
-func GetAccountAlias(svc *iam.Client) map[string]string {
+func GetAccountAlias(svc *iam.Client, stsSvc *sts.Client) map[string]string {
 	alias := make(map[string]string)
-	alias[GetAccountID(config.StsSession(config.DefaultAwsConfig()))] = GetAccountID(config.StsSession(config.DefaultAwsConfig()))
+	alias[GetAccountID(stsSvc)] = GetAccountID(stsSvc)
 
 	input := &iam.ListAccountAliasesInput{}
 	result, err := svc.ListAccountAliases(context.TODO(), input)
@@ -312,7 +307,7 @@ func GetAccountAlias(svc *iam.Client) map[string]string {
 		log.Fatal(err.Error())
 	}
 	if len(result.AccountAliases) > 0 {
-		alias[GetAccountID(config.StsSession(config.DefaultAwsConfig()))] = result.AccountAliases[0]
+		alias[GetAccountID(stsSvc)] = result.AccountAliases[0]
 	}
 	return alias
 }

@@ -10,11 +10,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/organizations/types"
 )
 
-// OrganizationsSession returns a shared organizationsSession
-func OrganizationsSession(config aws.Config) *organizations.Client {
-	return organizations.NewFromConfig(config)
-}
-
 func getOrganizationRoot(svc *organizations.Client) OrganizationEntry {
 	root, err := svc.ListRoots(context.TODO(), &organizations.ListRootsInput{})
 	if err != nil {

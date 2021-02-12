@@ -10,11 +10,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/appmesh/types"
 )
 
-// AppmeshSession returns a new AppMesh Client
-func AppmeshSession(config aws.Config) *appmesh.Client {
-	return appmesh.NewFromConfig(config)
-}
-
 // getAllAppMeshRoutes retrieves all of the routes in the mesh
 func getAllAppMeshRoutes(meshName *string, svc *appmesh.Client) []types.RouteRef {
 	routersInput := &appmesh.ListVirtualRoutersInput{

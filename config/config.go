@@ -1,12 +1,7 @@
 package config
 
 import (
-	"context"
 	"strings"
-
-	"github.com/aws/aws-sdk-go-v2/aws"
-	external "github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/service/sts"
 )
 
 // Config holds the global configuration settings
@@ -49,18 +44,4 @@ func (config *Config) ShouldCombineAndAppend() bool {
 		return false
 	}
 	return true
-}
-
-// DefaultAwsConfig loads default AWS Config
-func DefaultAwsConfig() aws.Config {
-	cfg, err := external.LoadDefaultConfig(context.TODO())
-	if err != nil {
-		panic(err)
-	}
-	return cfg
-}
-
-// StsSession returns an STS Client
-func StsSession(config aws.Config) *sts.Client {
-	return sts.NewFromConfig(config)
 }

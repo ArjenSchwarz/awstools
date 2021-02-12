@@ -8,11 +8,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ssoadmin"
 )
 
-// SSOSession returns a shared Ec2Session
-func SSOSession(config aws.Config) *ssoadmin.Client {
-	return ssoadmin.NewFromConfig(config)
-}
-
 // GetSSOAccountInstance retrieves the SSO Account Instance and all its data
 func GetSSOAccountInstance(svc *ssoadmin.Client) SSOInstance {
 	ssoInstance := getSSOInstance(svc)

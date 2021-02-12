@@ -36,9 +36,9 @@ var rolelistCmd = &cobra.Command{
 }
 
 func iamrolelist(cmd *cobra.Command, args []string) {
-	resultTitle := "IAM Role overview for account " + getName(helpers.GetAccountID(config.StsSession(config.DefaultAwsConfig())))
-	svc := helpers.IAMSession(config.DefaultAwsConfig())
-	roles, policies := helpers.GetRolesAndPolicies(*settings.Verbose, svc)
+	awsConfig := config.DefaultAwsConfig()
+	resultTitle := "IAM Role overview for account " + getName(helpers.GetAccountID(awsConfig.StsClient()))
+	roles, policies := helpers.GetRolesAndPolicies(*settings.Verbose, awsConfig.IamClient())
 	keys := []string{"Name", "Type", "AssumedFrom", "Policies", "Roles"}
 	stringSeparator := ", "
 	if settings.IsDrawIO() {
