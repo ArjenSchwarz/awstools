@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/ArjenSchwarz/awstools/drawio"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/organizations"
 	"github.com/aws/aws-sdk-go-v2/service/organizations/types"
@@ -17,11 +16,10 @@ func getOrganizationRoot(svc *organizations.Client) OrganizationEntry {
 	}
 	rootentry := root.Roots[0]
 	entry := OrganizationEntry{
-		ID:    *rootentry.Id,
-		Arn:   *rootentry.Arn,
-		Name:  *rootentry.Name,
-		Image: drawio.ShapeAWSOrganizations,
-		Type:  string(types.TargetTypeRoot),
+		ID:   *rootentry.Id,
+		Arn:  *rootentry.Arn,
+		Name: *rootentry.Name,
+		Type: string(types.TargetTypeRoot),
 	}
 	return entry
 }
@@ -39,7 +37,6 @@ type OrganizationEntry struct {
 	Name     string
 	Arn      string
 	Type     string
-	Image    string
 	Children []OrganizationEntry
 }
 
@@ -90,7 +87,6 @@ func formatChild(raw types.Child, svc *organizations.Client) OrganizationEntry {
 			ID:       *details.OrganizationalUnit.Id,
 			Type:     string(raw.Type),
 			Arn:      *details.OrganizationalUnit.Arn,
-			Image:    drawio.ShapeAWSOrganizationsOrganizationalUnit,
 			Children: []OrganizationEntry{},
 		}
 	}
@@ -106,7 +102,6 @@ func formatChild(raw types.Child, svc *organizations.Client) OrganizationEntry {
 		ID:       *details.Account.Id,
 		Type:     string(raw.Type),
 		Arn:      *details.Account.Arn,
-		Image:    drawio.ShapeAWSOrganizationsAccount,
 		Children: []OrganizationEntry{},
 	}
 }
