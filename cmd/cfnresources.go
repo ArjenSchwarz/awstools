@@ -14,7 +14,7 @@ var resourcesCmd = &cobra.Command{
 	Short: "List all the resources in a stack and any nested stacks",
 	Long: `This command will list the resources attached to the provided stack and any possible nested stacks.
 
-Return values are the ResourceID, Type, and Stack of the resource.
+Return values are the ResourceID, Type, and Stack of the resource. You can use the --namefile flag to show names instead of resource ids.
 
 --verbose will add the status and logicalname (the nme within the stack) to the output`,
 	Run: listResources,
@@ -48,15 +48,7 @@ func listResources(cmd *cobra.Command, args []string) {
 				Stack:        aws.ToString(resource.StackName),
 				Status:       string(resource.ResourceStatus),
 				LogicalName:  aws.ToString(resource.LogicalResourceId),
-				ResourceName: aws.ToString(resource.PhysicalResourceId),
-			}
-			// Override the resource name when there is a better name available
-			switch resourceStruct.Type {
-			case "AWS::EC2::Instance":
-				resourceStruct.ResourceName = helpers.GetEc2Name(*resource.PhysicalResourceId, awsConfig.Ec2Client())
-			case "AWS::RDS::DBInstance":
-				resourceStruct.ResourceName = helpers.GetRDSName(resource.PhysicalResourceId, awsConfig.RdsClient())
-
+				ResourceName: getName(*resource.PhysicalResourceId),
 			}
 			c <- resourceStruct
 		}(unparsedResource)

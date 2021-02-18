@@ -21,11 +21,7 @@ func GetEc2Name(ec2name string, svc *ec2.Client) string {
 
 	for _, reservation := range resp.Reservations {
 		for _, instance := range reservation.Instances {
-			for _, tag := range instance.Tags {
-				if aws.ToString(tag.Key) == "Name" {
-					return aws.ToString(tag.Value)
-				}
-			}
+			return getNameFromTags(instance.Tags)
 		}
 	}
 	return ""
@@ -88,13 +84,8 @@ func addAllVPCNames(svc *ec2.Client, result map[string]string) map[string]string
 	}
 	for _, vpc := range resp.Vpcs {
 		result[*vpc.VpcId] = *vpc.VpcId
-		if vpc.Tags != nil {
-			for _, tag := range vpc.Tags {
-				if *tag.Key == "Name" {
-					result[*vpc.VpcId] = *tag.Value
-					break
-				}
-			}
+		if name := getNameFromTags(vpc.Tags); name != "" {
+			result[*vpc.VpcId] = name
 		}
 	}
 	return result
@@ -107,13 +98,8 @@ func addAllPeerNames(svc *ec2.Client, result map[string]string) map[string]strin
 	}
 	for _, peer := range resp.VpcPeeringConnections {
 		result[*peer.VpcPeeringConnectionId] = *peer.VpcPeeringConnectionId
-		if peer.Tags != nil {
-			for _, tag := range peer.Tags {
-				if *tag.Key == "Name" {
-					result[*peer.VpcPeeringConnectionId] = *tag.Value
-					break
-				}
-			}
+		if name := getNameFromTags(peer.Tags); name != "" {
+			result[*peer.VpcPeeringConnectionId] = name
 		}
 	}
 	return result
@@ -126,13 +112,8 @@ func addAllSubnetNames(svc *ec2.Client, result map[string]string) map[string]str
 	}
 	for _, subnet := range resp.Subnets {
 		result[*subnet.SubnetId] = *subnet.SubnetId
-		if subnet.Tags != nil {
-			for _, tag := range subnet.Tags {
-				if *tag.Key == "Name" {
-					result[*subnet.SubnetId] = *tag.Value
-					break
-				}
-			}
+		if name := getNameFromTags(subnet.Tags); name != "" {
+			result[*subnet.SubnetId] = name
 		}
 	}
 	return result
@@ -145,13 +126,8 @@ func addAllRouteTableNames(svc *ec2.Client, result map[string]string) map[string
 	}
 	for _, resource := range resp.RouteTables {
 		result[*resource.RouteTableId] = *resource.RouteTableId
-		if resource.Tags != nil {
-			for _, tag := range resource.Tags {
-				if *tag.Key == "Name" {
-					result[*resource.RouteTableId] = *tag.Value
-					break
-				}
-			}
+		if name := getNameFromTags(resource.Tags); name != "" {
+			result[*resource.RouteTableId] = name
 		}
 	}
 	return result
@@ -447,6 +423,9 @@ func IsLatestInstanceFamily(instanceFamily string) bool {
 }
 
 func getNameFromTags(tags []types.Tag) string {
+	if tags == nil {
+		return ""
+	}
 	for _, tag := range tags {
 		if aws.ToString(tag.Key) == "Name" {
 			return aws.ToString(tag.Value)
