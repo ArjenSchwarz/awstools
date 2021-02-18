@@ -3,6 +3,7 @@ package helpers
 import (
 	"encoding/json"
 	"io/ioutil"
+	"strings"
 )
 
 // stringInSlice checks if a string exists in a slice
@@ -39,4 +40,10 @@ func FlattenStringMaps(stringmaps []map[string]string) map[string]string {
 		}
 	}
 	return result
+}
+
+// TypeByResourceID identifies the type of resource based on its unique ID
+func TypeByResourceID(resourceID string) string {
+	portions := strings.Split(resourceID, "-")
+	return strings.Join(portions[0:len(portions)-1], "-")
 }
