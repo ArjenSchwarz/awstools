@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/ArjenSchwarz/awstools/config"
@@ -12,10 +13,9 @@ import (
 var ssoListPermissionSetsCmd = &cobra.Command{
 	Use:   "list-permission-sets",
 	Short: "A list of the SSO Permission Sets",
-	Long: `Provides an overview of all the permission sets and their attached policies
+	Long: `Provides an overview of all the permission sets and their attached policies and deployed accounts
 
-	You can filter the output to a single permission set by supplying the --resource-id (-r) flag with the
-	permission set name or arn.
+By default this command gives an output showing the number of managed policies attached and whether it has an inline policy. To expand this and see the details, use the --verbose (-v) flag.
 	`,
 	Run: ssoListPermissionSets,
 }
@@ -28,10 +28,7 @@ func ssoListPermissionSets(cmd *cobra.Command, args []string) {
 	awsConfig := config.DefaultAwsConfig()
 	resultTitle := "SSO Overview per permission set"
 	ssoInstance := helpers.GetSSOAccountInstance(awsConfig.SsoClient())
-	keys := []string{"PermissionSet", "AccountIDs", "ManagedPolicies", "InlinePolicy"}
-	if *settings.Verbose {
-		keys = append(keys, "ManagedPolicies", "InlinePolicy")
-	}
+	keys := []string{"PermissionSet", "AccountIDs", "Arn", "ManagedPolicies", "InlinePolicy"}
 	output := helpers.OutputArray{Keys: keys, Title: resultTitle}
 	output.SortKey = "PermissionSet"
 	stringSeparator := ", "
@@ -40,8 +37,18 @@ func ssoListPermissionSets(cmd *cobra.Command, args []string) {
 		permchildren := []string{}
 		content := make(map[string]string)
 		content["PermissionSet"] = permissionset.Name
-		content["ManagedPolicies"] = strings.Join(permissionset.GetManagedPolicyNames(), stringSeparator)
-		content["InlinePolicy"] = permissionset.InlinePolicy
+		content["Arn"] = permissionset.Arn
+		if *settings.Verbose {
+			content["ManagedPolicies"] = strings.Join(permissionset.GetManagedPolicyNames(), stringSeparator)
+			content["InlinePolicy"] = permissionset.InlinePolicy
+		} else {
+			content["ManagedPolicies"] = fmt.Sprint(len(permissionset.GetManagedPolicyNames()))
+			inlinePolicy := "False"
+			if permissionset.InlinePolicy != "" {
+				inlinePolicy = "True"
+			}
+			content["InlinePolicy"] = inlinePolicy
+		}
 		for _, account := range permissionset.Accounts {
 			permchildren = append(permchildren, getName(account.AccountID))
 		}

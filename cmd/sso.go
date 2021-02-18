@@ -7,7 +7,7 @@ import (
 // ssoCmd represents the tgw command
 var ssoCmd = &cobra.Command{
 	Use:   "sso",
-	Short: "Single Sign-On commands",
+	Short: "AWS Single Sign-On commands",
 	Long:  `Various AWS SSO commands`,
 }
 

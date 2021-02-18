@@ -16,13 +16,9 @@ var ssoOverviewByPermissionSetCmd = &cobra.Command{
 	Long: `Provides an overview of all the permission sets and assignments attached to an account,
 	grouped by permission set.
 
-	You can filter the output to a single permission set by supplying the --resource-id (-r) flag with the
-	permission set name or arn.
+You can filter the output to a single permission set by supplying the --resource-id (-r) flag with the permission set name or arn.
 
-	Verbose mode will add the policies for the permissionsets in the textual output formats
-	drawio output will generate a graph that goes SSO Instance -> Permission Sets -> Accounts -> User/Group.
-	You may notice the same accounts shown multiple times, this is to improve readability not a bug.
-	dot output is currently limited as it shows internal names only
+Verbose mode will add the policies for the permissionsets in the textual output formats drawio output will generate a graph that goes SSO Instance -> Permission Sets -> Accounts -> User/Group. You may notice the same accounts shown multiple times, this is to improve readability not a bug. dot output is currently limited as it shows internal names only
 	`,
 	Run: ssoOverviewByPermissionSet,
 }
