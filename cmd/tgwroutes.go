@@ -72,7 +72,12 @@ func tgwroutes(cmd *cobra.Command, args []string) {
 		content["Name"] = getName(resourceid)
 		content["TargetGateway"] = tgw
 		if settings.IsDrawIO() {
-			content["Image"] = drawio.ShapeAWSVPC
+			switch helpers.TypeByResourceID(resourceid) {
+			case "vpc":
+				content["Image"] = drawio.ShapeAWSVPC
+			case "vpn":
+				content["Image"] = drawio.ShapeAWSClientVPN
+			}
 		}
 		holder := helpers.OutputHolder{Contents: content}
 		output.AddHolder(holder)
@@ -81,16 +86,7 @@ func tgwroutes(cmd *cobra.Command, args []string) {
 }
 
 func filterGateway(gateways []helpers.TransitGateway) (map[string]string, map[string][]string) {
-	limitertype := ""
-	if tgwresourceid != "" {
-		if tgwresourceid[0:3] == "vpc" { // VPC
-			limitertype = "vpc"
-		} else if tgwresourceid[0:7] == "tgw-rtb" { // Route Table
-			limitertype = "tgw-rtb"
-		} else if tgwresourceid[0:3] == "tgw" { // Transit Gateway
-			limitertype = "tgw"
-		}
-	}
+	limitertype := helpers.TypeByResourceID(tgwresourceid)
 	attachedresources := make(map[string]string)
 	tgwrts := make(map[string][]string)
 
