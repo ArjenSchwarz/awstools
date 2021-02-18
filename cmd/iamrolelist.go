@@ -29,9 +29,9 @@ var rolelistCmd = &cobra.Command{
 	Use:   "rolelist",
 	Short: "Get an overview of the roles and their policies",
 	Long: `Retrieves a list of all IAM roles in the account and their policies.
-	The policies themselves are also shown separately.
+The policies themselves are also shown separately.
 
-	The drawio output format links the users to policies.`,
+The drawio output format links the users to policies.`,
 	Run: iamrolelist,
 }
 

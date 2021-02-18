@@ -13,13 +13,14 @@ import (
 var structureCmd = &cobra.Command{
 	Use:   "structure",
 	Short: "Get a graphical overview of the Organization's structure",
-	Long: `This gives you an overview of how the accounts are connected.
-	Using the dot output format you can turn this into an image, and
-	using drawio you will get a CSV that you can import into draw.io
-	with its CSV import functionality.
+	Long: `This command provides a graphical overview of how the accounts are connected.
 
-	Example: awstools organizations structure -o dot | dot -Tpng -o structure.png
-	Example: awstools organizations structure -o drawio | pbcopy`,
+Examples:
+
+	awstools organizations structure -o dot | dot -Tpng -o structure.png
+	awstools organizations structure -o drawio | pbcopy
+
+Using the dot output format you can turn this into an image, and using drawio you will get a CSV that you can import into draw.io with its CSV import functionality. `,
 	Run: orgstructure,
 }
 
