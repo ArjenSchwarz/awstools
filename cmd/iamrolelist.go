@@ -65,7 +65,7 @@ func iamrolelist(cmd *cobra.Command, args []string) {
 		content["Policies"] = strings.Join(role.GetPolicyNames(), stringSeparator)
 		if settings.IsDrawIO() {
 			content["DrawioID"] = role.ID
-			content["Image"] = drawio.ShapeAWSIdentityandAccessManagementIAMRole
+			content["Image"] = drawio.AWSShape("Security Identity Compliance", "Role")
 		}
 		holder := helpers.OutputHolder{Contents: content}
 		output.AddHolder(holder)
@@ -75,7 +75,7 @@ func iamrolelist(cmd *cobra.Command, args []string) {
 		content["Name"] = policyname
 		if settings.IsDrawIO() {
 			content["DrawioID"] = policyname
-			content["Image"] = drawio.ShapeAWSIdentityandAccessManagementIAMPermissions
+			content["Image"] = drawio.AWSShape("Security Identity Compliance", "Permissions")
 		}
 		content["Type"] = policy.Type
 		content["Roles"] = strings.Join(policy.GetRoleNames(), stringSeparator)

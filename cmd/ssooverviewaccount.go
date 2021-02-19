@@ -100,7 +100,7 @@ func createSSOAccountDrawIOContents(instance helpers.SSOInstance, output *helper
 	content["Name"] = getName(instance.Arn)
 	content["DrawIOID"] = getName(instance.Arn)
 	content["Type"] = "SSO"
-	content["Image"] = drawio.ShapeAWSSingleSignOn
+	content["Image"] = drawio.AWSShape("Security Identity Compliance", "Single Sign-On")
 	content["Children"] = strings.Join(instance.GetAccountList(), ",")
 	holder := helpers.OutputHolder{Contents: content}
 	output.AddHolder(holder)
@@ -114,7 +114,7 @@ func createSSOAccountDrawIOContents(instance helpers.SSOInstance, output *helper
 		content["Name"] = getName(account.AccountID)
 		content["DrawIOID"] = account.AccountID
 		content["Type"] = "Account"
-		content["Image"] = drawio.ShapeAWSOrganizationsAccount
+		content["Image"] = drawio.AWSShape("Security Identity Compliance", "Organizations Account")
 		for _, assignment := range account.AccountAssignments {
 			accountchildren = append(accountchildren, assignment.PermissionSet.Name+account.AccountID)
 		}
@@ -128,7 +128,7 @@ func createSSOAccountDrawIOContents(instance helpers.SSOInstance, output *helper
 				content["Name"] = getName(assignment.PermissionSet.Name)
 				content["DrawIOID"] = getName(assignment.PermissionSet.Name + account.AccountID)
 				content["Type"] = "PermissionSet"
-				content["Image"] = drawio.ShapeAWSIdentityandAccessManagementIAMPermissions
+				content["Image"] = drawio.AWSShape("Security Identity Compliance", "Permissions")
 				content["Children"] = strings.Join(assignment.PermissionSet.GetAssignmentIdsByAccount(account.AccountID), ",")
 				holder := helpers.OutputHolder{Contents: content}
 				output.AddHolder(holder)
@@ -141,9 +141,9 @@ func createSSOAccountDrawIOContents(instance helpers.SSOInstance, output *helper
 				content["Type"] = assignment.PrincipalType
 				switch assignment.PrincipalType {
 				case "USER":
-					content["Image"] = drawio.ShapeAWSUser
+					content["Image"] = drawio.AWSShape("General Resources", "User")
 				case "GROUP":
-					content["Image"] = drawio.ShapeAWSUsers
+					content["Image"] = drawio.AWSShape("General Resources", "Users")
 				}
 				holder := helpers.OutputHolder{Contents: content}
 				output.AddHolder(holder)

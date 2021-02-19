@@ -98,9 +98,9 @@ func detailUsers(cmd *cobra.Command, args []string) {
 
 		if settings.IsDrawIO() {
 			if object.GetObjectType() == "User" {
-				content["Image"] = drawio.ShapeAWSUser
+				content["Image"] = drawio.AWSShape("General Resources", "User")
 			} else {
-				content["Image"] = drawio.ShapeAWSUsers
+				content["Image"] = drawio.AWSShape("General Resources", "Users")
 			}
 			content["DrawioID"] = object.GetID()
 		}
@@ -113,7 +113,7 @@ func detailUsers(cmd *cobra.Command, args []string) {
 		content["Name"] = policy.Name
 		content["Type"] = "Policy"
 		if settings.IsDrawIO() {
-			content["Image"] = drawio.ShapeAWSIdentityandAccessManagementIAMPermissions
+			content["Image"] = drawio.AWSShape("Security Identity Compliance", "Permissions")
 			content["AttachedToUsers"] = strings.Join(policy.Users, stringSeparator)
 			content["AttachedToGroups"] = strings.Join(policy.Groups, stringSeparator)
 			content["DrawioID"] = createID("Policy" + policy.Name)

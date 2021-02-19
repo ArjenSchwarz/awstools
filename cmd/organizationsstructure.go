@@ -53,9 +53,9 @@ func orgstructure(cmd *cobra.Command, args []string) {
 
 func traverseOrgStructureEntry(entry helpers.OrganizationEntry, output *helpers.OutputArray) {
 	imageConversion := map[string]string{
-		"ROOT":                drawio.ShapeAWSOrganizations,
-		"ORGANIZATIONAL_UNIT": drawio.ShapeAWSOrganizationsOrganizationalUnit,
-		"ACCOUNT":             drawio.ShapeAWSOrganizationsAccount,
+		"ROOT":                drawio.AWSShape("Management Governance", "Organizations"),
+		"ORGANIZATIONAL_UNIT": drawio.AWSShape("Management Governance", "Organizational Unit"),
+		"ACCOUNT":             drawio.AWSShape("Management Governance", "Account"),
 	}
 	content := make(map[string]string)
 	content["Name"] = entry.String()

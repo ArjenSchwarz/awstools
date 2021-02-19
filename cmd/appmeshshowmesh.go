@@ -55,7 +55,7 @@ func showmesh(cmd *cobra.Command, args []string) {
 		content := make(map[string]string)
 		content["Name"] = node.VirtualNodeName
 		if settings.IsDrawIO() {
-			content["Image"] = drawio.ShapeAWSECSContainer2
+			content["Image"] = drawio.AWSShape("Containers", "Container")
 		}
 		endpoints := []string{}
 		for _, backendNode := range node.BackendNodes {

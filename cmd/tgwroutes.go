@@ -61,7 +61,7 @@ func tgwroutes(cmd *cobra.Command, args []string) {
 		content["Name"] = getName(rt)
 		content["Destinations"] = strings.Join(connectedvpcs, ",")
 		if settings.IsDrawIO() {
-			content["Image"] = drawio.ShapeAWSRoute53RouteTable
+			content["Image"] = drawio.AWSShape("Network Content Delivery", "Route Table")
 		}
 		holder := helpers.OutputHolder{Contents: content}
 		output.AddHolder(holder)
@@ -74,9 +74,9 @@ func tgwroutes(cmd *cobra.Command, args []string) {
 		if settings.IsDrawIO() {
 			switch helpers.TypeByResourceID(resourceid) {
 			case "vpc":
-				content["Image"] = drawio.ShapeAWSVPC
+				content["Image"] = drawio.AWSShape("Network Content Delivery", "VPC")
 			case "vpn":
-				content["Image"] = drawio.ShapeAWSClientVPN
+				content["Image"] = drawio.AWSShape("Network Content Delivery", "Site-to-Site VPN")
 			}
 		}
 		holder := helpers.OutputHolder{Contents: content}
