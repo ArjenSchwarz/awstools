@@ -184,11 +184,13 @@ Simply download the [latest release][latest] for your platform, and you can use 
 
 The AWS configuration is read from the standard locations:
 
-* Your environment variables (`AWS_ACCESS_KEY`, `AWS_SECRET_ACCESS_KEY`, etc.).
+* Your environment variables (`AWS_ACCESS_KEY`, `AWS_SECRET_ACCESS_KEY`, `AWS_PROFILE` etc.).
 * The values in your `~/.aws/credentials` file.
 * Permissions from the IAM role the application has access to (when running on AWS)
 
-Unfortunately, the Go SDK doesn't support the credentials used by the AWS CLI v2 for AWS SSO connections. If you wish to use this, you will need to export the current settings (for an example see the `awsexportcurrent` function in [this zsh config file](https://github.com/ArjenSchwarz/custom_zsh/blob/master/plugins/aws-shorts/aws-shorts.plugin.zsh)) or use a tool like [benkehoe/aws-sso-credential-process](https://github.com/benkehoe/aws-sso-credential-process).
+Since switching to the aws-go-sdk-v2, awstools now supports the AWS CLI v2 generated credentials for AWS SSO sessions. If you haven't used this before, you can read [the documentation for how to set this up](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-sso.html). You can then set your profile using the `AWS_PROFILE` environment variable and it will be automatically picked up.
+
+TODO: #6 add support for a `--profile` flag
 
 [latest]: https://github.com/ArjenSchwarz/awstools/releases
 
