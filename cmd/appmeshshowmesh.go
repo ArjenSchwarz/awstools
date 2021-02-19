@@ -31,7 +31,7 @@ func init() {
 
 func showmesh(cmd *cobra.Command, args []string) {
 	resultTitle := "Virtual node connections for mesh " + *meshname
-	awsConfig := config.DefaultAwsConfig()
+	awsConfig := config.DefaultAwsConfig(*settings)
 	svc := awsConfig.AppmeshClient()
 	nodes := helpers.GetAllAppMeshNodeConnections(meshname, svc)
 	keys := []string{"Name", "Endpoints"}

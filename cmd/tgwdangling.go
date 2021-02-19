@@ -23,7 +23,7 @@ func init() {
 }
 
 func tgwdangling(cmd *cobra.Command, args []string) {
-	awsConfig := config.DefaultAwsConfig()
+	awsConfig := config.DefaultAwsConfig(*settings)
 	resultTitle := "Transit Gateway uni-directional routes"
 	gateways := helpers.GetAllTransitGateways(awsConfig.Ec2Client())
 	keys := []string{"VPC", "VPCName", "DestinationVPC", "DestinationName"}

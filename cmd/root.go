@@ -41,6 +41,8 @@ func init() {
 	settings.OutputFormat = rootCmd.PersistentFlags().StringP("output", "o", "json", "Format for the output, currently supported are csv, json, html, dot, and drawio")
 	settings.AppendToOutput = rootCmd.PersistentFlags().BoolP("append", "a", false, "Add to the provided output file instead of replacing it")
 	settings.NameFile = rootCmd.PersistentFlags().StringP("namefile", "n", "", "Use this file to provide names")
+	settings.Profile = rootCmd.PersistentFlags().String("profile", "", "Use a specific profile")
+	settings.Region = rootCmd.PersistentFlags().String("region", "", "Use a specific region")
 }
 
 // initConfig reads in config file and ENV variables if set.

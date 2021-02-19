@@ -36,7 +36,7 @@ The drawio output format links the users to policies.`,
 }
 
 func iamrolelist(cmd *cobra.Command, args []string) {
-	awsConfig := config.DefaultAwsConfig()
+	awsConfig := config.DefaultAwsConfig(*settings)
 	resultTitle := "IAM Role overview for account " + getName(helpers.GetAccountID(awsConfig.StsClient()))
 	roles, policies := helpers.GetRolesAndPolicies(*settings.Verbose, awsConfig.IamClient())
 	keys := []string{"Name", "Type", "AssumedFrom", "Policies", "Roles"}

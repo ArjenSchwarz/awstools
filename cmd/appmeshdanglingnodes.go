@@ -20,7 +20,7 @@ func init() {
 
 func danglingnodes(cmd *cobra.Command, args []string) {
 	resultTitle := "App Mesh Unattached Nodes for mesh " + *meshname
-	awsConfig := config.DefaultAwsConfig()
+	awsConfig := config.DefaultAwsConfig(*settings)
 	svc := awsConfig.AppmeshClient()
 	unserviced := helpers.GetAllUnservicedAppMeshNodes(meshname, svc)
 	keys := []string{"Virtual Node"}

@@ -29,7 +29,7 @@ func init() {
 }
 
 func orgstructure(cmd *cobra.Command, args []string) {
-	awsConfig := config.DefaultAwsConfig()
+	awsConfig := config.DefaultAwsConfig(*settings)
 	resultTitle := "AWS Organization Structure"
 	organization := helpers.GetFullOrganization(awsConfig.OrganizationsClient())
 	keys := []string{"Name", "Type", "Children"}

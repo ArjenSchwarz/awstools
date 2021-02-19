@@ -12,6 +12,8 @@ type Config struct {
 	AppendToOutput *bool
 	NameFile       *string
 	DotColumns     *DotColumns
+	Profile        *string
+	Region         *string
 }
 
 // DotColumns is used to set the From and To columns for the dot output format

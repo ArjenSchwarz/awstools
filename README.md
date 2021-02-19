@@ -190,7 +190,7 @@ The AWS configuration is read from the standard locations:
 
 Since switching to the aws-go-sdk-v2, awstools now supports the AWS CLI v2 generated credentials for AWS SSO sessions. If you haven't used this before, you can read [the documentation for how to set this up](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-sso.html). You can then set your profile using the `AWS_PROFILE` environment variable and it will be automatically picked up.
 
-TODO: #6 add support for a `--profile` flag
+In addition, it's possible to use the `--profile` and `--region` flags to override any other credentials you may have set. This works similar to the AWS CLI.
 
 [latest]: https://github.com/ArjenSchwarz/awstools/releases
 

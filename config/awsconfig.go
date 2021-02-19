@@ -21,13 +21,24 @@ type AWSConfig struct {
 }
 
 // DefaultAwsConfig loads default AWS Config
-func DefaultAwsConfig() AWSConfig {
+func DefaultAwsConfig(config Config) AWSConfig {
 	awsConfig := AWSConfig{}
-	cfg, err := external.LoadDefaultConfig(context.TODO())
-	if err != nil {
-		panic(err)
+	if *config.Profile != "" {
+		cfg, err := external.LoadDefaultConfig(context.TODO(), external.WithSharedConfigProfile(*config.Profile))
+		if err != nil {
+			panic(err)
+		}
+		awsConfig.Config = cfg
+	} else {
+		cfg, err := external.LoadDefaultConfig(context.TODO())
+		if err != nil {
+			panic(err)
+		}
+		awsConfig.Config = cfg
 	}
-	awsConfig.Config = cfg
+	if *config.Region != "" {
+		awsConfig.Config.Region = *config.Region
+	}
 	return awsConfig
 }
 

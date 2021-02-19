@@ -22,7 +22,7 @@ func init() {
 
 func meshroute(cmd *cobra.Command, args []string) {
 	resultTitle := "Overview of the routes in the mesh"
-	awsConfig := config.DefaultAwsConfig()
+	awsConfig := config.DefaultAwsConfig(*settings)
 	svc := awsConfig.AppmeshClient()
 	routes := helpers.GetAllAppMeshPaths(meshname, svc)
 	keys := []string{"Service", "Path", "Node"}

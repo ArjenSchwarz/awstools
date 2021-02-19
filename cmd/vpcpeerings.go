@@ -26,7 +26,7 @@ func init() {
 }
 
 func peerings(cmd *cobra.Command, args []string) {
-	awsConfig := config.DefaultAwsConfig()
+	awsConfig := config.DefaultAwsConfig(*settings)
 	resultTitle := "VPC Peerings for account " + getName(helpers.GetAccountID(awsConfig.StsClient()))
 	peerings := helpers.GetAllVpcPeers(awsConfig.Ec2Client())
 	keys := []string{"ID", "Name", "AccountID", "PeeringIDs"}

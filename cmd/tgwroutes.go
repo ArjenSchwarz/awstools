@@ -34,7 +34,7 @@ func init() {
 }
 
 func tgwroutes(cmd *cobra.Command, args []string) {
-	awsConfig := config.DefaultAwsConfig()
+	awsConfig := config.DefaultAwsConfig(*settings)
 	resultTitle := "Overview of all routes"
 	gateways := helpers.GetAllTransitGateways(awsConfig.Ec2Client())
 	keys := []string{"ID", "Name", "Destinations", "TargetGateway"}

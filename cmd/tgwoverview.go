@@ -21,7 +21,7 @@ func init() {
 }
 
 func tgwoverview(cmd *cobra.Command, args []string) {
-	awsConfig := config.DefaultAwsConfig()
+	awsConfig := config.DefaultAwsConfig(*settings)
 	resultTitle := "Transit Gateway Routes in account " + getName(helpers.GetAccountID(awsConfig.StsClient()))
 	gateways := helpers.GetAllTransitGateways(awsConfig.Ec2Client())
 	keys := []string{"Transit Gateway Account", "Transit Gateway ID", "Route Table ID", "Route Table Name", "CIDR", "Target VPC"}

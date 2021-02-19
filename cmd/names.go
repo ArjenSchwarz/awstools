@@ -27,7 +27,7 @@ func init() {
 }
 
 func names(cmd *cobra.Command, args []string) {
-	awsConfig := config.DefaultAwsConfig()
+	awsConfig := config.DefaultAwsConfig(*settings)
 	var names []map[string]string
 	if settings.ShouldCombineAndAppend() {
 		names = append(names, helpers.GetStringMapFromJSONFile(*settings.OutputFile))
