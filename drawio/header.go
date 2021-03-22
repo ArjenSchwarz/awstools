@@ -8,6 +8,7 @@ import (
 
 // DefaultConnectionStyle is the default style for connecting nodes
 const DefaultConnectionStyle = "curved=1;endArrow=blockThin;endFill=1;fontSize=11;"
+const BidirectionalConnectionStyle = "curved=1;endArrow=blockThin;endFill=1;fontSize=11;startArrow=blockThin;startFill=1;"
 
 // DefaultParentStyle is the default style for parent-child relationships
 const DefaultParentStyle = "swimlane;whiteSpace=wrap;html=1;childLayout=stackLayout;horizontal=1;horizontalStack=0;resizeParent=1;resizeLast=0;collapsible=1;"
