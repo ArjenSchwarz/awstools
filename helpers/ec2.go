@@ -2,6 +2,7 @@ package helpers
 
 import (
 	"context"
+	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
@@ -73,6 +74,7 @@ func GetAllEC2ResourceNames(svc *ec2.Client) map[string]string {
 	result = addAllSubnetNames(svc, result)
 	result = addAllRouteTableNames(svc, result)
 	result = addAllTransitGatewayNames(svc, result)
+	result = addAllVpnNames(svc, result)
 	return result
 }
 
@@ -139,6 +141,21 @@ func addAllTransitGatewayNames(svc *ec2.Client, result map[string]string) map[st
 		result[tgw.ID] = tgw.Name
 		for _, rt := range tgw.RouteTables {
 			result[rt.ID] = rt.Name
+		}
+	}
+	return result
+}
+
+//addAllVPCNames returns the names of all vpns in a map
+func addAllVpnNames(svc *ec2.Client, result map[string]string) map[string]string {
+	resp, err := svc.DescribeVpnConnections(context.TODO(), &ec2.DescribeVpnConnectionsInput{})
+	if err != nil {
+		panic(err)
+	}
+	for _, vpn := range resp.VpnConnections {
+		result[*vpn.VpnConnectionId] = *vpn.VpnConnectionId
+		if name := getNameFromTags(vpn.Tags); name != "" {
+			result[*vpn.VpnConnectionId] = name
 		}
 	}
 	return result
@@ -376,12 +393,17 @@ func GetActiveRoutesForTransitGatewayRouteTable(routetableID string, svc *ec2.Cl
 		panic(err)
 	}
 	for _, route := range resp.Routes {
+		resourceid := *route.TransitGatewayAttachments[0].ResourceId
+		// We don't care about the public IPs of the routes, so strip those off
+		if route.TransitGatewayAttachments[0].ResourceType == types.TransitGatewayAttachmentResourceTypeVpn {
+			resourceid = strings.Split(resourceid, "(")[0]
+		}
 		tgwroute := TransitGatewayRoute{
 			State: string(route.State),
 			CIDR:  *route.DestinationCidrBlock,
 			Attachment: TransitGatewayAttachment{
 				ID:         *route.TransitGatewayAttachments[0].TransitGatewayAttachmentId,
-				ResourceID: *route.TransitGatewayAttachments[0].ResourceId,
+				ResourceID: resourceid,
 			},
 			RouteType: string(route.Type),
 		}
