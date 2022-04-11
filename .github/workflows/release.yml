@@ -14,14 +14,14 @@ jobs:
         goarch: [amd64, arm64]
 
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
     - name: Set APP_VERSION env
       run: echo APP_VERSION=$(echo ${GITHUB_REF} | rev | cut -d'/' -f 1 | rev ) >> ${GITHUB_ENV}
-    - uses: wangyoucao577/go-release-action@v1.19
+    - uses: wangyoucao577/go-release-action@v1.25
       with:
         github_token: ${{ secrets.GITHUB_TOKEN }}
         goos: ${{ matrix.goos }}
         goarch: ${{ matrix.goarch }}
-        goversion: "1.18"
+        goversion: "latest"
         binary_name: "awstools"
         ldflags: "-X 'github.com/ArjenSchwarz/awstools/cmd.Version=${{ env.APP_VERSION}}'"
