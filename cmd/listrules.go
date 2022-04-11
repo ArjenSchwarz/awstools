@@ -63,11 +63,11 @@ package cmd
 // 		}
 // 	}
 // 	keys := []string{"SecurityGroup", "Ports", "Source"}
-// 	output := helpers.OutputArray{Keys: keys}
+// 	output := format.OutputArray{Keys: keys}
 // 	for _, resource := range rules {
 // 		if resource.SecurityGroupName != "" {
 
-// 			content := make(map[string]string)
+// 			content := make(map[string]interface{})
 // 			content["SecurityGroup"] = resource.SecurityGroupName
 // 			if resource.FromPort == resource.ToPort {
 // 				if resource.FromPort == 0 {
@@ -79,7 +79,7 @@ package cmd
 // 				content["Ports"] = strconv.FormatInt(resource.FromPort, 10) + " - " + strconv.FormatInt(resource.ToPort, 10)
 // 			}
 // 			content["Source"] = resource.Source
-// 			holder := helpers.OutputHolder{Contents: content}
+// 			holder := format.OutputHolder{Contents: content}
 // 			output.AddHolder(holder)
 // 		}
 // 	}

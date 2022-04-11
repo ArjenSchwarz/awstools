@@ -5,6 +5,7 @@ import (
 
 	"github.com/ArjenSchwarz/awstools/config"
 	"github.com/ArjenSchwarz/awstools/helpers"
+	"github.com/ArjenSchwarz/awstools/lib/format"
 	"github.com/spf13/cobra"
 )
 
@@ -27,16 +28,17 @@ func ssoDangling(cmd *cobra.Command, args []string) {
 	resultTitle := "Dangling Permission Sets"
 	ssoInstance := helpers.GetSSOAccountInstance(awsConfig.SsoClient())
 	keys := []string{"PermissionSet", "Arn", "ManagedPolicies", "InlinePolicy"}
-	output := helpers.OutputArray{Keys: keys, Title: resultTitle}
+	output := format.OutputArray{Keys: keys, Settings: format.NewOutputSettings(*settings)}
+	output.Settings.Title = resultTitle
 	stringSeparator := ", "
 	for _, permissionset := range ssoInstance.PermissionSets {
 		if len(permissionset.Accounts) == 0 {
-			content := make(map[string]string)
+			content := make(map[string]interface{})
 			content["PermissionSet"] = permissionset.Name
 			content["Arn"] = permissionset.Arn
 			content["ManagedPolicies"] = strings.Join(permissionset.GetManagedPolicyNames(), stringSeparator)
 			content["InlinePolicy"] = permissionset.InlinePolicy
-			holder := helpers.OutputHolder{Contents: content}
+			holder := format.OutputHolder{Contents: content}
 			output.AddHolder(holder)
 		}
 	}

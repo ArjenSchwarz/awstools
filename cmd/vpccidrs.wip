@@ -26,9 +26,9 @@ func vpccidrs(cmd *cobra.Command, args []string) {
 	vpcs := helpers.GetAllVPCs()
 	cidrs := helpers.GetAllVPCRouteTables(svc)
 	keys := []string{"AccountID", "VPC", "VPC Name", "VPC CIDR", "Subnet", "Subnet Name", "Subnet CIDR"}
-	output := helpers.OutputArray{Keys: keys, Title: resultTitle}
+	output := format.OutputArray{Keys: keys, Title: resultTitle}
 	for _, routetable := range cidrs {
-		content := make(map[string]string)
+		content := make(map[string]interface{})
 		content["ID"] = routetable.ID
 		content["Name"] = getName(routetable.ID)
 		content["VPC"] = routetable.Vpc.ID
@@ -45,7 +45,7 @@ func vpccidrs(cmd *cobra.Command, args []string) {
 			routelist = append(routelist, fmt.Sprintf("%v: %v", route.DestinationCIDR, route.DestinationTarget))
 		}
 		content["cidrs"] = strings.Join(routelist, ",")
-		holder := helpers.OutputHolder{Contents: content}
+		holder := format.OutputHolder{Contents: content}
 		output.AddHolder(holder)
 	}
 	// if settings.IsDrawIO() {
@@ -102,7 +102,7 @@ func vpccidrs(cmd *cobra.Command, args []string) {
 	// }
 	// for id, entry := range sorted {
 	// 	peeringIDs := unique(entry)
-	// 	content := make(map[string]string)
+	// 	content := make(map[string]interface{})
 	// 	content["ID"] = id
 	// 	content["Name"] = getName(id)
 	// 	if len(entry) > 0 {

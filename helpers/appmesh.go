@@ -30,9 +30,7 @@ func getAllAppMeshRoutes(meshName *string, svc *appmesh.Client) []types.RouteRef
 		if err != nil {
 			fmt.Print(err)
 		}
-		for _, route := range routes.Routes {
-			routeslist = append(routeslist, route)
-		}
+		routeslist = append(routeslist, routes.Routes...)
 	}
 
 	return routeslist

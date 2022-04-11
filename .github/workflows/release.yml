@@ -1,0 +1,27 @@
+on:
+  release:
+    types:
+      - published
+
+jobs:
+  releases-matrix:
+    name: Release Go Binary
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        # build and publish in parallel: linux/amd64, linux/arm64, windows/amd64, darwin/amd64, darwin/arm64
+        goos: [linux, windows, darwin]
+        goarch: [amd64, arm64]
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: Set APP_VERSION env
+      run: echo APP_VERSION=$(echo ${GITHUB_REF} | rev | cut -d'/' -f 1 | rev ) >> ${GITHUB_ENV}
+    - uses: wangyoucao577/go-release-action@v1.19
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        goos: ${{ matrix.goos }}
+        goarch: ${{ matrix.goarch }}
+        goversion: "1.18"
+        binary_name: "awstools"
+        ldflags: "-X 'github.com/ArjenSchwarz/awstools/cmd.Version=${{ env.APP_VERSION}}'"

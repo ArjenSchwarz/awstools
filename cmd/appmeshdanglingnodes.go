@@ -3,6 +3,7 @@ package cmd
 import (
 	"github.com/ArjenSchwarz/awstools/config"
 	"github.com/ArjenSchwarz/awstools/helpers"
+	"github.com/ArjenSchwarz/awstools/lib/format"
 	"github.com/spf13/cobra"
 )
 
@@ -24,11 +25,12 @@ func danglingnodes(cmd *cobra.Command, args []string) {
 	svc := awsConfig.AppmeshClient()
 	unserviced := helpers.GetAllUnservicedAppMeshNodes(meshname, svc)
 	keys := []string{"Virtual Node"}
-	output := helpers.OutputArray{Keys: keys, Title: resultTitle}
+	output := format.OutputArray{Keys: keys, Settings: format.NewOutputSettings(*settings)}
+	output.Settings.Title = resultTitle
 	for _, node := range unserviced {
-		content := make(map[string]string)
+		content := make(map[string]interface{})
 		content["Virtual Node"] = node
-		holder := helpers.OutputHolder{Contents: content}
+		holder := format.OutputHolder{Contents: content}
 		output.AddHolder(holder)
 	}
 	output.Write(*settings)

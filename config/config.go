@@ -2,6 +2,8 @@ package config
 
 import (
 	"strings"
+
+	"github.com/spf13/viper"
 )
 
 // Config holds the global configuration settings
@@ -11,15 +13,16 @@ type Config struct {
 	OutputFormat   *string
 	AppendToOutput *bool
 	NameFile       *string
-	DotColumns     *DotColumns
 	Profile        *string
 	Region         *string
+	UseEmoji       *bool
 }
 
-// DotColumns is used to set the From and To columns for the dot output format
-type DotColumns struct {
-	From string
-	To   string
+func (config *Config) GetLCString(setting string) string {
+	if viper.IsSet(setting) {
+		return strings.ToLower(viper.GetString(setting))
+	}
+	return ""
 }
 
 // GetOutputFormat returns the output format

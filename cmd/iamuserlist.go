@@ -8,6 +8,7 @@ import (
 	"github.com/ArjenSchwarz/awstools/config"
 	"github.com/ArjenSchwarz/awstools/drawio"
 	"github.com/ArjenSchwarz/awstools/helpers"
+	"github.com/ArjenSchwarz/awstools/lib/format"
 	"github.com/spf13/cobra"
 )
 
@@ -46,20 +47,17 @@ func detailUsers(cmd *cobra.Command, args []string) {
 			keys = append(keys, "AttachedToUsers")
 		}
 	}
-	output := helpers.OutputArray{Keys: keys, Title: resultTitle}
+	output := format.OutputArray{Keys: keys, Settings: format.NewOutputSettings(*settings)}
+	output.Settings.Title = resultTitle
 	switch settings.GetOutputFormat() {
 	case "drawio":
-		output.DrawIOHeader = createIamuserlistDrawIOHeader()
+		output.Settings.DrawIOHeader = createIamuserlistDrawIOHeader()
 	case "dot":
-		dotcolumns := config.DotColumns{
-			From: "Name",
-			To:   "Groups",
-		}
-		settings.DotColumns = &dotcolumns
+		output.Settings.AddDotFromToColumns("Name", "Groups")
 	}
 	policylist := make(map[string]helpers.AttachedIAMPolicy)
 	for _, object := range objectlist {
-		content := make(map[string]string)
+		content := make(map[string]interface{})
 		content["Name"] = object.GetName()
 		content["Type"] = object.GetObjectType()
 		if user, ok := object.(helpers.IAMUser); ok {
@@ -104,12 +102,12 @@ func detailUsers(cmd *cobra.Command, args []string) {
 			}
 			content["DrawioID"] = object.GetID()
 		}
-		holder := helpers.OutputHolder{Contents: content}
+		holder := format.OutputHolder{Contents: content}
 		output.AddHolder(holder)
 	}
 	// This will only happen when verbose is set
 	for _, policy := range policylist {
-		content := make(map[string]string)
+		content := make(map[string]interface{})
 		content["Name"] = policy.Name
 		content["Type"] = "Policy"
 		if settings.IsDrawIO() {
@@ -122,7 +120,7 @@ func detailUsers(cmd *cobra.Command, args []string) {
 			content["Groups"] = strings.Join(policy.Groups, stringSeparator)
 
 		}
-		holder := helpers.OutputHolder{Contents: content}
+		holder := format.OutputHolder{Contents: content}
 		output.AddHolder(holder)
 	}
 	output.Write(*settings)

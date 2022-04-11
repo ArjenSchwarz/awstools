@@ -6,6 +6,7 @@ import (
 	"github.com/ArjenSchwarz/awstools/config"
 	"github.com/ArjenSchwarz/awstools/drawio"
 	"github.com/ArjenSchwarz/awstools/helpers"
+	"github.com/ArjenSchwarz/awstools/lib/format"
 	"github.com/spf13/cobra"
 )
 
@@ -36,28 +37,25 @@ func orgstructure(cmd *cobra.Command, args []string) {
 	if settings.IsDrawIO() {
 		keys = append(keys, "Image")
 	}
-	output := helpers.OutputArray{Keys: keys, Title: resultTitle}
+	output := format.OutputArray{Keys: keys, Settings: format.NewOutputSettings(*settings)}
+	output.Settings.Title = resultTitle
 	switch settings.GetOutputFormat() {
 	case "drawio":
-		output.DrawIOHeader = createOrganizationsStructureDrawIOHeader()
+		output.Settings.DrawIOHeader = createOrganizationsStructureDrawIOHeader()
 	case "dot":
-		dotcolumns := config.DotColumns{
-			From: "Name",
-			To:   "Children",
-		}
-		settings.DotColumns = &dotcolumns
+		output.Settings.AddDotFromToColumns("Name", "Children")
 	}
 	traverseOrgStructureEntry(organization, &output)
 	output.Write(*settings)
 }
 
-func traverseOrgStructureEntry(entry helpers.OrganizationEntry, output *helpers.OutputArray) {
+func traverseOrgStructureEntry(entry helpers.OrganizationEntry, output *format.OutputArray) {
 	imageConversion := map[string]string{
 		"ROOT":                drawio.AWSShape("Management Governance", "Organizations"),
 		"ORGANIZATIONAL_UNIT": drawio.AWSShape("Management Governance", "Organizational Unit"),
 		"ACCOUNT":             drawio.AWSShape("Management Governance", "Account"),
 	}
-	content := make(map[string]string)
+	content := make(map[string]interface{})
 	content["Name"] = entry.String()
 	content["Type"] = entry.Type
 	content["Children"] = entry.String()
@@ -70,7 +68,7 @@ func traverseOrgStructureEntry(entry helpers.OrganizationEntry, output *helpers.
 		traverseOrgStructureEntry(child, output)
 	}
 	content["Children"] = strings.Join(children, ",")
-	holder := helpers.OutputHolder{Contents: content}
+	holder := format.OutputHolder{Contents: content}
 	output.AddHolder(holder)
 }
 

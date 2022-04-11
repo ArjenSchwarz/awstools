@@ -6,6 +6,7 @@ import (
 	"github.com/ArjenSchwarz/awstools/config"
 	"github.com/ArjenSchwarz/awstools/drawio"
 	"github.com/ArjenSchwarz/awstools/helpers"
+	"github.com/ArjenSchwarz/awstools/lib/format"
 
 	"github.com/spf13/cobra"
 )
@@ -41,33 +42,30 @@ func tgwroutes(cmd *cobra.Command, args []string) {
 	if settings.IsDrawIO() {
 		keys = append(keys, "Image")
 	}
-	output := helpers.OutputArray{Keys: keys, Title: resultTitle}
+	output := format.OutputArray{Keys: keys, Settings: format.NewOutputSettings(*settings)}
+	output.Settings.Title = resultTitle
 	switch settings.GetOutputFormat() {
 	case "drawio":
-		output.DrawIOHeader = createTgwRoutesDrawIOHeader()
+		output.Settings.DrawIOHeader = createTgwRoutesDrawIOHeader()
 	case "dot":
-		dotcolumns := config.DotColumns{
-			From: "Destinations",
-			To:   "ID",
-		}
-		settings.DotColumns = &dotcolumns
+		output.Settings.AddDotFromToColumns("Destinations", "ID")
 	}
 
 	attachedresources, tgwrts := filterGateway(gateways)
 
 	for rt, connectedvpcs := range tgwrts {
-		content := make(map[string]string)
+		content := make(map[string]interface{})
 		content["ID"] = rt
 		content["Name"] = getName(rt)
 		content["Destinations"] = strings.Join(connectedvpcs, ",")
 		if settings.IsDrawIO() {
 			content["Image"] = drawio.AWSShape("Network Content Delivery", "Route Table")
 		}
-		holder := helpers.OutputHolder{Contents: content}
+		holder := format.OutputHolder{Contents: content}
 		output.AddHolder(holder)
 	}
 	for resourceid, tgw := range attachedresources {
-		content := make(map[string]string)
+		content := make(map[string]interface{})
 		content["ID"] = resourceid
 		content["Name"] = getName(resourceid)
 		content["TargetGateway"] = tgw
@@ -79,7 +77,7 @@ func tgwroutes(cmd *cobra.Command, args []string) {
 				content["Image"] = drawio.AWSShape("Network Content Delivery", "Site-to-Site VPN")
 			}
 		}
-		holder := helpers.OutputHolder{Contents: content}
+		holder := format.OutputHolder{Contents: content}
 		output.AddHolder(holder)
 	}
 	output.Write(*settings)

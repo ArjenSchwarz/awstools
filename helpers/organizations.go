@@ -59,9 +59,8 @@ func (entry *OrganizationEntry) findChildren(svc *organizations.Client) []Organi
 		ParentId:  aws.String(entry.ID),
 		ChildType: types.ChildType(types.TargetTypeAccount),
 	}
-	accountchildren, err := svc.ListChildren(context.TODO(), accountinput)
-	if err != nil {
-	}
+	accountchildren, _ := svc.ListChildren(context.TODO(), accountinput)
+
 	for _, child := range accountchildren.Children {
 		accountchild := formatChild(child, svc)
 		children = append(children, accountchild)

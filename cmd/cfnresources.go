@@ -3,6 +3,7 @@ package cmd
 import (
 	"github.com/ArjenSchwarz/awstools/config"
 	"github.com/ArjenSchwarz/awstools/helpers"
+	"github.com/ArjenSchwarz/awstools/lib/format"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
 	"github.com/spf13/cobra"
@@ -61,9 +62,10 @@ func listResources(cmd *cobra.Command, args []string) {
 		keys = append(keys, "Status")
 		keys = append(keys, "LogicalName")
 	}
-	output := helpers.OutputArray{Keys: keys, Title: resultTitle}
+	output := format.OutputArray{Keys: keys, Settings: format.NewOutputSettings(*settings)}
+	output.Settings.Title = resultTitle
 	for _, resource := range resources {
-		content := make(map[string]string)
+		content := make(map[string]interface{})
 		content["ResourceID"] = resource.ResourceID
 		content["Type"] = resource.Type
 		content["Stack"] = resource.Stack
@@ -72,7 +74,7 @@ func listResources(cmd *cobra.Command, args []string) {
 			content["Status"] = resource.Status
 			content["LogicalName"] = resource.LogicalName
 		}
-		holder := helpers.OutputHolder{Contents: content}
+		holder := format.OutputHolder{Contents: content}
 		output.AddHolder(holder)
 	}
 	output.Write(*settings)

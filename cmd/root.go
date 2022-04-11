@@ -43,6 +43,7 @@ func init() {
 	settings.NameFile = rootCmd.PersistentFlags().StringP("namefile", "n", "", "Use this file to provide names")
 	settings.Profile = rootCmd.PersistentFlags().String("profile", "", "Use a specific profile")
 	settings.Region = rootCmd.PersistentFlags().String("region", "", "Use a specific region")
+	settings.UseEmoji = rootCmd.PersistentFlags().Bool("emoji", false, "Use emoji in the output")
 }
 
 // initConfig reads in config file and ENV variables if set.

@@ -6,6 +6,7 @@ import (
 	"github.com/ArjenSchwarz/awstools/config"
 	"github.com/ArjenSchwarz/awstools/drawio"
 	"github.com/ArjenSchwarz/awstools/helpers"
+	"github.com/ArjenSchwarz/awstools/lib/format"
 	"github.com/spf13/cobra"
 )
 
@@ -38,21 +39,18 @@ func showmesh(cmd *cobra.Command, args []string) {
 	if settings.IsDrawIO() {
 		keys = append(keys, "Image")
 	}
-	output := helpers.OutputArray{Keys: keys, Title: resultTitle}
+	output := format.OutputArray{Keys: keys, Settings: format.NewOutputSettings(*settings)}
+	output.Settings.Title = resultTitle
 	// Set output specific config
 	switch settings.GetOutputFormat() {
 	case "drawio":
-		output.DrawIOHeader = createAppmeshShowmeshDrawIOHeader()
+		output.Settings.DrawIOHeader = createAppmeshShowmeshDrawIOHeader()
 	case "dot":
-		dotcolumns := config.DotColumns{
-			From: "Name",
-			To:   "Endpoints",
-		}
-		settings.DotColumns = &dotcolumns
+		output.Settings.AddDotFromToColumns("Name", "Endpoints")
 	}
 
 	for _, node := range nodes {
-		content := make(map[string]string)
+		content := make(map[string]interface{})
 		content["Name"] = node.VirtualNodeName
 		if settings.IsDrawIO() {
 			content["Image"] = drawio.AWSShape("Containers", "Container")
@@ -62,7 +60,7 @@ func showmesh(cmd *cobra.Command, args []string) {
 			endpoints = append(endpoints, backendNode)
 		}
 		content["Endpoints"] = strings.Join(endpoints, ",")
-		holder := helpers.OutputHolder{Contents: content}
+		holder := format.OutputHolder{Contents: content}
 		output.AddHolder(holder)
 	}
 	output.Write(*settings)

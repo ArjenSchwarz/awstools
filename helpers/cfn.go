@@ -31,9 +31,7 @@ func GetNestedCloudFormationResources(stackname *string, svc *cloudformation.Cli
 	for _, resource := range resources {
 		result = append(result, resource)
 		if aws.ToString(resource.ResourceType) == "AWS::CloudFormation::Stack" {
-			for _, subresource := range GetNestedCloudFormationResources(resource.PhysicalResourceId, svc) {
-				result = append(result, subresource)
-			}
+			result = append(result, GetNestedCloudFormationResources(resource.PhysicalResourceId, svc)...)
 		}
 	}
 	return result

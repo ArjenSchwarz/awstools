@@ -6,6 +6,7 @@ import (
 	"github.com/ArjenSchwarz/awstools/config"
 	"github.com/ArjenSchwarz/awstools/drawio"
 	"github.com/ArjenSchwarz/awstools/helpers"
+	"github.com/ArjenSchwarz/awstools/lib/format"
 	"github.com/spf13/cobra"
 )
 
@@ -33,16 +34,13 @@ func peerings(cmd *cobra.Command, args []string) {
 	if settings.IsDrawIO() {
 		keys = append(keys, "Image")
 	}
-	output := helpers.OutputArray{Keys: keys, Title: resultTitle}
+	output := format.OutputArray{Keys: keys, Settings: format.NewOutputSettings(*settings)}
+	output.Settings.Title = resultTitle
 	switch settings.GetOutputFormat() {
 	case "drawio":
-		output.DrawIOHeader = createVpcPeeringsDrawIOHeader()
+		output.Settings.DrawIOHeader = createVpcPeeringsDrawIOHeader()
 	case "dot":
-		dotcolumns := config.DotColumns{
-			From: "ID",
-			To:   "PeeringIDs",
-		}
-		settings.DotColumns = &dotcolumns
+		output.Settings.AddDotFromToColumns("ID", "PeeringIDs")
 	}
 	vpcs := make(map[string]helpers.VPCHolder)
 	sorted := make(map[string][]string)
@@ -84,7 +82,7 @@ func peerings(cmd *cobra.Command, args []string) {
 	}
 	for id, entry := range sorted {
 		peeringIDs := unique(entry)
-		content := make(map[string]string)
+		content := make(map[string]interface{})
 		content["ID"] = id
 		content["Name"] = getName(id)
 		if len(entry) > 0 {
@@ -98,7 +96,7 @@ func peerings(cmd *cobra.Command, args []string) {
 				content["Image"] = drawio.AWSShape("Network Content Delivery", "Peering Connection")
 			}
 		}
-		holder := helpers.OutputHolder{Contents: content}
+		holder := format.OutputHolder{Contents: content}
 		output.AddHolder(holder)
 	}
 	output.Write(*settings)

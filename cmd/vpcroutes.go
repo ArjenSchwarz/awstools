@@ -6,6 +6,7 @@ import (
 
 	"github.com/ArjenSchwarz/awstools/config"
 	"github.com/ArjenSchwarz/awstools/helpers"
+	"github.com/ArjenSchwarz/awstools/lib/format"
 	"github.com/spf13/cobra"
 )
 
@@ -26,9 +27,10 @@ func routes(cmd *cobra.Command, args []string) {
 	resultTitle := "VPC Routes for account " + getName(helpers.GetAccountID(awsConfig.StsClient()))
 	routes := helpers.GetAllVPCRouteTables(awsConfig.Ec2Client())
 	keys := []string{"AccountID", "Account Name", "ID", "Name", "VPC", "VPC Name", "Subnets", "Routes"}
-	output := helpers.OutputArray{Keys: keys, Title: resultTitle}
+	output := format.OutputArray{Keys: keys, Settings: format.NewOutputSettings(*settings)}
+	output.Settings.Title = resultTitle
 	for _, routetable := range routes {
-		content := make(map[string]string)
+		content := make(map[string]interface{})
 		content["ID"] = routetable.ID
 		content["Name"] = getName(routetable.ID)
 		content["VPC"] = routetable.Vpc.ID
@@ -45,7 +47,7 @@ func routes(cmd *cobra.Command, args []string) {
 			routelist = append(routelist, fmt.Sprintf("%v: %v", route.DestinationCIDR, route.DestinationTarget))
 		}
 		content["Routes"] = strings.Join(routelist, ",")
-		holder := helpers.OutputHolder{Contents: content}
+		holder := format.OutputHolder{Contents: content}
 		output.AddHolder(holder)
 	}
 	// if settings.IsDrawIO() {
@@ -102,7 +104,7 @@ func routes(cmd *cobra.Command, args []string) {
 	// }
 	// for id, entry := range sorted {
 	// 	peeringIDs := unique(entry)
-	// 	content := make(map[string]string)
+	// 	content := make(map[string]interface{})
 	// 	content["ID"] = id
 	// 	content["Name"] = getName(id)
 	// 	if len(entry) > 0 {

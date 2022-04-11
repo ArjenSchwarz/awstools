@@ -6,6 +6,7 @@ import (
 	"github.com/ArjenSchwarz/awstools/config"
 	"github.com/ArjenSchwarz/awstools/drawio"
 	"github.com/ArjenSchwarz/awstools/helpers"
+	"github.com/ArjenSchwarz/awstools/lib/format"
 	"github.com/spf13/cobra"
 )
 
@@ -33,14 +34,15 @@ func tgwoverview(cmd *cobra.Command, args []string) {
 	if settings.IsDrawIO() {
 		keys = []string{"ID", "Name", "Destinations", "Image"}
 	}
-	output := helpers.OutputArray{Keys: keys, Title: resultTitle}
+	output := format.OutputArray{Keys: keys, Settings: format.NewOutputSettings(*settings)}
+	output.Settings.Title = resultTitle
 	if settings.IsDrawIO() {
 		createTgwOverviewDrawIO(&output, gateways)
 	} else {
 		for _, gateway := range gateways {
 			for _, routetable := range gateway.RouteTables {
 				for _, route := range routetable.Routes {
-					content := make(map[string]string)
+					content := make(map[string]interface{})
 					content["Transit Gateway Account"] = gateway.AccountID
 					content["Transit Gateway ID"] = gateway.ID
 					content["Route Table ID"] = routetable.ID
@@ -49,7 +51,7 @@ func tgwoverview(cmd *cobra.Command, args []string) {
 					content["Target Name"] = getName(route.Attachment.ResourceID)
 					content["Target ID"] = route.Attachment.ResourceID
 					content["Target Type"] = helpers.TypeByResourceID(route.Attachment.ResourceID)
-					holder := helpers.OutputHolder{Contents: content}
+					holder := format.OutputHolder{Contents: content}
 					output.AddHolder(holder)
 				}
 			}
@@ -58,7 +60,7 @@ func tgwoverview(cmd *cobra.Command, args []string) {
 	output.Write(*settings)
 }
 
-func createTgwOverviewDrawIO(output *helpers.OutputArray, gateways []helpers.TransitGateway) {
+func createTgwOverviewDrawIO(output *format.OutputArray, gateways []helpers.TransitGateway) {
 	drawioheader := drawio.NewHeader("%Name%", "%Image%", "Image")
 	drawioheader.SetHeightAndWidth("78", "78")
 	connection := drawio.NewConnection()
@@ -67,7 +69,7 @@ func createTgwOverviewDrawIO(output *helpers.OutputArray, gateways []helpers.Tra
 	connection.Invert = false
 	connection.Style = drawio.BidirectionalConnectionStyle
 	drawioheader.AddConnection(connection)
-	output.DrawIOHeader = drawioheader
+	output.Settings.DrawIOHeader = drawioheader
 	type targetTgwMap struct {
 		ID           string
 		Name         string
@@ -114,12 +116,12 @@ func createTgwOverviewDrawIO(output *helpers.OutputArray, gateways []helpers.Tra
 		}
 	}
 	for _, mapping := range targetTgwMapping {
-		content := make(map[string]string)
+		content := make(map[string]interface{})
 		content["ID"] = mapping.ID
 		content["Name"] = mapping.Name
 		content["Destinations"] = strings.Join(mapping.Destinations, ",")
 		content["Image"] = mapping.Image
-		holder := helpers.OutputHolder{Contents: content}
+		holder := format.OutputHolder{Contents: content}
 		output.AddHolder(holder)
 	}
 }

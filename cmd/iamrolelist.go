@@ -18,6 +18,7 @@ import (
 	"strings"
 
 	"github.com/ArjenSchwarz/awstools/drawio"
+	"github.com/ArjenSchwarz/awstools/lib/format"
 
 	"github.com/ArjenSchwarz/awstools/config"
 	"github.com/ArjenSchwarz/awstools/helpers"
@@ -46,19 +47,16 @@ func iamrolelist(cmd *cobra.Command, args []string) {
 		keys = append(keys, "DrawioID")
 		stringSeparator = ","
 	}
-	output := helpers.OutputArray{Keys: keys, Title: resultTitle}
+	output := format.OutputArray{Keys: keys, Settings: format.NewOutputSettings(*settings)}
+	output.Settings.Title = resultTitle
 	switch settings.GetOutputFormat() {
 	case "drawio":
-		output.DrawIOHeader = createIamrolelistDrawIOHeader()
+		output.Settings.DrawIOHeader = createIamrolelistDrawIOHeader()
 	case "dot":
-		dotcolumns := config.DotColumns{
-			From: "Name",
-			To:   "Policies",
-		}
-		settings.DotColumns = &dotcolumns
+		output.Settings.AddDotFromToColumns("Name", "Policies")
 	}
 	for _, role := range roles {
-		content := make(map[string]string)
+		content := make(map[string]interface{})
 		content["Name"] = role.Name
 		content["AssumedFrom"] = strings.Join(role.CanBeAssumedFrom(), stringSeparator)
 		content["Type"] = role.Type
@@ -67,11 +65,11 @@ func iamrolelist(cmd *cobra.Command, args []string) {
 			content["DrawioID"] = role.ID
 			content["Image"] = drawio.AWSShape("Security Identity Compliance", "Role")
 		}
-		holder := helpers.OutputHolder{Contents: content}
+		holder := format.OutputHolder{Contents: content}
 		output.AddHolder(holder)
 	}
 	for policyname, policy := range policies {
-		content := make(map[string]string)
+		content := make(map[string]interface{})
 		content["Name"] = policyname
 		if settings.IsDrawIO() {
 			content["DrawioID"] = policyname
@@ -79,7 +77,7 @@ func iamrolelist(cmd *cobra.Command, args []string) {
 		}
 		content["Type"] = policy.Type
 		content["Roles"] = strings.Join(policy.GetRoleNames(), stringSeparator)
-		holder := helpers.OutputHolder{Contents: content}
+		holder := format.OutputHolder{Contents: content}
 		output.AddHolder(holder)
 	}
 	output.Write(*settings)

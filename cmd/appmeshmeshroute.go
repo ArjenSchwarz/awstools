@@ -5,6 +5,7 @@ import (
 
 	"github.com/ArjenSchwarz/awstools/config"
 	"github.com/ArjenSchwarz/awstools/helpers"
+	"github.com/ArjenSchwarz/awstools/lib/format"
 	"github.com/spf13/cobra"
 )
 
@@ -30,10 +31,11 @@ func meshroute(cmd *cobra.Command, args []string) {
 		keys = append(keys, "Weight")
 		keys = append(keys, "Router")
 	}
-	output := helpers.OutputArray{Keys: keys, Title: resultTitle}
+	output := format.OutputArray{Keys: keys, Settings: format.NewOutputSettings(*settings)}
+	output.Settings.Title = resultTitle
 	for _, route := range routes {
 		for _, path := range route.VirtualServiceRoutes {
-			content := make(map[string]string)
+			content := make(map[string]interface{})
 			content["Service"] = route.VirtualServiceName
 			content["Path"] = path.Path
 			content["Node"] = path.DestinationNode
@@ -41,7 +43,7 @@ func meshroute(cmd *cobra.Command, args []string) {
 				content["Weight"] = strconv.Itoa(int(path.Weight))
 				content["Router"] = path.Router
 			}
-			holder := helpers.OutputHolder{Contents: content}
+			holder := format.OutputHolder{Contents: content}
 			output.AddHolder(holder)
 		}
 	}

@@ -3,6 +3,7 @@ package cmd
 import (
 	"github.com/ArjenSchwarz/awstools/config"
 	"github.com/ArjenSchwarz/awstools/helpers"
+	"github.com/ArjenSchwarz/awstools/lib/format"
 	"github.com/spf13/cobra"
 )
 
@@ -27,7 +28,8 @@ func tgwdangling(cmd *cobra.Command, args []string) {
 	resultTitle := "Transit Gateway uni-directional routes"
 	gateways := helpers.GetAllTransitGateways(awsConfig.Ec2Client())
 	keys := []string{"VPC", "VPCName", "DestinationVPC", "DestinationName"}
-	output := helpers.OutputArray{Keys: keys, Title: resultTitle}
+	output := format.OutputArray{Keys: keys, Settings: format.NewOutputSettings(*settings)}
+	output.Settings.Title = resultTitle
 	vpcs := make(map[string][]string)
 	for _, gateway := range gateways {
 		for _, routetable := range gateway.RouteTables {
@@ -44,12 +46,12 @@ func tgwdangling(cmd *cobra.Command, args []string) {
 	for vpcid, targets := range vpcs {
 		for _, target := range targets {
 			if !contains(vpcs[target], vpcid) {
-				content := make(map[string]string)
+				content := make(map[string]interface{})
 				content["VPC"] = vpcid
 				content["VPCName"] = getName(vpcid)
 				content["DestinationVPC"] = target
 				content["DestinationName"] = getName(target)
-				holder := helpers.OutputHolder{Contents: content}
+				holder := format.OutputHolder{Contents: content}
 				output.AddHolder(holder)
 			}
 		}

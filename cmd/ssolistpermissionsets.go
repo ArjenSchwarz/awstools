@@ -6,6 +6,7 @@ import (
 
 	"github.com/ArjenSchwarz/awstools/config"
 	"github.com/ArjenSchwarz/awstools/helpers"
+	"github.com/ArjenSchwarz/awstools/lib/format"
 	"github.com/spf13/cobra"
 )
 
@@ -29,13 +30,14 @@ func ssoListPermissionSets(cmd *cobra.Command, args []string) {
 	resultTitle := "SSO Overview per permission set"
 	ssoInstance := helpers.GetSSOAccountInstance(awsConfig.SsoClient())
 	keys := []string{"PermissionSet", "AccountIDs", "Arn", "ManagedPolicies", "InlinePolicy"}
-	output := helpers.OutputArray{Keys: keys, Title: resultTitle}
-	output.SortKey = "PermissionSet"
+	output := format.OutputArray{Keys: keys, Settings: format.NewOutputSettings(*settings)}
+	output.Settings.Title = resultTitle
+	output.Settings.SortKey = "PermissionSet"
 	stringSeparator := ", "
 
 	for _, permissionset := range ssoInstance.PermissionSets {
 		permchildren := []string{}
-		content := make(map[string]string)
+		content := make(map[string]interface{})
 		content["PermissionSet"] = permissionset.Name
 		content["Arn"] = permissionset.Arn
 		if *settings.Verbose {
@@ -53,7 +55,7 @@ func ssoListPermissionSets(cmd *cobra.Command, args []string) {
 			permchildren = append(permchildren, getName(account.AccountID))
 		}
 		content["AccountIDs"] = strings.Join(permchildren, stringSeparator)
-		holder := helpers.OutputHolder{Contents: content}
+		holder := format.OutputHolder{Contents: content}
 		output.AddHolder(holder)
 	}
 	output.Write(*settings)

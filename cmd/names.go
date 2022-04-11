@@ -6,6 +6,7 @@ import (
 
 	"github.com/ArjenSchwarz/awstools/config"
 	"github.com/ArjenSchwarz/awstools/helpers"
+	"github.com/ArjenSchwarz/awstools/lib/format"
 	"github.com/spf13/cobra"
 )
 
@@ -37,7 +38,7 @@ func names(cmd *cobra.Command, args []string) {
 	names = append(names, helpers.GetAccountAlias(awsConfig.IamClient(), awsConfig.StsClient()))
 	allNames := helpers.FlattenStringMaps(names)
 	jsonString, _ := json.Marshal(allNames)
-	err := helpers.PrintByteSlice(jsonString, *settings.OutputFile)
+	err := format.PrintByteSlice(jsonString, *settings.OutputFile)
 	if err != nil {
 		log.Fatal(err.Error())
 	}
