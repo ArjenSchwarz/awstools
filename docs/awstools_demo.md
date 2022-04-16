@@ -1,27 +1,21 @@
 ---
 date: 2022-04-16T20:43:03+10:00
-title: "awstools gen docs"
-slug: awstools_gen_docs
-url: /awstools/awstools_gen_docs/
+title: "awstools demo"
+slug: awstools_demo
+url: /awstools/awstools_demo/
 ---
-## awstools gen docs
+## awstools demo
 
-Generate Markdown documentation for awstools
+See demos for awstools
 
 ### Synopsis
 
-Generate documentation for awstools in Markdown format
-This is used for the documentation in the repository, but can be run separately. By default it will generate it in the docs directory from where you run the command, but you can override this with the --directory flag.
-
-```
-awstools gen docs [flags]
-```
+The individual commands show a demo of some of the capabilities and settings
 
 ### Options
 
 ```
-  -d, --directory string   The directory where the documentation will be generated (default "./docs")
-  -h, --help               help for docs
+  -h, --help   help for demo
 ```
 
 ### Options inherited from parent commands
@@ -40,5 +34,7 @@ awstools gen docs [flags]
 
 ### SEE ALSO
 
-* [awstools gen](#awstools-gen)	 - Generate various useful things for awstools
+* [awstools](#awstools)	 - Various tools for dealing with complex AWS comments
+* [awstools demo settings](#awstools-demo-settings)	 - Information about the settings file
+* [awstools demo tables](#awstools-demo-tables)	 - Show what the different table styles look like
 

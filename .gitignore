@@ -1,3 +1,6 @@
 awstools
 pkg/
 dist/
+docs/public
+docs/.hugo*
+docs/resources/_gen/

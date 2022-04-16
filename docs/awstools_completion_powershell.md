@@ -1,27 +1,34 @@
 ---
 date: 2022-04-16T20:43:03+10:00
-title: "awstools gen docs"
-slug: awstools_gen_docs
-url: /awstools/awstools_gen_docs/
+title: "awstools completion powershell"
+slug: awstools_completion_powershell
+url: /awstools/awstools_completion_powershell/
 ---
-## awstools gen docs
+## awstools completion powershell
 
-Generate Markdown documentation for awstools
+Generate the autocompletion script for powershell
 
 ### Synopsis
 
-Generate documentation for awstools in Markdown format
-This is used for the documentation in the repository, but can be run separately. By default it will generate it in the docs directory from where you run the command, but you can override this with the --directory flag.
+Generate the autocompletion script for powershell.
+
+To load completions in your current shell session:
+
+	awstools completion powershell | Out-String | Invoke-Expression
+
+To load completions for every new session, add the output of the above command
+to your powershell profile.
+
 
 ```
-awstools gen docs [flags]
+awstools completion powershell [flags]
 ```
 
 ### Options
 
 ```
-  -d, --directory string   The directory where the documentation will be generated (default "./docs")
-  -h, --help               help for docs
+  -h, --help              help for powershell
+      --no-descriptions   disable completion descriptions
 ```
 
 ### Options inherited from parent commands
@@ -40,5 +47,5 @@ awstools gen docs [flags]
 
 ### SEE ALSO
 
-* [awstools gen](#awstools-gen)	 - Generate various useful things for awstools
+* [awstools completion](#awstools-completion)	 - Generate the autocompletion script for the specified shell
 

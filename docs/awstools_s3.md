@@ -1,27 +1,21 @@
 ---
 date: 2022-04-16T20:43:03+10:00
-title: "awstools gen docs"
-slug: awstools_gen_docs
-url: /awstools/awstools_gen_docs/
+title: "awstools s3"
+slug: awstools_s3
+url: /awstools/awstools_s3/
 ---
-## awstools gen docs
+## awstools s3
 
-Generate Markdown documentation for awstools
+S3 commands
 
 ### Synopsis
 
-Generate documentation for awstools in Markdown format
-This is used for the documentation in the repository, but can be run separately. By default it will generate it in the docs directory from where you run the command, but you can override this with the --directory flag.
-
-```
-awstools gen docs [flags]
-```
+This lets you run various S3 related commands, please look at the options available.
 
 ### Options
 
 ```
-  -d, --directory string   The directory where the documentation will be generated (default "./docs")
-  -h, --help               help for docs
+  -h, --help   help for s3
 ```
 
 ### Options inherited from parent commands
@@ -40,5 +34,6 @@ awstools gen docs [flags]
 
 ### SEE ALSO
 
-* [awstools gen](#awstools-gen)	 - Generate various useful things for awstools
+* [awstools](#awstools)	 - Various tools for dealing with complex AWS comments
+* [awstools s3 list](#awstools-s3-list)	 - An overview of S3 buckets
 

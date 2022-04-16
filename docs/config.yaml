@@ -1,0 +1,28 @@
+---
+baseurl: "https://arjenschwarz.github.io/awstools/"
+title: "awstools documentation"
+preserveTaxonomyNames: true
+LanguageCode: en
+# Code higlighting settings
+pygmentsCodefences: true
+pygmentsCodeFencesGuessSyntax: false
+pygmentsOptions: ""
+pygmentsStyle: "monokai"
+pygmentsUseClasses: false
+
+defaultContentLanguage: "en"
+
+markup:
+  goldmark:
+    parser:
+      autoHeadingIDType: "github-ascii"
+    renderer:
+        unsafe: true
+
+params:
+  search: true
+  maxMenuDepth: 2 # (optional) available options are: 1, 2, or 3 (default: 2)
+
+module:
+  imports:
+    path: "github.com/bep/docuapi/v2"

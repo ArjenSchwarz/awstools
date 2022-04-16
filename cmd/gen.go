@@ -11,6 +11,8 @@ var genCmd = &cobra.Command{
 	Long:  `Generate documentation, CLI completions, and IAM policies`,
 }
 
+var docsdir string
+
 func init() {
 	rootCmd.AddCommand(genCmd)
 }

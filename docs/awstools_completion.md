@@ -1,21 +1,23 @@
 ---
 date: 2022-04-16T20:43:03+10:00
-title: "awstools tgw"
-slug: awstools_tgw
-url: /awstools/awstools_tgw/
+title: "awstools completion"
+slug: awstools_completion
+url: /awstools/awstools_completion/
 ---
-## awstools tgw
+## awstools completion
 
-Transit Gateway commands
+Generate the autocompletion script for the specified shell
 
 ### Synopsis
 
-Various Transit Gateway commands
+Generate the autocompletion script for awstools for the specified shell.
+See each sub-command's help for details on how to use the generated script.
+
 
 ### Options
 
 ```
-  -h, --help   help for tgw
+  -h, --help   help for completion
 ```
 
 ### Options inherited from parent commands
@@ -35,7 +37,8 @@ Various Transit Gateway commands
 ### SEE ALSO
 
 * [awstools](#awstools)	 - Various tools for dealing with complex AWS comments
-* [awstools tgw dangling](#awstools-tgw-dangling)	 - Check for incomplete routes
-* [awstools tgw overview](#awstools-tgw-overview)	 - A basic overview of the Transit Gateway
-* [awstools tgw routetables](#awstools-tgw-routetables)	 - Get an overview of connections between Transit Gateway Route Tables and attached resources
+* [awstools completion bash](#awstools-completion-bash)	 - Generate the autocompletion script for bash
+* [awstools completion fish](#awstools-completion-fish)	 - Generate the autocompletion script for fish
+* [awstools completion powershell](#awstools-completion-powershell)	 - Generate the autocompletion script for powershell
+* [awstools completion zsh](#awstools-completion-zsh)	 - Generate the autocompletion script for zsh
 

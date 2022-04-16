@@ -1,27 +1,37 @@
 ---
 date: 2022-04-16T20:43:03+10:00
-title: "awstools gen docs"
-slug: awstools_gen_docs
-url: /awstools/awstools_gen_docs/
+title: "awstools completion fish"
+slug: awstools_completion_fish
+url: /awstools/awstools_completion_fish/
 ---
-## awstools gen docs
+## awstools completion fish
 
-Generate Markdown documentation for awstools
+Generate the autocompletion script for fish
 
 ### Synopsis
 
-Generate documentation for awstools in Markdown format
-This is used for the documentation in the repository, but can be run separately. By default it will generate it in the docs directory from where you run the command, but you can override this with the --directory flag.
+Generate the autocompletion script for the fish shell.
+
+To load completions in your current shell session:
+
+	awstools completion fish | source
+
+To load completions for every new session, execute once:
+
+	awstools completion fish > ~/.config/fish/completions/awstools.fish
+
+You will need to start a new shell for this setup to take effect.
+
 
 ```
-awstools gen docs [flags]
+awstools completion fish [flags]
 ```
 
 ### Options
 
 ```
-  -d, --directory string   The directory where the documentation will be generated (default "./docs")
-  -h, --help               help for docs
+  -h, --help              help for fish
+      --no-descriptions   disable completion descriptions
 ```
 
 ### Options inherited from parent commands
@@ -40,5 +50,5 @@ awstools gen docs [flags]
 
 ### SEE ALSO
 
-* [awstools gen](#awstools-gen)	 - Generate various useful things for awstools
+* [awstools completion](#awstools-completion)	 - Generate the autocompletion script for the specified shell
 

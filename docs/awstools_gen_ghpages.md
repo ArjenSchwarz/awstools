@@ -1,27 +1,26 @@
 ---
 date: 2022-04-16T20:43:03+10:00
-title: "awstools gen docs"
-slug: awstools_gen_docs
-url: /awstools/awstools_gen_docs/
+title: "awstools gen ghpages"
+slug: awstools_gen_ghpages
+url: /awstools/awstools_gen_ghpages/
 ---
-## awstools gen docs
+## awstools gen ghpages
 
-Generate Markdown documentation for awstools
+Generate documentation for awstools' gh pages site
 
 ### Synopsis
 
 Generate documentation for awstools in Markdown format
-This is used for the documentation in the repository, but can be run separately. By default it will generate it in the docs directory from where you run the command, but you can override this with the --directory flag.
+This is used for the documentation in the GitHub Pages site, but can be run separately.
 
 ```
-awstools gen docs [flags]
+awstools gen ghpages [flags]
 ```
 
 ### Options
 
 ```
-  -d, --directory string   The directory where the documentation will be generated (default "./docs")
-  -h, --help               help for docs
+  -h, --help   help for ghpages
 ```
 
 ### Options inherited from parent commands
