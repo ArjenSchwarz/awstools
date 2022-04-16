@@ -3,7 +3,7 @@ package templates
 // BaseHTMLTemplate is the base HTML template for outputs
 const BaseHTMLTemplate = `<html>
 <head>
-	<title>{{.Title}}</title>
+	<title>{{.Settings.Title}}</title>
 	<style>
 	/*
 
@@ -106,19 +106,3 @@ h1 span {
 	<div id='end'></div>
 </body>
 </html>`
-
-// HTMLTableTemplate renders a HTML Table
-const HTMLTableTemplate = `{{ $keys := .Keys }}
-	{{ $rows := .Contents }}
-	<h1>{{.Title}}</h1>
-	<table class="responstable">
-	<thead>
-		<tr>{{range $keys}}<th>{{.}}</th>{{end}}</tr>
-	</thead>
-	<tbody>
-	{{range $row := $rows }}
-	<tr>{{range $key := $keys}}<td>{{index $row.Contents $key}}</td>{{end}}</tr>
-	{{end}}
-	</tbody>
-	</table>
-	<div id='end'></div>`

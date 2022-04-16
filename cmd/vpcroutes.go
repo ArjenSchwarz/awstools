@@ -27,7 +27,7 @@ func routes(cmd *cobra.Command, args []string) {
 	resultTitle := "VPC Routes for account " + getName(helpers.GetAccountID(awsConfig.StsClient()))
 	routes := helpers.GetAllVPCRouteTables(awsConfig.Ec2Client())
 	keys := []string{"AccountID", "Account Name", "ID", "Name", "VPC", "VPC Name", "Subnets", "Routes"}
-	output := format.OutputArray{Keys: keys, Settings: format.NewOutputSettings(*settings)}
+	output := format.OutputArray{Keys: keys, Settings: settings.NewOutputSettings()}
 	output.Settings.Title = resultTitle
 	for _, routetable := range routes {
 		content := make(map[string]interface{})
@@ -119,5 +119,5 @@ func routes(cmd *cobra.Command, args []string) {
 	// 		}
 	// 	}
 	// }
-	output.Write(*settings)
+	output.Write()
 }

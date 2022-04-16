@@ -58,11 +58,11 @@ func listResources(cmd *cobra.Command, args []string) {
 		resources[i] = <-c
 	}
 	keys := []string{"ResourceID", "Type", "Stack", "Name"}
-	if *settings.Verbose {
+	if settings.IsVerbose() {
 		keys = append(keys, "Status")
 		keys = append(keys, "LogicalName")
 	}
-	output := format.OutputArray{Keys: keys, Settings: format.NewOutputSettings(*settings)}
+	output := format.OutputArray{Keys: keys, Settings: settings.NewOutputSettings()}
 	output.Settings.Title = resultTitle
 	for _, resource := range resources {
 		content := make(map[string]interface{})
@@ -70,12 +70,12 @@ func listResources(cmd *cobra.Command, args []string) {
 		content["Type"] = resource.Type
 		content["Stack"] = resource.Stack
 		content["Name"] = resource.ResourceName
-		if *settings.Verbose {
+		if settings.IsVerbose() {
 			content["Status"] = resource.Status
 			content["LogicalName"] = resource.LogicalName
 		}
 		holder := format.OutputHolder{Contents: content}
 		output.AddHolder(holder)
 	}
-	output.Write(*settings)
+	output.Write()
 }

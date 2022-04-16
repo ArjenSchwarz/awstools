@@ -25,3 +25,33 @@ jobs:
         goversion: "latest"
         binary_name: "awstools"
         ldflags: "-X 'github.com/ArjenSchwarz/awstools/cmd.Version=${{ env.APP_VERSION}}'"
+
+  deploy-docs:
+    name: Build binary and documentation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-go@v3
+        with:
+          go-version: '1.18' # The Go version to download (if necessary) and use.
+      - name: Build awstools and generate documentation
+        run: |
+          go build -o awstools
+          ./awstools gen ghpages
+
+      - name: Set up Hugo
+        uses: peaceiris/actions-hugo@v2.4.13
+        with:
+          hugo-version: '0.92.0'
+          extended: true
+      - name: Build Hugo
+        run: |
+          cd docs
+          npm install postcss postcss-cli autoprefixer
+          hugo
+
+      - name: Deploy 🚀
+        uses: JamesIves/github-pages-deploy-action@v4.3.0
+        with:
+          branch: gh-pages
+          folder: docs/public

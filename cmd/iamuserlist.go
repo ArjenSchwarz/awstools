@@ -42,12 +42,12 @@ func detailUsers(cmd *cobra.Command, args []string) {
 		keys = append(keys, "Image")
 		keys = append(keys, "DrawioID")
 		stringSeparator = ","
-		if *settings.Verbose {
+		if settings.IsVerbose() {
 			keys = append(keys, "AttachedToGroups")
 			keys = append(keys, "AttachedToUsers")
 		}
 	}
-	output := format.OutputArray{Keys: keys, Settings: format.NewOutputSettings(*settings)}
+	output := format.OutputArray{Keys: keys, Settings: settings.NewOutputSettings()}
 	output.Settings.Title = resultTitle
 	switch settings.GetOutputFormat() {
 	case "drawio":
@@ -75,7 +75,7 @@ func detailUsers(cmd *cobra.Command, args []string) {
 		for policyname, policydetail := range object.GetDirectPolicies() {
 			directPolicyNames = append(directPolicyNames, policyname)
 			directPolicyDetails = append(directPolicyDetails, policydetail)
-			if *settings.Verbose {
+			if settings.IsVerbose() {
 				// Get the attached policies
 				policy := helpers.AttachedIAMPolicy{Name: policyname}
 				if _, ok := policylist[policyname]; ok {
@@ -123,7 +123,7 @@ func detailUsers(cmd *cobra.Command, args []string) {
 		holder := format.OutputHolder{Contents: content}
 		output.AddHolder(holder)
 	}
-	output.Write(*settings)
+	output.Write()
 }
 
 // createIamuserlistDrawIOHeader creates and configures the draw.io header settings
@@ -138,7 +138,7 @@ func createIamuserlistDrawIOHeader() drawio.Header {
 	connection.Invert = false
 	connection.Label = "Member of"
 	drawioheader.AddConnection(connection)
-	if *settings.Verbose {
+	if settings.IsVerbose() {
 		connection2 := drawio.NewConnection()
 		connection2.From = "PolicyNames"
 		connection2.To = "Name"

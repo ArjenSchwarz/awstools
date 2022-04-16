@@ -3,7 +3,6 @@ package format
 import (
 	"bufio"
 	"bytes"
-	"encoding/csv"
 	"encoding/json"
 	"fmt"
 	"html/template"
@@ -15,8 +14,8 @@ import (
 	"strings"
 
 	"github.com/emicklei/dot"
+	"github.com/jedib0t/go-pretty/v6/table"
 
-	"github.com/ArjenSchwarz/awstools/config"
 	"github.com/ArjenSchwarz/awstools/drawio"
 	"github.com/ArjenSchwarz/awstools/templates"
 )
@@ -50,17 +49,21 @@ func (output OutputArray) GetContentsMap() []map[string]string {
 }
 
 // Write will provide the output as configured in the configuration
-func (output OutputArray) Write(settings config.Config) {
+func (output OutputArray) Write() {
 	switch output.Settings.OutputFormat {
 	case "csv":
 		output.toCSV()
 	case "html":
 		output.toHTML()
+	case "table":
+		output.toTable()
+	case "markdown":
+		output.toMarkdown()
 	case "drawio":
 		if !output.Settings.DrawIOHeader.IsSet() {
 			log.Fatal("This command doesn't currently support the drawio output format")
 		}
-		drawio.CreateCSV(output.Settings.DrawIOHeader, output.Keys, output.GetContentsMap(), *settings.OutputFile)
+		drawio.CreateCSV(output.Settings.DrawIOHeader, output.Keys, output.GetContentsMap(), output.Settings.OutputFile)
 	case "dot":
 		if output.Settings.DotColumns == nil {
 			log.Fatal("This command doesn't currently support the dot output format")
@@ -72,53 +75,8 @@ func (output OutputArray) Write(settings config.Config) {
 }
 
 func (output OutputArray) toCSV() {
-	total := [][]string{}
-	if !output.Settings.ShouldAppend {
-		total = append(total, output.Keys)
-	}
-	for _, holder := range output.Contents {
-		values := make([]string, len(output.Keys))
-		for counter, key := range output.Keys {
-			if val, ok := holder.Contents[key]; ok {
-				values[counter] = output.toString(val)
-			}
-		}
-		total = append(total, values)
-	}
-	var target io.Writer
-	if output.Settings.OutputFile == "" {
-		target = os.Stdout
-	} else {
-		if output.Settings.ShouldAppend {
-			file, err := os.OpenFile(output.Settings.OutputFile, os.O_APPEND|os.O_WRONLY, os.ModeAppend)
-			if err != nil {
-				log.Fatal(err)
-			}
-			defer file.Close()
-			target = bufio.NewWriter(file)
-		} else {
-			file, err := os.Create(output.Settings.OutputFile)
-			if err != nil {
-				log.Fatal(err)
-			}
-			defer file.Close()
-			target = bufio.NewWriter(file)
-		}
-
-	}
-	w := csv.NewWriter(target)
-
-	for _, record := range total {
-		if err := w.Write(record); err != nil {
-			log.Fatalln("error writing record to csv:", err)
-		}
-	}
-
-	w.Flush()
-
-	if err := w.Error(); err != nil {
-		log.Fatal(err)
-	}
+	t := output.buildTable()
+	t.RenderCSV()
 }
 
 func (output OutputArray) toJSON() {
@@ -172,8 +130,6 @@ func (output OutputArray) toDot() {
 }
 
 func (output OutputArray) toHTML() {
-	t := template.New("table")
-	t, _ = t.Parse(templates.HTMLTableTemplate)
 	var baseTemplate string
 	if output.Settings.ShouldAppend {
 		originalfile, err := ioutil.ReadFile(output.Settings.OutputFile)
@@ -188,13 +144,94 @@ func (output OutputArray) toHTML() {
 		b.Execute(baseBuf, output)
 		baseTemplate = baseBuf.String()
 	}
+	t := output.buildTable()
 	tableBuf := new(bytes.Buffer)
-	t.Execute(tableBuf, output)
+	t.SetOutputMirror(tableBuf)
+	t.SetHTMLCSSClass("responstable")
+	t.RenderHTML()
+	tableBuf.Write([]byte("<div id='end'></div>")) // Add the placeholder
 	resultString := strings.Replace(baseTemplate, "<div id='end'></div>", tableBuf.String(), 1)
+
 	err := PrintByteSlice([]byte(resultString), output.Settings.OutputFile)
 	if err != nil {
 		log.Fatal(err.Error())
 	}
+}
+
+func (output OutputArray) toTable() {
+	if output.Settings.SeparateTables {
+		fmt.Println("")
+	}
+	t := output.buildTable()
+	t.SetStyle(output.Settings.TableStyle)
+	t.Render()
+	if output.Settings.SeparateTables {
+		fmt.Println("")
+	}
+}
+
+func (output OutputArray) toMarkdown() {
+	t := output.buildTable()
+	t.RenderMarkdown()
+}
+
+func (output OutputArray) buildTable() table.Writer {
+	t := table.NewWriter()
+	if output.Settings.Title != "" {
+		t.SetTitle(output.Settings.Title)
+	}
+	var target io.Writer
+	// var err error
+	if output.Settings.OutputFile == "" {
+		target = os.Stdout
+	} else {
+		//Always create if append flag isn't provided
+		if !output.Settings.ShouldAppend {
+			target, _ = os.Create(output.Settings.OutputFile)
+		} else {
+			target, _ = os.OpenFile(output.Settings.OutputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		}
+	}
+	t.SetOutputMirror(target)
+	t.AppendHeader(output.KeysAsInterface())
+	for _, cont := range output.ContentsAsInterfaces() {
+		t.AppendRow(cont)
+	}
+	columnConfigs := make([]table.ColumnConfig, 0)
+	for _, key := range output.Keys {
+		columnConfig := table.ColumnConfig{
+			Name:     key,
+			WidthMin: 6,
+			WidthMax: output.Settings.TableMaxColumnWidth,
+		}
+		columnConfigs = append(columnConfigs, columnConfig)
+	}
+	t.SetColumnConfigs(columnConfigs)
+	return t
+}
+
+func (output *OutputArray) KeysAsInterface() []interface{} {
+	b := make([]interface{}, len(output.Keys))
+	for i := range output.Keys {
+		b[i] = output.Keys[i]
+	}
+
+	return b
+}
+
+func (output *OutputArray) ContentsAsInterfaces() [][]interface{} {
+	total := make([][]interface{}, 0)
+
+	for _, holder := range output.Contents {
+		values := make([]interface{}, len(output.Keys))
+		for counter, key := range output.Keys {
+			if val, ok := holder.Contents[key]; ok {
+				values[counter] = output.toString(val)
+			}
+		}
+		total = append(total, values)
+	}
+	return total
 }
 
 // PrintByteSlice prints the provided contents to stdout or the provided filepath

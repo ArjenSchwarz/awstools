@@ -30,7 +30,7 @@ func ssoListPermissionSets(cmd *cobra.Command, args []string) {
 	resultTitle := "SSO Overview per permission set"
 	ssoInstance := helpers.GetSSOAccountInstance(awsConfig.SsoClient())
 	keys := []string{"PermissionSet", "AccountIDs", "Arn", "ManagedPolicies", "InlinePolicy"}
-	output := format.OutputArray{Keys: keys, Settings: format.NewOutputSettings(*settings)}
+	output := format.OutputArray{Keys: keys, Settings: settings.NewOutputSettings()}
 	output.Settings.Title = resultTitle
 	output.Settings.SortKey = "PermissionSet"
 	stringSeparator := ", "
@@ -40,7 +40,7 @@ func ssoListPermissionSets(cmd *cobra.Command, args []string) {
 		content := make(map[string]interface{})
 		content["PermissionSet"] = permissionset.Name
 		content["Arn"] = permissionset.Arn
-		if *settings.Verbose {
+		if settings.IsVerbose() {
 			content["ManagedPolicies"] = strings.Join(permissionset.GetManagedPolicyNames(), stringSeparator)
 			content["InlinePolicy"] = permissionset.InlinePolicy
 		} else {
@@ -58,5 +58,5 @@ func ssoListPermissionSets(cmd *cobra.Command, args []string) {
 		holder := format.OutputHolder{Contents: content}
 		output.AddHolder(holder)
 	}
-	output.Write(*settings)
+	output.Write()
 }

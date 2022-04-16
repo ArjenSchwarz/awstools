@@ -31,14 +31,14 @@ func names(cmd *cobra.Command, args []string) {
 	awsConfig := config.DefaultAwsConfig(*settings)
 	var names []map[string]string
 	if settings.ShouldCombineAndAppend() {
-		names = append(names, helpers.GetStringMapFromJSONFile(*settings.OutputFile))
+		names = append(names, helpers.GetStringMapFromJSONFile(settings.GetString("output.file")))
 	}
 	names = append(names, helpers.GetAllEC2ResourceNames(awsConfig.Ec2Client()))
 	names = append(names, helpers.GetAllRdsResourceNames(awsConfig.RdsClient()))
 	names = append(names, helpers.GetAccountAlias(awsConfig.IamClient(), awsConfig.StsClient()))
 	allNames := helpers.FlattenStringMaps(names)
 	jsonString, _ := json.Marshal(allNames)
-	err := format.PrintByteSlice(jsonString, *settings.OutputFile)
+	err := format.PrintByteSlice(jsonString, settings.GetString("output.file"))
 	if err != nil {
 		log.Fatal(err.Error())
 	}

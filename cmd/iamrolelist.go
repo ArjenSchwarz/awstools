@@ -39,7 +39,7 @@ The drawio output format links the users to policies.`,
 func iamrolelist(cmd *cobra.Command, args []string) {
 	awsConfig := config.DefaultAwsConfig(*settings)
 	resultTitle := "IAM Role overview for account " + getName(helpers.GetAccountID(awsConfig.StsClient()))
-	roles, policies := helpers.GetRolesAndPolicies(*settings.Verbose, awsConfig.IamClient())
+	roles, policies := helpers.GetRolesAndPolicies(settings.IsVerbose(), awsConfig.IamClient())
 	keys := []string{"Name", "Type", "AssumedFrom", "Policies", "Roles"}
 	stringSeparator := ", "
 	if settings.IsDrawIO() {
@@ -47,7 +47,7 @@ func iamrolelist(cmd *cobra.Command, args []string) {
 		keys = append(keys, "DrawioID")
 		stringSeparator = ","
 	}
-	output := format.OutputArray{Keys: keys, Settings: format.NewOutputSettings(*settings)}
+	output := format.OutputArray{Keys: keys, Settings: settings.NewOutputSettings()}
 	output.Settings.Title = resultTitle
 	switch settings.GetOutputFormat() {
 	case "drawio":
@@ -80,7 +80,7 @@ func iamrolelist(cmd *cobra.Command, args []string) {
 		holder := format.OutputHolder{Contents: content}
 		output.AddHolder(holder)
 	}
-	output.Write(*settings)
+	output.Write()
 }
 
 // createIamrolelistDrawIOHeader creates and configures the draw.io header settings

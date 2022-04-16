@@ -34,7 +34,7 @@ func peerings(cmd *cobra.Command, args []string) {
 	if settings.IsDrawIO() {
 		keys = append(keys, "Image")
 	}
-	output := format.OutputArray{Keys: keys, Settings: format.NewOutputSettings(*settings)}
+	output := format.OutputArray{Keys: keys, Settings: settings.NewOutputSettings()}
 	output.Settings.Title = resultTitle
 	switch settings.GetOutputFormat() {
 	case "drawio":
@@ -45,7 +45,7 @@ func peerings(cmd *cobra.Command, args []string) {
 	vpcs := make(map[string]helpers.VPCHolder)
 	sorted := make(map[string][]string)
 	if settings.ShouldCombineAndAppend() {
-		headers, previousResults := drawio.GetHeaderAndContentsFromFile(*settings.OutputFile)
+		headers, previousResults := drawio.GetHeaderAndContentsFromFile(settings.GetString("output.file"))
 		for _, row := range previousResults {
 			id := row[headers["ID"]]
 			accountid := row[headers["AccountID"]]
@@ -99,7 +99,7 @@ func peerings(cmd *cobra.Command, args []string) {
 		holder := format.OutputHolder{Contents: content}
 		output.AddHolder(holder)
 	}
-	output.Write(*settings)
+	output.Write()
 }
 
 func createVpcPeeringsDrawIOHeader() drawio.Header {

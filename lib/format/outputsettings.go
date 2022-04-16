@@ -1,19 +1,42 @@
 package format
 
 import (
-	"github.com/ArjenSchwarz/awstools/config"
 	"github.com/ArjenSchwarz/awstools/drawio"
+	"github.com/jedib0t/go-pretty/v6/table"
 )
 
+// TableStyles is a lookup map for getting the table styles based on a string
+var TableStyles = map[string]table.Style{
+	"Default":                    table.StyleDefault,
+	"Bold":                       table.StyleBold,
+	"ColoredBright":              table.StyleColoredBright,
+	"ColoredDark":                table.StyleColoredDark,
+	"ColoredBlackOnBlueWhite":    table.StyleColoredBlackOnBlueWhite,
+	"ColoredBlackOnCyanWhite":    table.StyleColoredBlackOnCyanWhite,
+	"ColoredBlackOnGreenWhite":   table.StyleColoredBlackOnGreenWhite,
+	"ColoredBlackOnMagentaWhite": table.StyleColoredBlackOnMagentaWhite,
+	"ColoredBlackOnYellowWhite":  table.StyleColoredBlackOnYellowWhite,
+	"ColoredBlackOnRedWhite":     table.StyleColoredBlackOnRedWhite,
+	"ColoredBlueWhiteOnBlack":    table.StyleColoredBlueWhiteOnBlack,
+	"ColoredCyanWhiteOnBlack":    table.StyleColoredCyanWhiteOnBlack,
+	"ColoredGreenWhiteOnBlack":   table.StyleColoredGreenWhiteOnBlack,
+	"ColoredMagentaWhiteOnBlack": table.StyleColoredMagentaWhiteOnBlack,
+	"ColoredRedWhiteOnBlack":     table.StyleColoredRedWhiteOnBlack,
+	"ColoredYellowWhiteOnBlack":  table.StyleColoredYellowWhiteOnBlack,
+}
+
 type OutputSettings struct {
-	UseEmoji     bool
-	OutputFormat string
-	OutputFile   string
-	ShouldAppend bool
-	Title        string
-	SortKey      string
-	DrawIOHeader drawio.Header
-	DotColumns   *DotColumns
+	UseEmoji            bool
+	OutputFormat        string
+	OutputFile          string
+	ShouldAppend        bool
+	Title               string
+	SortKey             string
+	DrawIOHeader        drawio.Header
+	DotColumns          *DotColumns
+	TableStyle          table.Style
+	SeparateTables      bool
+	TableMaxColumnWidth int
 }
 
 // DotColumns is used to set the From and To columns for the dot output format
@@ -22,12 +45,10 @@ type DotColumns struct {
 	To   string
 }
 
-func NewOutputSettings(config config.Config) *OutputSettings {
+func NewOutputSettings() *OutputSettings {
 	settings := OutputSettings{
-		UseEmoji:     *config.UseEmoji,
-		OutputFormat: *config.OutputFormat,
-		OutputFile:   *config.OutputFile,
-		ShouldAppend: *config.AppendToOutput,
+		TableStyle:          table.StyleDefault,
+		TableMaxColumnWidth: 50,
 	}
 	return &settings
 }

@@ -29,8 +29,8 @@ type AWSConfig struct {
 // DefaultAwsConfig loads default AWS Config
 func DefaultAwsConfig(config Config) AWSConfig {
 	awsConfig := AWSConfig{}
-	if config.GetLCString("profile") != "" {
-		awsConfig.ProfileName = config.GetLCString("profile")
+	if config.GetLCString("aws.profile") != "" {
+		awsConfig.ProfileName = config.GetLCString("aws.profile")
 		cfg, err := external.LoadDefaultConfig(context.TODO(), external.WithSharedConfigProfile(config.GetLCString("profile")))
 		if err != nil {
 			panic(err)
@@ -43,8 +43,8 @@ func DefaultAwsConfig(config Config) AWSConfig {
 		}
 		awsConfig.Config = cfg
 	}
-	if config.GetLCString("region") != "" {
-		awsConfig.Config.Region = config.GetLCString("region")
+	if config.GetLCString("aws.region") != "" {
+		awsConfig.Config.Region = config.GetLCString("aws.region")
 	}
 	awsConfig.Region = awsConfig.Config.Region
 	awsConfig.setCallerInfo()

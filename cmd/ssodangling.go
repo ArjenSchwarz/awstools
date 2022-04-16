@@ -28,7 +28,7 @@ func ssoDangling(cmd *cobra.Command, args []string) {
 	resultTitle := "Dangling Permission Sets"
 	ssoInstance := helpers.GetSSOAccountInstance(awsConfig.SsoClient())
 	keys := []string{"PermissionSet", "Arn", "ManagedPolicies", "InlinePolicy"}
-	output := format.OutputArray{Keys: keys, Settings: format.NewOutputSettings(*settings)}
+	output := format.OutputArray{Keys: keys, Settings: settings.NewOutputSettings()}
 	output.Settings.Title = resultTitle
 	stringSeparator := ", "
 	for _, permissionset := range ssoInstance.PermissionSets {
@@ -42,5 +42,5 @@ func ssoDangling(cmd *cobra.Command, args []string) {
 			output.AddHolder(holder)
 		}
 	}
-	output.Write(*settings)
+	output.Write()
 }

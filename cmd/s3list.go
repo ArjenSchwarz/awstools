@@ -41,10 +41,10 @@ func s3List(cmd *cobra.Command, args []string) {
 			keys = append(keys, fmt.Sprintf("Tag: %s", tag))
 		}
 	}
-	if *settings.Verbose {
+	if settings.IsVerbose() {
 		keys = append(keys, "Policy")
 	}
-	output := format.OutputArray{Keys: keys, Settings: format.NewOutputSettings(*settings)}
+	output := format.OutputArray{Keys: keys, Settings: settings.NewOutputSettings()}
 	output.Settings.Title = resultTitle
 	for _, bucket := range buckets {
 		if publicBucketsOnly && !bucket.IsPublic {
@@ -80,13 +80,13 @@ func s3List(cmd *cobra.Command, args []string) {
 				content[fmt.Sprintf("Tag: %s", tag)] = bucket.Tags[tag]
 			}
 		}
-		if *settings.Verbose {
+		if settings.IsVerbose() {
 			content["Policy"] = bucket.Policy
 		}
 		holder := format.OutputHolder{Contents: content}
 		output.AddHolder(holder)
 	}
-	output.Write(*settings)
+	output.Write()
 }
 
 func s3EncryptionToString(rules []types.ServerSideEncryptionRule) string {

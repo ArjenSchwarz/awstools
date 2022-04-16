@@ -39,7 +39,7 @@ func showmesh(cmd *cobra.Command, args []string) {
 	if settings.IsDrawIO() {
 		keys = append(keys, "Image")
 	}
-	output := format.OutputArray{Keys: keys, Settings: format.NewOutputSettings(*settings)}
+	output := format.OutputArray{Keys: keys, Settings: settings.NewOutputSettings()}
 	output.Settings.Title = resultTitle
 	// Set output specific config
 	switch settings.GetOutputFormat() {
@@ -63,7 +63,7 @@ func showmesh(cmd *cobra.Command, args []string) {
 		holder := format.OutputHolder{Contents: content}
 		output.AddHolder(holder)
 	}
-	output.Write(*settings)
+	output.Write()
 }
 
 func createAppmeshShowmeshDrawIOHeader() drawio.Header {

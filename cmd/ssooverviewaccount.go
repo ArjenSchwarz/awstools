@@ -35,10 +35,10 @@ func ssoOverviewByAccount(cmd *cobra.Command, args []string) {
 	resultTitle := "SSO Overview per account"
 	ssoInstance := helpers.GetSSOAccountInstance(awsConfig.SsoClient())
 	keys := []string{"AccountID", "PermissionSet", "Principal"}
-	if *settings.Verbose {
+	if settings.IsVerbose() {
 		keys = append(keys, "ManagedPolicies", "InlinePolicy")
 	}
-	output := format.OutputArray{Keys: keys, Settings: format.NewOutputSettings(*settings)}
+	output := format.OutputArray{Keys: keys, Settings: settings.NewOutputSettings()}
 	output.Settings.Title = resultTitle
 	output.Settings.SortKey = "AccountID"
 	stringSeparator := ", "
@@ -57,7 +57,7 @@ func ssoOverviewByAccount(cmd *cobra.Command, args []string) {
 					content["AccountID"] = getName(account.AccountID)
 					content["PermissionSet"] = assignment.PermissionSet.Name
 					content["Principal"] = getName(assignment.PrincipalID)
-					if *settings.Verbose {
+					if settings.IsVerbose() {
 						content["ManagedPolicies"] = strings.Join(assignment.PermissionSet.GetManagedPolicyNames(), stringSeparator)
 						content["InlinePolicy"] = assignment.PermissionSet.InlinePolicy
 					}
@@ -67,7 +67,7 @@ func ssoOverviewByAccount(cmd *cobra.Command, args []string) {
 			}
 		}
 	}
-	output.Write(*settings)
+	output.Write()
 }
 
 func filteredSSOAccount(account helpers.SSOAccount) bool {

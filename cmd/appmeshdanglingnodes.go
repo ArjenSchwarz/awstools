@@ -25,7 +25,7 @@ func danglingnodes(cmd *cobra.Command, args []string) {
 	svc := awsConfig.AppmeshClient()
 	unserviced := helpers.GetAllUnservicedAppMeshNodes(meshname, svc)
 	keys := []string{"Virtual Node"}
-	output := format.OutputArray{Keys: keys, Settings: format.NewOutputSettings(*settings)}
+	output := format.OutputArray{Keys: keys, Settings: settings.NewOutputSettings()}
 	output.Settings.Title = resultTitle
 	for _, node := range unserviced {
 		content := make(map[string]interface{})
@@ -33,6 +33,6 @@ func danglingnodes(cmd *cobra.Command, args []string) {
 		holder := format.OutputHolder{Contents: content}
 		output.AddHolder(holder)
 	}
-	output.Write(*settings)
+	output.Write()
 
 }

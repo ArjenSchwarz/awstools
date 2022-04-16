@@ -34,7 +34,7 @@ func tgwoverview(cmd *cobra.Command, args []string) {
 	if settings.IsDrawIO() {
 		keys = []string{"ID", "Name", "Destinations", "Image"}
 	}
-	output := format.OutputArray{Keys: keys, Settings: format.NewOutputSettings(*settings)}
+	output := format.OutputArray{Keys: keys, Settings: settings.NewOutputSettings()}
 	output.Settings.Title = resultTitle
 	if settings.IsDrawIO() {
 		createTgwOverviewDrawIO(&output, gateways)
@@ -57,7 +57,7 @@ func tgwoverview(cmd *cobra.Command, args []string) {
 			}
 		}
 	}
-	output.Write(*settings)
+	output.Write()
 }
 
 func createTgwOverviewDrawIO(output *format.OutputArray, gateways []helpers.TransitGateway) {
@@ -78,7 +78,7 @@ func createTgwOverviewDrawIO(output *format.OutputArray, gateways []helpers.Tran
 	}
 	targetTgwMapping := make(map[string]targetTgwMap)
 	if settings.ShouldCombineAndAppend() {
-		headers, previousResults := drawio.GetHeaderAndContentsFromFile(*settings.OutputFile)
+		headers, previousResults := drawio.GetHeaderAndContentsFromFile(settings.GetString("output.file"))
 		for _, row := range previousResults {
 			targetTgwMapping[row[headers["ID"]]] = targetTgwMap{
 				ID:           row[headers["ID"]],

@@ -34,10 +34,10 @@ func ssoOverviewByPermissionSet(cmd *cobra.Command, args []string) {
 	resultTitle := "SSO Overview per permission set"
 	ssoInstance := helpers.GetSSOAccountInstance(awsConfig.SsoClient())
 	keys := []string{"PermissionSet", "AccountID", "Principal"}
-	if *settings.Verbose {
+	if settings.IsVerbose() {
 		keys = append(keys, "ManagedPolicies", "InlinePolicy")
 	}
-	output := format.OutputArray{Keys: keys, Settings: format.NewOutputSettings(*settings)}
+	output := format.OutputArray{Keys: keys, Settings: settings.NewOutputSettings()}
 	output.Settings.Title = resultTitle
 	output.Settings.SortKey = "PermissionSet"
 	stringSeparator := ", "
@@ -59,7 +59,7 @@ func ssoOverviewByPermissionSet(cmd *cobra.Command, args []string) {
 					content["PermissionSet"] = assignment.PermissionSet.Name
 					content["AccountID"] = getName(account.AccountID)
 					content["Principal"] = getName(assignment.PrincipalID)
-					if *settings.Verbose {
+					if settings.IsVerbose() {
 						content["ManagedPolicies"] = strings.Join(assignment.PermissionSet.GetManagedPolicyNames(), stringSeparator)
 						content["InlinePolicy"] = assignment.PermissionSet.InlinePolicy
 					}
@@ -69,7 +69,7 @@ func ssoOverviewByPermissionSet(cmd *cobra.Command, args []string) {
 			}
 		}
 	}
-	output.Write(*settings)
+	output.Write()
 }
 
 func filteredSSOPermissionSet(permissionset helpers.SSOPermissionSet) bool {

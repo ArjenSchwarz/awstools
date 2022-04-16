@@ -37,7 +37,7 @@ func orgstructure(cmd *cobra.Command, args []string) {
 	if settings.IsDrawIO() {
 		keys = append(keys, "Image")
 	}
-	output := format.OutputArray{Keys: keys, Settings: format.NewOutputSettings(*settings)}
+	output := format.OutputArray{Keys: keys, Settings: settings.NewOutputSettings()}
 	output.Settings.Title = resultTitle
 	switch settings.GetOutputFormat() {
 	case "drawio":
@@ -46,7 +46,7 @@ func orgstructure(cmd *cobra.Command, args []string) {
 		output.Settings.AddDotFromToColumns("Name", "Children")
 	}
 	traverseOrgStructureEntry(organization, &output)
-	output.Write(*settings)
+	output.Write()
 }
 
 func traverseOrgStructureEntry(entry helpers.OrganizationEntry, output *format.OutputArray) {

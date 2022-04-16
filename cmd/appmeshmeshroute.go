@@ -27,11 +27,11 @@ func meshroute(cmd *cobra.Command, args []string) {
 	svc := awsConfig.AppmeshClient()
 	routes := helpers.GetAllAppMeshPaths(meshname, svc)
 	keys := []string{"Service", "Path", "Node"}
-	if *settings.Verbose {
+	if settings.IsVerbose() {
 		keys = append(keys, "Weight")
 		keys = append(keys, "Router")
 	}
-	output := format.OutputArray{Keys: keys, Settings: format.NewOutputSettings(*settings)}
+	output := format.OutputArray{Keys: keys, Settings: settings.NewOutputSettings()}
 	output.Settings.Title = resultTitle
 	for _, route := range routes {
 		for _, path := range route.VirtualServiceRoutes {
@@ -39,7 +39,7 @@ func meshroute(cmd *cobra.Command, args []string) {
 			content["Service"] = route.VirtualServiceName
 			content["Path"] = path.Path
 			content["Node"] = path.DestinationNode
-			if *settings.Verbose {
+			if settings.IsVerbose() {
 				content["Weight"] = strconv.Itoa(int(path.Weight))
 				content["Router"] = path.Router
 			}
@@ -47,5 +47,5 @@ func meshroute(cmd *cobra.Command, args []string) {
 			output.AddHolder(holder)
 		}
 	}
-	output.Write(*settings)
+	output.Write()
 }
