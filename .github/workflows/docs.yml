@@ -25,7 +25,7 @@ jobs:
           extended: true
       - name: Build Hugo
         run: |
-          npm install postcss-cli autoprefixer
+          npm install -g postcss postcss-cli autoprefixer
           cd docs && hugo
 
       - name: Deploy 🚀
