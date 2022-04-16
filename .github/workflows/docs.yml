@@ -25,8 +25,9 @@ jobs:
           extended: true
       - name: Build Hugo
         run: |
-          npm install -g postcss postcss-cli autoprefixer
-          cd docs && hugo
+          cd docs
+          npm install postcss postcss-cli autoprefixer
+          hugo
 
       - name: Deploy 🚀
         uses: JamesIves/github-pages-deploy-action@v4.3.0
