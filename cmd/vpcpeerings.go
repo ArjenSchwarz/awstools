@@ -36,11 +36,11 @@ func peerings(cmd *cobra.Command, args []string) {
 	}
 	output := format.OutputArray{Keys: keys, Settings: settings.NewOutputSettings()}
 	output.Settings.Title = resultTitle
-	switch settings.GetOutputFormat() {
-	case "drawio":
+	if settings.IsDrawIO() {
 		output.Settings.DrawIOHeader = createVpcPeeringsDrawIOHeader()
-	case "dot":
-		output.Settings.AddDotFromToColumns("ID", "PeeringIDs")
+	}
+	if output.Settings.NeedsFromToColumns() {
+		output.Settings.AddFromToColumns("ID", "PeeringIDs")
 	}
 	vpcs := make(map[string]helpers.VPCHolder)
 	sorted := make(map[string][]string)

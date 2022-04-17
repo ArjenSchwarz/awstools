@@ -1,6 +1,8 @@
 package format
 
 import (
+	"strings"
+
 	"github.com/ArjenSchwarz/awstools/drawio"
 	"github.com/jedib0t/go-pretty/v6/table"
 )
@@ -33,14 +35,14 @@ type OutputSettings struct {
 	Title               string
 	SortKey             string
 	DrawIOHeader        drawio.Header
-	DotColumns          *DotColumns
+	FromToColumns       *FromToColumns
 	TableStyle          table.Style
 	SeparateTables      bool
 	TableMaxColumnWidth int
 }
 
 // DotColumns is used to set the From and To columns for the dot output format
-type DotColumns struct {
+type FromToColumns struct {
 	From string
 	To   string
 }
@@ -53,10 +55,21 @@ func NewOutputSettings() *OutputSettings {
 	return &settings
 }
 
-func (settings *OutputSettings) AddDotFromToColumns(from string, to string) {
-	dotcolumns := DotColumns{
+func (settings *OutputSettings) AddFromToColumns(from string, to string) {
+	result := FromToColumns{
 		From: from,
 		To:   to,
 	}
-	settings.DotColumns = &dotcolumns
+	settings.FromToColumns = &result
+}
+
+func (settings *OutputSettings) SetOutputFormat(format string) {
+	settings.OutputFormat = strings.ToLower(format)
+}
+
+func (settings *OutputSettings) NeedsFromToColumns() bool {
+	if settings.OutputFormat == "dot" || settings.OutputFormat == "mermaid" {
+		return true
+	}
+	return false
 }

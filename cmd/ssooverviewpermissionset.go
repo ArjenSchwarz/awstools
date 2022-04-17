@@ -41,14 +41,13 @@ func ssoOverviewByPermissionSet(cmd *cobra.Command, args []string) {
 	output.Settings.Title = resultTitle
 	output.Settings.SortKey = "PermissionSet"
 	stringSeparator := ", "
-	switch settings.GetOutputFormat() {
-	case "drawio":
+	if settings.IsDrawIO() {
 		output.Settings.DrawIOHeader = createSSOPermissionsetsDrawIOHeader()
 		createSSOPermissionsetsDrawIOContents(ssoInstance, &output)
-	case "dot":
-		output.Settings.AddDotFromToColumns("DrawIOID", "Children")
+	} else if output.Settings.NeedsFromToColumns() {
+		output.Settings.AddFromToColumns("DrawIOID", "Children")
 		createSSOPermissionsetsDrawIOContents(ssoInstance, &output)
-	default:
+	} else {
 		for _, permissionset := range ssoInstance.PermissionSets {
 			if !filteredSSOPermissionSet(permissionset) {
 				continue

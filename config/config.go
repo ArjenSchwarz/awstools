@@ -79,7 +79,7 @@ func (config *Config) IsVerbose() bool {
 func (config *Config) NewOutputSettings() *format.OutputSettings {
 	settings := format.NewOutputSettings()
 	settings.UseEmoji = config.GetBool("output.use-emoji")
-	settings.OutputFormat = config.GetLCString("output.format")
+	settings.SetOutputFormat(config.GetLCString("output.format"))
 	settings.OutputFile = config.GetLCString("output.file")
 	settings.ShouldAppend = config.GetBool("output.append")
 	settings.TableStyle = format.TableStyles[config.GetString("output.table.style")]

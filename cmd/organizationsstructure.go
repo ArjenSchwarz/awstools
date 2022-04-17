@@ -39,11 +39,11 @@ func orgstructure(cmd *cobra.Command, args []string) {
 	}
 	output := format.OutputArray{Keys: keys, Settings: settings.NewOutputSettings()}
 	output.Settings.Title = resultTitle
-	switch settings.GetOutputFormat() {
-	case "drawio":
+	if settings.IsDrawIO() {
 		output.Settings.DrawIOHeader = createOrganizationsStructureDrawIOHeader()
-	case "dot":
-		output.Settings.AddDotFromToColumns("Name", "Children")
+	}
+	if output.Settings.NeedsFromToColumns() {
+		output.Settings.AddFromToColumns("Name", "Children")
 	}
 	traverseOrgStructureEntry(organization, &output)
 	output.Write()

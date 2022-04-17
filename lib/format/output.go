@@ -59,13 +59,18 @@ func (output OutputArray) Write() {
 		output.toTable()
 	case "markdown":
 		output.toMarkdown()
+	case "mermaid":
+		if output.Settings.FromToColumns == nil {
+			log.Fatal("This command doesn't currently support the mermaid output format")
+		}
+		output.toMermaid()
 	case "drawio":
 		if !output.Settings.DrawIOHeader.IsSet() {
 			log.Fatal("This command doesn't currently support the drawio output format")
 		}
 		drawio.CreateCSV(output.Settings.DrawIOHeader, output.Keys, output.GetContentsMap(), output.Settings.OutputFile)
 	case "dot":
-		if output.Settings.DotColumns == nil {
+		if output.Settings.FromToColumns == nil {
 			log.Fatal("This command doesn't currently support the dot output format")
 		}
 		output.toDot()
@@ -89,16 +94,39 @@ func (output OutputArray) toJSON() {
 }
 
 func (output OutputArray) toDot() {
+	result := output.buildDotGraph()
+	err := PrintByteSlice([]byte(result), output.Settings.OutputFile)
+	if err != nil {
+		log.Fatal(err.Error())
+	}
+}
+
+func (output OutputArray) toMermaid() {
+	dotversion := output.buildDotGraph()
+	result := strings.ReplaceAll(dotversion, "->", " --> ")
+	result = strings.ReplaceAll(result, "[label=", "(")
+	result = strings.ReplaceAll(result, "];", ")")
+	result = strings.ReplaceAll(result, ";", "")
+	result = strings.Replace(result, "digraph  {", "flowchart TB", 1)
+	result = strings.ReplaceAll(result, "\t\n", "")
+	result = strings.TrimRight(result, "}\n")
+	err := PrintByteSlice([]byte(result), output.Settings.OutputFile)
+	if err != nil {
+		log.Fatal(err.Error())
+	}
+}
+
+func (output OutputArray) buildDotGraph() string {
 	type dotholder struct {
 		To   string
 		From string
 	}
-	// Create new lines using the dotcolumns, splitting up multi values
+	// Create new lines using the FromToColumns, splitting up multi values
 	cleanedlist := []dotholder{}
 	for _, holder := range output.Contents {
-		for _, tovalue := range strings.Split(output.toString(holder.Contents[output.Settings.DotColumns.To]), ",") {
+		for _, tovalue := range strings.Split(output.toString(holder.Contents[output.Settings.FromToColumns.To]), ",") {
 			dothold := dotholder{
-				From: output.toString(holder.Contents[output.Settings.DotColumns.From]),
+				From: output.toString(holder.Contents[output.Settings.FromToColumns.From]),
 				To:   tovalue,
 			}
 			cleanedlist = append(cleanedlist, dothold)
@@ -123,10 +151,7 @@ func (output OutputArray) toDot() {
 			g.Edge(nodelist[cleaned.From], nodelist[cleaned.To])
 		}
 	}
-	err := PrintByteSlice([]byte(g.String()), output.Settings.OutputFile)
-	if err != nil {
-		log.Fatal(err.Error())
-	}
+	return g.String()
 }
 
 func (output OutputArray) toHTML() {

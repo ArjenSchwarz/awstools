@@ -49,11 +49,11 @@ func detailUsers(cmd *cobra.Command, args []string) {
 	}
 	output := format.OutputArray{Keys: keys, Settings: settings.NewOutputSettings()}
 	output.Settings.Title = resultTitle
-	switch settings.GetOutputFormat() {
-	case "drawio":
+	if settings.IsDrawIO() {
 		output.Settings.DrawIOHeader = createIamuserlistDrawIOHeader()
-	case "dot":
-		output.Settings.AddDotFromToColumns("Name", "Groups")
+	}
+	if output.Settings.NeedsFromToColumns() {
+		output.Settings.AddFromToColumns("Name", "Groups")
 	}
 	policylist := make(map[string]helpers.AttachedIAMPolicy)
 	for _, object := range objectlist {

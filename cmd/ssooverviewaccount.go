@@ -42,14 +42,13 @@ func ssoOverviewByAccount(cmd *cobra.Command, args []string) {
 	output.Settings.Title = resultTitle
 	output.Settings.SortKey = "AccountID"
 	stringSeparator := ", "
-	switch settings.GetOutputFormat() {
-	case "drawio":
+	if settings.IsDrawIO() {
 		output.Settings.DrawIOHeader = createSSOAccountsDrawIOHeader()
 		createSSOAccountDrawIOContents(ssoInstance, &output)
-	case "dot":
-		output.Settings.AddDotFromToColumns("DrawIOID", "Children")
+	} else if output.Settings.NeedsFromToColumns() {
+		output.Settings.AddFromToColumns("DrawIOID", "Children")
 		createSSOAccountDrawIOContents(ssoInstance, &output)
-	default:
+	} else {
 		for _, account := range ssoInstance.Accounts {
 			if filteredSSOAccount(account) {
 				for _, assignment := range account.AccountAssignments {

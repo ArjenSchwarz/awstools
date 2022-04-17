@@ -42,11 +42,11 @@ func showmesh(cmd *cobra.Command, args []string) {
 	output := format.OutputArray{Keys: keys, Settings: settings.NewOutputSettings()}
 	output.Settings.Title = resultTitle
 	// Set output specific config
-	switch settings.GetOutputFormat() {
-	case "drawio":
+	if settings.IsDrawIO() {
 		output.Settings.DrawIOHeader = createAppmeshShowmeshDrawIOHeader()
-	case "dot":
-		output.Settings.AddDotFromToColumns("Name", "Endpoints")
+	}
+	if output.Settings.NeedsFromToColumns() {
+		output.Settings.AddFromToColumns("Name", "Endpoints")
 	}
 
 	for _, node := range nodes {

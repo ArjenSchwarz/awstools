@@ -44,11 +44,11 @@ func tgwroutes(cmd *cobra.Command, args []string) {
 	}
 	output := format.OutputArray{Keys: keys, Settings: settings.NewOutputSettings()}
 	output.Settings.Title = resultTitle
-	switch settings.GetOutputFormat() {
-	case "drawio":
+	if settings.IsDrawIO() {
 		output.Settings.DrawIOHeader = createTgwRoutesDrawIOHeader()
-	case "dot":
-		output.Settings.AddDotFromToColumns("Destinations", "ID")
+	}
+	if output.Settings.NeedsFromToColumns() {
+		output.Settings.AddFromToColumns("Destinations", "ID")
 	}
 
 	attachedresources, tgwrts := filterGateway(gateways)

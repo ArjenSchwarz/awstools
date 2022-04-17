@@ -49,11 +49,11 @@ func iamrolelist(cmd *cobra.Command, args []string) {
 	}
 	output := format.OutputArray{Keys: keys, Settings: settings.NewOutputSettings()}
 	output.Settings.Title = resultTitle
-	switch settings.GetOutputFormat() {
-	case "drawio":
+	if settings.IsDrawIO() {
 		output.Settings.DrawIOHeader = createIamrolelistDrawIOHeader()
-	case "dot":
-		output.Settings.AddDotFromToColumns("Name", "Policies")
+	}
+	if output.Settings.NeedsFromToColumns() {
+		output.Settings.AddFromToColumns("Name", "Policies")
 	}
 	for _, role := range roles {
 		content := make(map[string]interface{})

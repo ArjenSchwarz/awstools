@@ -195,9 +195,63 @@ $ awstools appmesh showmesh -m bookinfo-mesh -o dot | dot -Tpng -o mesh.png && o
 
 ![An example diagram converted from the dot output format](docs/images/dot-mesh.png)
 
+## Mermaid
+
+Mermaid is a Javascript library that you can use to render diagrams based on a very basic syntax. It's main draw is that it's natively supported by GitHub in their Markdown previews. Which makes it very useful in README and documentation. For example if I put the below generated output straight in this README
+
+````
+```mermaid
+flowchart TB
+	n7("Arjen Backups (1234567891)")
+	n6("Arjen Schwarz (1234567892)")
+	n1("Main account (1234567890)")
+	n9("Container Camp 2019 (1234567893)")
+	n2("DeepRacer Demo (1234567894)")
+	n10("Root (r-abcd)")
+	n8("Service accounts (ou-abcd-abcd123)")
+	n4("ig.nore.me (1234567895)")
+	n5("ignoreme (ou-abcd-abcd124)")
+	n3("testaccounts (ou-abcd-abcd125)")
+	n10 --> n3
+	n10 --> n5
+	n10 --> n8
+	n10 --> n9
+	n8 --> n6
+	n8 --> n7
+	n5 --> n4
+	n3 --> n1
+	n3 --> n2
+```
+````
+
+it will render it as a diagram
+
+```mermaid
+flowchart TB
+	n7("Arjen Backups (1234567891)")
+	n6("Arjen Schwarz (1234567892)")
+	n1("Main account (1234567890)")
+	n9("Container Camp 2019 (1234567893)")
+	n2("DeepRacer Demo (1234567894)")
+	n10("Root (r-abcd)")
+	n8("Service accounts (ou-abcd-abcd123)")
+	n4("ig.nore.me (1234567895)")
+	n5("ignoreme (ou-abcd-abcd124)")
+	n3("testaccounts (ou-abcd-abcd125)")
+	n10 --> n3
+	n10 --> n5
+	n10 --> n8
+	n10 --> n9
+	n8 --> n6
+	n8 --> n7
+	n5 --> n4
+	n3 --> n1
+	n3 --> n2
+```
+
 ### Draw.io format
 
-[Draw.io](https://draw.io) is a very good free online diagramming tool. One of its advantages is that you can import diagrams from a CSV file, which is therefore one of the output formats.
+[Diagrams.net](https://diagrams.net) aka draw.io is a very good free online diagramming tool. One of its advantages is that you can import diagrams from a CSV file, which is therefore one of the output formats.
 
 ```bash
 $ awstools appmesh showmesh -m bookinfo-mesh -o drawio
