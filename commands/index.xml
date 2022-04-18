@@ -6,57 +6,57 @@
     <description>Recent content in Commands on awstools documentation</description>
     <generator>Hugo -- gohugo.io</generator>
     <language>en</language>
-    <lastBuildDate>Sat, 16 Apr 2022 11:09:45 +0000</lastBuildDate><atom:link href="https://arjenschwarz.github.io/awstools/commands/index.xml" rel="self" type="application/rss+xml" />
+    <lastBuildDate>Mon, 18 Apr 2022 23:51:14 +0000</lastBuildDate><atom:link href="https://arjenschwarz.github.io/awstools/commands/index.xml" rel="self" type="application/rss+xml" />
     <item>
       <title>awstools</title>
       <link>https://arjenschwarz.github.io/awstools/awstools/awstools/</link>
-      <pubDate>Sat, 16 Apr 2022 11:09:45 +0000</pubDate>
+      <pubDate>Mon, 18 Apr 2022 23:51:14 +0000</pubDate>
       
       <guid>https://arjenschwarz.github.io/awstools/awstools/awstools/</guid>
-      <description> awstoolsVarious tools for dealing with complex AWS comments
+      <description>awstoolsVarious tools for dealing with complex AWS comments
 Synopsisawstools is designed to be used for more complex tasks that would take a lot of work using just the CLI.
 This usually involves tasks that would require multiple calls.
-Full documentation for all commands can be accessed using the &amp;ndash;help flag or by reading it on https://github.com/ArjenSchwarz/awstools/blob/main/docs/awstools.md
-Options -a, --append Add to the provided output file instead of replacing it --emoji Use emoji in the output -f, --file string Optional file to save the output to -h, --help help for awstools -n, --namefile string Use this file to provide names -o, --output string Format for the output, currently supported are csv, json, html, dot, and drawio (default &amp;quot;json&amp;quot;) --profile string Use a specific profile --region string Use a specific region -v, --verbose Give verbose output  SEE ALSO awstools appmesh	- App Mesh commands awstools cfn	- CloudFormation commands awstools completion	- Generate the autocompletion script for the specified shell awstools gen	- Generate various useful things for awstools awstools iam	- IAM commands awstools names	- Get the names for the resources in the account awstools organizations	- AWS Organizations commands awstools s3	- S3 commands awstools sso	- AWS Single Sign-On commands awstools tgw	- Transit Gateway commands awstools version	- Show the version number awstools vpc	- VPC commands  </description>
+Full documentation for all commands can be accessed using the &amp;ndash;help flag or by reading it on https://arjenschwarz.github.io/awstools/
+Options -a, --append Add to the provided output file instead of replacing it --config string config file (default is .</description>
     </item>
     
     <item>
       <title>awstools appmesh</title>
       <link>https://arjenschwarz.github.io/awstools/awstools/awstools_appmesh/</link>
-      <pubDate>Sat, 16 Apr 2022 11:09:45 +0000</pubDate>
+      <pubDate>Mon, 18 Apr 2022 23:51:14 +0000</pubDate>
       
       <guid>https://arjenschwarz.github.io/awstools/awstools/awstools_appmesh/</guid>
       <description> awstools appmeshApp Mesh commands
 SynopsisThis lets you run various commands for AWS App Mesh
-Options -h, --help help for appmesh -m, --meshname string The name of the mesh  Options inherited from parent commands -a, --append Add to the provided output file instead of replacing it --emoji Use emoji in the output -f, --file string Optional file to save the output to -n, --namefile string Use this file to provide names -o, --output string Format for the output, currently supported are csv, json, html, dot, and drawio (default &amp;quot;json&amp;quot;) --profile string Use a specific profile --region string Use a specific region -v, --verbose Give verbose output  SEE ALSO awstools	- Various tools for dealing with complex AWS comments awstools appmesh danglingnodes	- Get all dangling nodes awstools appmesh routelist	- Get an overview of all routes in the mesh awstools appmesh showmesh	- Show the connections between virtual nodes  </description>
+Options -h, --help help for appmesh -m, --meshname string The name of the mesh  Options inherited from parent commands -a, --append Add to the provided output file instead of replacing it --config string config file (default is .awstools.yaml in current directory, or $HOME/.awstools.yaml) --emoji Use emoji in the output -f, --file string Optional file to save the output to -n, --namefile string Use this file to provide names -o, --output string Format for the output, currently supported are csv, table, json, html, dot, and drawio (default &amp;quot;json&amp;quot;) --profile string Use a specific profile --region string Use a specific region -v, --verbose Give verbose output  SEE ALSO awstools	- Various tools for dealing with complex AWS comments awstools appmesh danglingnodes	- Get all dangling nodes awstools appmesh routelist	- Get an overview of all routes in the mesh awstools appmesh showmesh	- Show the connections between virtual nodes  </description>
     </item>
     
     <item>
       <title>awstools appmesh danglingnodes</title>
       <link>https://arjenschwarz.github.io/awstools/awstools/awstools_appmesh_danglingnodes/</link>
-      <pubDate>Sat, 16 Apr 2022 11:09:45 +0000</pubDate>
+      <pubDate>Mon, 18 Apr 2022 23:51:14 +0000</pubDate>
       
       <guid>https://arjenschwarz.github.io/awstools/awstools/awstools_appmesh_danglingnodes/</guid>
       <description> awstools appmesh danglingnodesGet all dangling nodes
 SynopsisGet an overview of all nodes without a route or service attached to them
-awstools appmesh danglingnodes [flags]  Options -h, --help help for danglingnodes  Options inherited from parent commands -a, --append Add to the provided output file instead of replacing it --emoji Use emoji in the output -f, --file string Optional file to save the output to -m, --meshname string The name of the mesh -n, --namefile string Use this file to provide names -o, --output string Format for the output, currently supported are csv, json, html, dot, and drawio (default &amp;quot;json&amp;quot;) --profile string Use a specific profile --region string Use a specific region -v, --verbose Give verbose output  SEE ALSO awstools appmesh	- App Mesh commands  </description>
+awstools appmesh danglingnodes [flags]  Options -h, --help help for danglingnodes  Options inherited from parent commands -a, --append Add to the provided output file instead of replacing it --config string config file (default is .awstools.yaml in current directory, or $HOME/.awstools.yaml) --emoji Use emoji in the output -f, --file string Optional file to save the output to -m, --meshname string The name of the mesh -n, --namefile string Use this file to provide names -o, --output string Format for the output, currently supported are csv, table, json, html, dot, and drawio (default &amp;quot;json&amp;quot;) --profile string Use a specific profile --region string Use a specific region -v, --verbose Give verbose output  SEE ALSO awstools appmesh	- App Mesh commands  </description>
     </item>
     
     <item>
       <title>awstools appmesh routelist</title>
       <link>https://arjenschwarz.github.io/awstools/awstools/awstools_appmesh_routelist/</link>
-      <pubDate>Sat, 16 Apr 2022 11:09:45 +0000</pubDate>
+      <pubDate>Mon, 18 Apr 2022 23:51:14 +0000</pubDate>
       
       <guid>https://arjenschwarz.github.io/awstools/awstools/awstools_appmesh_routelist/</guid>
       <description> awstools appmesh routelistGet an overview of all routes in the mesh
 SynopsisThis displays all the routes in the mesh
-awstools appmesh routelist [flags]  Options -h, --help help for routelist  Options inherited from parent commands -a, --append Add to the provided output file instead of replacing it --emoji Use emoji in the output -f, --file string Optional file to save the output to -m, --meshname string The name of the mesh -n, --namefile string Use this file to provide names -o, --output string Format for the output, currently supported are csv, json, html, dot, and drawio (default &amp;quot;json&amp;quot;) --profile string Use a specific profile --region string Use a specific region -v, --verbose Give verbose output  SEE ALSO awstools appmesh	- App Mesh commands  </description>
+awstools appmesh routelist [flags]  Options -h, --help help for routelist  Options inherited from parent commands -a, --append Add to the provided output file instead of replacing it --config string config file (default is .awstools.yaml in current directory, or $HOME/.awstools.yaml) --emoji Use emoji in the output -f, --file string Optional file to save the output to -m, --meshname string The name of the mesh -n, --namefile string Use this file to provide names -o, --output string Format for the output, currently supported are csv, table, json, html, dot, and drawio (default &amp;quot;json&amp;quot;) --profile string Use a specific profile --region string Use a specific region -v, --verbose Give verbose output  SEE ALSO awstools appmesh	- App Mesh commands  </description>
     </item>
     
     <item>
       <title>awstools appmesh showmesh</title>
       <link>https://arjenschwarz.github.io/awstools/awstools/awstools_appmesh_showmesh/</link>
-      <pubDate>Sat, 16 Apr 2022 11:09:45 +0000</pubDate>
+      <pubDate>Mon, 18 Apr 2022 23:51:14 +0000</pubDate>
       
       <guid>https://arjenschwarz.github.io/awstools/awstools/awstools_appmesh_showmesh/</guid>
       <description>awstools appmesh showmeshShow the connections between virtual nodes
@@ -68,42 +68,42 @@ awstools appmesh showmesh -m bookinfo-mesh -o dot | dot -Tpng -o bookinfo-mesh.p
     <item>
       <title>awstools cfn</title>
       <link>https://arjenschwarz.github.io/awstools/awstools/awstools_cfn/</link>
-      <pubDate>Sat, 16 Apr 2022 11:09:45 +0000</pubDate>
+      <pubDate>Mon, 18 Apr 2022 23:51:14 +0000</pubDate>
       
       <guid>https://arjenschwarz.github.io/awstools/awstools/awstools_cfn/</guid>
       <description> awstools cfnCloudFormation commands
 SynopsisThis lets you run various CloudFormation related commands, please look at the options available.
-Options -h, --help help for cfn -s, --stack string The name of the stack  Options inherited from parent commands -a, --append Add to the provided output file instead of replacing it --emoji Use emoji in the output -f, --file string Optional file to save the output to -n, --namefile string Use this file to provide names -o, --output string Format for the output, currently supported are csv, json, html, dot, and drawio (default &amp;quot;json&amp;quot;) --profile string Use a specific profile --region string Use a specific region -v, --verbose Give verbose output  SEE ALSO awstools	- Various tools for dealing with complex AWS comments awstools cfn resources	- List all the resources in a stack and any nested stacks  </description>
+Options -h, --help help for cfn -s, --stack string The name of the stack  Options inherited from parent commands -a, --append Add to the provided output file instead of replacing it --config string config file (default is .awstools.yaml in current directory, or $HOME/.awstools.yaml) --emoji Use emoji in the output -f, --file string Optional file to save the output to -n, --namefile string Use this file to provide names -o, --output string Format for the output, currently supported are csv, table, json, html, dot, and drawio (default &amp;quot;json&amp;quot;) --profile string Use a specific profile --region string Use a specific region -v, --verbose Give verbose output  SEE ALSO awstools	- Various tools for dealing with complex AWS comments awstools cfn resources	- List all the resources in a stack and any nested stacks  </description>
     </item>
     
     <item>
       <title>awstools cfn resources</title>
       <link>https://arjenschwarz.github.io/awstools/awstools/awstools_cfn_resources/</link>
-      <pubDate>Sat, 16 Apr 2022 11:09:45 +0000</pubDate>
+      <pubDate>Mon, 18 Apr 2022 23:51:14 +0000</pubDate>
       
       <guid>https://arjenschwarz.github.io/awstools/awstools/awstools_cfn_resources/</guid>
-      <description> awstools cfn resourcesList all the resources in a stack and any nested stacks
+      <description>awstools cfn resourcesList all the resources in a stack and any nested stacks
 SynopsisThis command will list the resources attached to the provided stack and any possible nested stacks.
 Return values are the ResourceID, Type, and Stack of the resource. You can use the &amp;ndash;namefile flag to show names instead of resource ids.
 &amp;ndash;verbose will add the status and logicalname (the nme within the stack) to the output
-awstools cfn resources [flags]  Options -h, --help help for resources  Options inherited from parent commands -a, --append Add to the provided output file instead of replacing it --emoji Use emoji in the output -f, --file string Optional file to save the output to -n, --namefile string Use this file to provide names -o, --output string Format for the output, currently supported are csv, json, html, dot, and drawio (default &amp;quot;json&amp;quot;) --profile string Use a specific profile --region string Use a specific region -s, --stack string The name of the stack -v, --verbose Give verbose output  SEE ALSO awstools cfn	- CloudFormation commands  </description>
+awstools cfn resources [flags]  Options -h, --help help for resources  Options inherited from parent commands -a, --append Add to the provided output file instead of replacing it --config string config file (default is .</description>
     </item>
     
     <item>
       <title>awstools completion</title>
       <link>https://arjenschwarz.github.io/awstools/awstools/awstools_completion/</link>
-      <pubDate>Sat, 16 Apr 2022 11:09:45 +0000</pubDate>
+      <pubDate>Mon, 18 Apr 2022 23:51:14 +0000</pubDate>
       
       <guid>https://arjenschwarz.github.io/awstools/awstools/awstools_completion/</guid>
       <description> awstools completionGenerate the autocompletion script for the specified shell
 SynopsisGenerate the autocompletion script for awstools for the specified shell. See each sub-command&amp;rsquo;s help for details on how to use the generated script.
-Options -h, --help help for completion  Options inherited from parent commands -a, --append Add to the provided output file instead of replacing it --emoji Use emoji in the output -f, --file string Optional file to save the output to -n, --namefile string Use this file to provide names -o, --output string Format for the output, currently supported are csv, json, html, dot, and drawio (default &amp;quot;json&amp;quot;) --profile string Use a specific profile --region string Use a specific region -v, --verbose Give verbose output  SEE ALSO awstools	- Various tools for dealing with complex AWS comments awstools completion bash	- Generate the autocompletion script for bash awstools completion fish	- Generate the autocompletion script for fish awstools completion powershell	- Generate the autocompletion script for powershell awstools completion zsh	- Generate the autocompletion script for zsh  </description>
+Options -h, --help help for completion  Options inherited from parent commands -a, --append Add to the provided output file instead of replacing it --config string config file (default is .awstools.yaml in current directory, or $HOME/.awstools.yaml) --emoji Use emoji in the output -f, --file string Optional file to save the output to -n, --namefile string Use this file to provide names -o, --output string Format for the output, currently supported are csv, table, json, html, dot, and drawio (default &amp;quot;json&amp;quot;) --profile string Use a specific profile --region string Use a specific region -v, --verbose Give verbose output  SEE ALSO awstools	- Various tools for dealing with complex AWS comments awstools completion bash	- Generate the autocompletion script for bash awstools completion fish	- Generate the autocompletion script for fish awstools completion powershell	- Generate the autocompletion script for powershell awstools completion zsh	- Generate the autocompletion script for zsh  </description>
     </item>
     
     <item>
       <title>awstools completion bash</title>
       <link>https://arjenschwarz.github.io/awstools/awstools/awstools_completion_bash/</link>
-      <pubDate>Sat, 16 Apr 2022 11:09:45 +0000</pubDate>
+      <pubDate>Mon, 18 Apr 2022 23:51:14 +0000</pubDate>
       
       <guid>https://arjenschwarz.github.io/awstools/awstools/awstools_completion_bash/</guid>
       <description>awstools completion bashGenerate the autocompletion script for bash
@@ -117,34 +117,34 @@ Linux:awstools completion bash &amp;gt; /etc/bash_completion.d/awstools  macOS:a
     <item>
       <title>awstools completion fish</title>
       <link>https://arjenschwarz.github.io/awstools/awstools/awstools_completion_fish/</link>
-      <pubDate>Sat, 16 Apr 2022 11:09:45 +0000</pubDate>
+      <pubDate>Mon, 18 Apr 2022 23:51:14 +0000</pubDate>
       
       <guid>https://arjenschwarz.github.io/awstools/awstools/awstools_completion_fish/</guid>
-      <description> awstools completion fishGenerate the autocompletion script for fish
+      <description>awstools completion fishGenerate the autocompletion script for fish
 SynopsisGenerate the autocompletion script for the fish shell.
 To load completions in your current shell session:
 awstools completion fish | source  To load completions for every new session, execute once:
 awstools completion fish &amp;gt; ~/.config/fish/completions/awstools.fish  You will need to start a new shell for this setup to take effect.
-awstools completion fish [flags]  Options -h, --help help for fish --no-descriptions disable completion descriptions  Options inherited from parent commands -a, --append Add to the provided output file instead of replacing it --emoji Use emoji in the output -f, --file string Optional file to save the output to -n, --namefile string Use this file to provide names -o, --output string Format for the output, currently supported are csv, json, html, dot, and drawio (default &amp;quot;json&amp;quot;) --profile string Use a specific profile --region string Use a specific region -v, --verbose Give verbose output  SEE ALSO awstools completion	- Generate the autocompletion script for the specified shell  </description>
+awstools completion fish [flags]  Options -h, --help help for fish --no-descriptions disable completion descriptions  Options inherited from parent commands -a, --append Add to the provided output file instead of replacing it --config string config file (default is .</description>
     </item>
     
     <item>
       <title>awstools completion powershell</title>
       <link>https://arjenschwarz.github.io/awstools/awstools/awstools_completion_powershell/</link>
-      <pubDate>Sat, 16 Apr 2022 11:09:45 +0000</pubDate>
+      <pubDate>Mon, 18 Apr 2022 23:51:14 +0000</pubDate>
       
       <guid>https://arjenschwarz.github.io/awstools/awstools/awstools_completion_powershell/</guid>
-      <description> awstools completion powershellGenerate the autocompletion script for powershell
+      <description>awstools completion powershellGenerate the autocompletion script for powershell
 SynopsisGenerate the autocompletion script for powershell.
 To load completions in your current shell session:
 awstools completion powershell | Out-String | Invoke-Expression  To load completions for every new session, add the output of the above command to your powershell profile.
-awstools completion powershell [flags]  Options -h, --help help for powershell --no-descriptions disable completion descriptions  Options inherited from parent commands -a, --append Add to the provided output file instead of replacing it --emoji Use emoji in the output -f, --file string Optional file to save the output to -n, --namefile string Use this file to provide names -o, --output string Format for the output, currently supported are csv, json, html, dot, and drawio (default &amp;quot;json&amp;quot;) --profile string Use a specific profile --region string Use a specific region -v, --verbose Give verbose output  SEE ALSO awstools completion	- Generate the autocompletion script for the specified shell  </description>
+awstools completion powershell [flags]  Options -h, --help help for powershell --no-descriptions disable completion descriptions  Options inherited from parent commands -a, --append Add to the provided output file instead of replacing it --config string config file (default is .</description>
     </item>
     
     <item>
       <title>awstools completion zsh</title>
       <link>https://arjenschwarz.github.io/awstools/awstools/awstools_completion_zsh/</link>
-      <pubDate>Sat, 16 Apr 2022 11:09:45 +0000</pubDate>
+      <pubDate>Mon, 18 Apr 2022 23:51:14 +0000</pubDate>
       
       <guid>https://arjenschwarz.github.io/awstools/awstools/awstools_completion_zsh/</guid>
       <description>awstools completion zshGenerate the autocompletion script for zsh
@@ -155,20 +155,53 @@ Linux:awstools completion zsh &amp;gt; &amp;quot;${fpath[1]}/_awstools&amp;quot;
     </item>
     
     <item>
+      <title>awstools demo</title>
+      <link>https://arjenschwarz.github.io/awstools/awstools/awstools_demo/</link>
+      <pubDate>Mon, 18 Apr 2022 23:51:14 +0000</pubDate>
+      
+      <guid>https://arjenschwarz.github.io/awstools/awstools/awstools_demo/</guid>
+      <description> awstools demoSee demos for awstools
+SynopsisThe individual commands show a demo of some of the capabilities and settings
+Options -h, --help help for demo  Options inherited from parent commands -a, --append Add to the provided output file instead of replacing it --config string config file (default is .awstools.yaml in current directory, or $HOME/.awstools.yaml) --emoji Use emoji in the output -f, --file string Optional file to save the output to -n, --namefile string Use this file to provide names -o, --output string Format for the output, currently supported are csv, table, json, html, dot, and drawio (default &amp;quot;json&amp;quot;) --profile string Use a specific profile --region string Use a specific region -v, --verbose Give verbose output  SEE ALSO awstools	- Various tools for dealing with complex AWS comments awstools demo settings	- Information about the settings file awstools demo tables	- Show what the different table styles look like  </description>
+    </item>
+    
+    <item>
+      <title>awstools demo settings</title>
+      <link>https://arjenschwarz.github.io/awstools/awstools/awstools_demo_settings/</link>
+      <pubDate>Mon, 18 Apr 2022 23:51:14 +0000</pubDate>
+      
+      <guid>https://arjenschwarz.github.io/awstools/awstools/awstools_demo_settings/</guid>
+      <description> awstools demo settingsInformation about the settings file
+SynopsisThis will show details about what settings are available in the settings file
+awstools demo settings [flags]  Options -h, --help help for settings  Options inherited from parent commands -a, --append Add to the provided output file instead of replacing it --config string config file (default is .awstools.yaml in current directory, or $HOME/.awstools.yaml) --emoji Use emoji in the output -f, --file string Optional file to save the output to -n, --namefile string Use this file to provide names -o, --output string Format for the output, currently supported are csv, table, json, html, dot, and drawio (default &amp;quot;json&amp;quot;) --profile string Use a specific profile --region string Use a specific region -v, --verbose Give verbose output  SEE ALSO awstools demo	- See demos for awstools  </description>
+    </item>
+    
+    <item>
+      <title>awstools demo tables</title>
+      <link>https://arjenschwarz.github.io/awstools/awstools/awstools_demo_tables/</link>
+      <pubDate>Mon, 18 Apr 2022 23:51:14 +0000</pubDate>
+      
+      <guid>https://arjenschwarz.github.io/awstools/awstools/awstools_demo_tables/</guid>
+      <description> awstools demo tablesShow what the different table styles look like
+SynopsisThis command will show an overview of all the different style of tables
+awstools demo tables [flags]  Options -h, --help help for tables  Options inherited from parent commands -a, --append Add to the provided output file instead of replacing it --config string config file (default is .awstools.yaml in current directory, or $HOME/.awstools.yaml) --emoji Use emoji in the output -f, --file string Optional file to save the output to -n, --namefile string Use this file to provide names -o, --output string Format for the output, currently supported are csv, table, json, html, dot, and drawio (default &amp;quot;json&amp;quot;) --profile string Use a specific profile --region string Use a specific region -v, --verbose Give verbose output  SEE ALSO awstools demo	- See demos for awstools  </description>
+    </item>
+    
+    <item>
       <title>awstools gen</title>
       <link>https://arjenschwarz.github.io/awstools/awstools/awstools_gen/</link>
-      <pubDate>Sat, 16 Apr 2022 11:09:45 +0000</pubDate>
+      <pubDate>Mon, 18 Apr 2022 23:51:14 +0000</pubDate>
       
       <guid>https://arjenschwarz.github.io/awstools/awstools/awstools_gen/</guid>
       <description> awstools genGenerate various useful things for awstools
 SynopsisGenerate documentation, CLI completions, and IAM policies
-Options -h, --help help for gen  Options inherited from parent commands -a, --append Add to the provided output file instead of replacing it --emoji Use emoji in the output -f, --file string Optional file to save the output to -n, --namefile string Use this file to provide names -o, --output string Format for the output, currently supported are csv, json, html, dot, and drawio (default &amp;quot;json&amp;quot;) --profile string Use a specific profile --region string Use a specific region -v, --verbose Give verbose output  SEE ALSO awstools	- Various tools for dealing with complex AWS comments awstools gen completion	- Generate completion script awstools gen docs	- Generate Markdown documentation for awstools awstools gen ghpages	- Generate documentation for awstools&#39; gh pages site  </description>
+Options -h, --help help for gen  Options inherited from parent commands -a, --append Add to the provided output file instead of replacing it --config string config file (default is .awstools.yaml in current directory, or $HOME/.awstools.yaml) --emoji Use emoji in the output -f, --file string Optional file to save the output to -n, --namefile string Use this file to provide names -o, --output string Format for the output, currently supported are csv, table, json, html, dot, and drawio (default &amp;quot;json&amp;quot;) --profile string Use a specific profile --region string Use a specific region -v, --verbose Give verbose output  SEE ALSO awstools	- Various tools for dealing with complex AWS comments awstools gen completion	- Generate completion script awstools gen docs	- Generate Markdown documentation for awstools awstools gen ghpages	- Generate documentation for awstools&#39; gh pages site  </description>
     </item>
     
     <item>
       <title>awstools gen completion</title>
       <link>https://arjenschwarz.github.io/awstools/awstools/awstools_gen_completion/</link>
-      <pubDate>Sat, 16 Apr 2022 11:09:45 +0000</pubDate>
+      <pubDate>Mon, 18 Apr 2022 23:51:14 +0000</pubDate>
       
       <guid>https://arjenschwarz.github.io/awstools/awstools/awstools_gen_completion/</guid>
       <description>awstools gen completionGenerate completion script
@@ -184,7 +217,7 @@ $ echo &amp;quot;autoload -U compinit; compinit&amp;quot; &amp;gt;&amp;gt; ~/.</
     <item>
       <title>awstools gen docs</title>
       <link>https://arjenschwarz.github.io/awstools/awstools/awstools_gen_docs/</link>
-      <pubDate>Sat, 16 Apr 2022 11:09:45 +0000</pubDate>
+      <pubDate>Mon, 18 Apr 2022 23:51:14 +0000</pubDate>
       
       <guid>https://arjenschwarz.github.io/awstools/awstools/awstools_gen_docs/</guid>
       <description>awstools gen docsGenerate Markdown documentation for awstools
@@ -195,41 +228,41 @@ awstools gen docs [flags]  Options -d, --directory string The directory where th
     <item>
       <title>awstools gen ghpages</title>
       <link>https://arjenschwarz.github.io/awstools/awstools/awstools_gen_ghpages/</link>
-      <pubDate>Sat, 16 Apr 2022 11:09:45 +0000</pubDate>
+      <pubDate>Mon, 18 Apr 2022 23:51:14 +0000</pubDate>
       
       <guid>https://arjenschwarz.github.io/awstools/awstools/awstools_gen_ghpages/</guid>
-      <description> awstools gen ghpagesGenerate documentation for awstools&#39; gh pages site
+      <description>awstools gen ghpagesGenerate documentation for awstools&#39; gh pages site
 SynopsisGenerate documentation for awstools in Markdown format This is used for the documentation in the GitHub Pages site, but can be run separately.
-awstools gen ghpages [flags]  Options -h, --help help for ghpages  Options inherited from parent commands -a, --append Add to the provided output file instead of replacing it --emoji Use emoji in the output -f, --file string Optional file to save the output to -n, --namefile string Use this file to provide names -o, --output string Format for the output, currently supported are csv, json, html, dot, and drawio (default &amp;quot;json&amp;quot;) --profile string Use a specific profile --region string Use a specific region -v, --verbose Give verbose output  SEE ALSO awstools gen	- Generate various useful things for awstools  </description>
+awstools gen ghpages [flags]  Options -h, --help help for ghpages  Options inherited from parent commands -a, --append Add to the provided output file instead of replacing it --config string config file (default is .awstools.yaml in current directory, or $HOME/.</description>
     </item>
     
     <item>
       <title>awstools iam</title>
       <link>https://arjenschwarz.github.io/awstools/awstools/awstools_iam/</link>
-      <pubDate>Sat, 16 Apr 2022 11:09:45 +0000</pubDate>
+      <pubDate>Mon, 18 Apr 2022 23:51:14 +0000</pubDate>
       
       <guid>https://arjenschwarz.github.io/awstools/awstools/awstools_iam/</guid>
       <description> awstools iamIAM commands
 SynopsisVarious commands that deal with IAM users
-Options -h, --help help for iam  Options inherited from parent commands -a, --append Add to the provided output file instead of replacing it --emoji Use emoji in the output -f, --file string Optional file to save the output to -n, --namefile string Use this file to provide names -o, --output string Format for the output, currently supported are csv, json, html, dot, and drawio (default &amp;quot;json&amp;quot;) --profile string Use a specific profile --region string Use a specific region -v, --verbose Give verbose output  SEE ALSO awstools	- Various tools for dealing with complex AWS comments awstools iam rolelist	- Get an overview of the roles and their policies awstools iam userlist	- Get an overview of the IAM users in the account  </description>
+Options -h, --help help for iam  Options inherited from parent commands -a, --append Add to the provided output file instead of replacing it --config string config file (default is .awstools.yaml in current directory, or $HOME/.awstools.yaml) --emoji Use emoji in the output -f, --file string Optional file to save the output to -n, --namefile string Use this file to provide names -o, --output string Format for the output, currently supported are csv, table, json, html, dot, and drawio (default &amp;quot;json&amp;quot;) --profile string Use a specific profile --region string Use a specific region -v, --verbose Give verbose output  SEE ALSO awstools	- Various tools for dealing with complex AWS comments awstools iam rolelist	- Get an overview of the roles and their policies awstools iam userlist	- Get an overview of the IAM users in the account  </description>
     </item>
     
     <item>
       <title>awstools iam rolelist</title>
       <link>https://arjenschwarz.github.io/awstools/awstools/awstools_iam_rolelist/</link>
-      <pubDate>Sat, 16 Apr 2022 11:09:45 +0000</pubDate>
+      <pubDate>Mon, 18 Apr 2022 23:51:14 +0000</pubDate>
       
       <guid>https://arjenschwarz.github.io/awstools/awstools/awstools_iam_rolelist/</guid>
-      <description> awstools iam rolelistGet an overview of the roles and their policies
+      <description>awstools iam rolelistGet an overview of the roles and their policies
 SynopsisRetrieves a list of all IAM roles in the account and their policies. The policies themselves are also shown separately.
 The drawio output format links the users to policies.
-awstools iam rolelist [flags]  Options -h, --help help for rolelist  Options inherited from parent commands -a, --append Add to the provided output file instead of replacing it --emoji Use emoji in the output -f, --file string Optional file to save the output to -n, --namefile string Use this file to provide names -o, --output string Format for the output, currently supported are csv, json, html, dot, and drawio (default &amp;quot;json&amp;quot;) --profile string Use a specific profile --region string Use a specific region -v, --verbose Give verbose output  SEE ALSO awstools iam	- IAM commands  </description>
+awstools iam rolelist [flags]  Options -h, --help help for rolelist  Options inherited from parent commands -a, --append Add to the provided output file instead of replacing it --config string config file (default is .</description>
     </item>
     
     <item>
       <title>awstools iam userlist</title>
       <link>https://arjenschwarz.github.io/awstools/awstools/awstools_iam_userlist/</link>
-      <pubDate>Sat, 16 Apr 2022 11:09:45 +0000</pubDate>
+      <pubDate>Mon, 18 Apr 2022 23:51:14 +0000</pubDate>
       
       <guid>https://arjenschwarz.github.io/awstools/awstools/awstools_iam_userlist/</guid>
       <description>awstools iam userlistGet an overview of the IAM users in the account
@@ -240,29 +273,29 @@ The drawio output format links the users to groups and (in verbose mode) both of
     <item>
       <title>awstools names</title>
       <link>https://arjenschwarz.github.io/awstools/awstools/awstools_names/</link>
-      <pubDate>Sat, 16 Apr 2022 11:09:45 +0000</pubDate>
+      <pubDate>Mon, 18 Apr 2022 23:51:14 +0000</pubDate>
       
       <guid>https://arjenschwarz.github.io/awstools/awstools/awstools_names/</guid>
-      <description> awstools namesGet the names for the resources in the account
+      <description>awstools namesGet the names for the resources in the account
 SynopsisThese names can be stored in a file and then used by other functionalities. This is especially useful for commands that deal with multiple accounts.
-Only outputs as JSON.  awstools names [flags]  Options -h, --help help for names  Options inherited from parent commands -a, --append Add to the provided output file instead of replacing it --emoji Use emoji in the output -f, --file string Optional file to save the output to -n, --namefile string Use this file to provide names -o, --output string Format for the output, currently supported are csv, json, html, dot, and drawio (default &amp;quot;json&amp;quot;) --profile string Use a specific profile --region string Use a specific region -v, --verbose Give verbose output  SEE ALSO awstools	- Various tools for dealing with complex AWS comments  </description>
+Only outputs as JSON.  awstools names [flags]  Options -h, --help help for names  Options inherited from parent commands -a, --append Add to the provided output file instead of replacing it --config string config file (default is .</description>
     </item>
     
     <item>
       <title>awstools organizations</title>
       <link>https://arjenschwarz.github.io/awstools/awstools/awstools_organizations/</link>
-      <pubDate>Sat, 16 Apr 2022 11:09:45 +0000</pubDate>
+      <pubDate>Mon, 18 Apr 2022 23:51:14 +0000</pubDate>
       
       <guid>https://arjenschwarz.github.io/awstools/awstools/awstools_organizations/</guid>
       <description> awstools organizationsAWS Organizations commands
 SynopsisFunctionalities related to AWS Organizations
-Options -h, --help help for organizations  Options inherited from parent commands -a, --append Add to the provided output file instead of replacing it --emoji Use emoji in the output -f, --file string Optional file to save the output to -n, --namefile string Use this file to provide names -o, --output string Format for the output, currently supported are csv, json, html, dot, and drawio (default &amp;quot;json&amp;quot;) --profile string Use a specific profile --region string Use a specific region -v, --verbose Give verbose output  SEE ALSO awstools	- Various tools for dealing with complex AWS comments awstools organizations structure	- Get a graphical overview of the Organization&amp;rsquo;s structure  </description>
+Options -h, --help help for organizations  Options inherited from parent commands -a, --append Add to the provided output file instead of replacing it --config string config file (default is .awstools.yaml in current directory, or $HOME/.awstools.yaml) --emoji Use emoji in the output -f, --file string Optional file to save the output to -n, --namefile string Use this file to provide names -o, --output string Format for the output, currently supported are csv, table, json, html, dot, and drawio (default &amp;quot;json&amp;quot;) --profile string Use a specific profile --region string Use a specific region -v, --verbose Give verbose output  SEE ALSO awstools	- Various tools for dealing with complex AWS comments awstools organizations structure	- Get a graphical overview of the Organization&amp;rsquo;s structure  </description>
     </item>
     
     <item>
       <title>awstools organizations structure</title>
       <link>https://arjenschwarz.github.io/awstools/awstools/awstools_organizations_structure/</link>
-      <pubDate>Sat, 16 Apr 2022 11:09:45 +0000</pubDate>
+      <pubDate>Mon, 18 Apr 2022 23:51:14 +0000</pubDate>
       
       <guid>https://arjenschwarz.github.io/awstools/awstools/awstools_organizations_structure/</guid>
       <description>awstools organizations structureGet a graphical overview of the Organization&amp;rsquo;s structure
@@ -274,40 +307,40 @@ awstools organizations structure -o dot | dot -Tpng -o structure.png awstools or
     <item>
       <title>awstools s3</title>
       <link>https://arjenschwarz.github.io/awstools/awstools/awstools_s3/</link>
-      <pubDate>Sat, 16 Apr 2022 11:09:45 +0000</pubDate>
+      <pubDate>Mon, 18 Apr 2022 23:51:14 +0000</pubDate>
       
       <guid>https://arjenschwarz.github.io/awstools/awstools/awstools_s3/</guid>
       <description> awstools s3S3 commands
 SynopsisThis lets you run various S3 related commands, please look at the options available.
-Options -h, --help help for s3  Options inherited from parent commands -a, --append Add to the provided output file instead of replacing it --emoji Use emoji in the output -f, --file string Optional file to save the output to -n, --namefile string Use this file to provide names -o, --output string Format for the output, currently supported are csv, json, html, dot, and drawio (default &amp;quot;json&amp;quot;) --profile string Use a specific profile --region string Use a specific region -v, --verbose Give verbose output  SEE ALSO awstools	- Various tools for dealing with complex AWS comments awstools s3 list	- An overview of S3 buckets  </description>
+Options -h, --help help for s3  Options inherited from parent commands -a, --append Add to the provided output file instead of replacing it --config string config file (default is .awstools.yaml in current directory, or $HOME/.awstools.yaml) --emoji Use emoji in the output -f, --file string Optional file to save the output to -n, --namefile string Use this file to provide names -o, --output string Format for the output, currently supported are csv, table, json, html, dot, and drawio (default &amp;quot;json&amp;quot;) --profile string Use a specific profile --region string Use a specific region -v, --verbose Give verbose output  SEE ALSO awstools	- Various tools for dealing with complex AWS comments awstools s3 list	- An overview of S3 buckets  </description>
     </item>
     
     <item>
       <title>awstools s3 list</title>
       <link>https://arjenschwarz.github.io/awstools/awstools/awstools_s3_list/</link>
-      <pubDate>Sat, 16 Apr 2022 11:09:45 +0000</pubDate>
+      <pubDate>Mon, 18 Apr 2022 23:51:14 +0000</pubDate>
       
       <guid>https://arjenschwarz.github.io/awstools/awstools/awstools_s3_list/</guid>
-      <description> awstools s3 listAn overview of S3 buckets
+      <description>awstools s3 listAn overview of S3 buckets
 SynopsisLists all S3 buckets.
-awstools s3 list [flags]  Options -h, --help help for list -t, --include-tags string Optional tag values to show in output --public-only Only show public buckets --unencrypted-only Only show unencrypted buckets  Options inherited from parent commands -a, --append Add to the provided output file instead of replacing it --emoji Use emoji in the output -f, --file string Optional file to save the output to -n, --namefile string Use this file to provide names -o, --output string Format for the output, currently supported are csv, json, html, dot, and drawio (default &amp;quot;json&amp;quot;) --profile string Use a specific profile --region string Use a specific region -v, --verbose Give verbose output  SEE ALSO awstools s3	- S3 commands  </description>
+awstools s3 list [flags]  Options -h, --help help for list -t, --include-tags string Optional tag values to show in output --public-only Only show public buckets --unencrypted-only Only show unencrypted buckets  Options inherited from parent commands -a, --append Add to the provided output file instead of replacing it --config string config file (default is .awstools.yaml in current directory, or $HOME/.</description>
     </item>
     
     <item>
       <title>awstools sso</title>
       <link>https://arjenschwarz.github.io/awstools/awstools/awstools_sso/</link>
-      <pubDate>Sat, 16 Apr 2022 11:09:45 +0000</pubDate>
+      <pubDate>Mon, 18 Apr 2022 23:51:14 +0000</pubDate>
       
       <guid>https://arjenschwarz.github.io/awstools/awstools/awstools_sso/</guid>
       <description> awstools ssoAWS Single Sign-On commands
 SynopsisVarious AWS SSO commands
-Options -h, --help help for sso  Options inherited from parent commands -a, --append Add to the provided output file instead of replacing it --emoji Use emoji in the output -f, --file string Optional file to save the output to -n, --namefile string Use this file to provide names -o, --output string Format for the output, currently supported are csv, json, html, dot, and drawio (default &amp;quot;json&amp;quot;) --profile string Use a specific profile --region string Use a specific region -v, --verbose Give verbose output  SEE ALSO awstools	- Various tools for dealing with complex AWS comments awstools sso by-account	- A basic overview of the SSO Config Permission Sets by account awstools sso by-permission-set	- A basic overview of the SSO Config Permission Sets grouped by permission set awstools sso dangling	- An overview of unassigned permission sets awstools sso list-permission-sets	- A list of the SSO Permission Sets  </description>
+Options -h, --help help for sso  Options inherited from parent commands -a, --append Add to the provided output file instead of replacing it --config string config file (default is .awstools.yaml in current directory, or $HOME/.awstools.yaml) --emoji Use emoji in the output -f, --file string Optional file to save the output to -n, --namefile string Use this file to provide names -o, --output string Format for the output, currently supported are csv, table, json, html, dot, and drawio (default &amp;quot;json&amp;quot;) --profile string Use a specific profile --region string Use a specific region -v, --verbose Give verbose output  SEE ALSO awstools	- Various tools for dealing with complex AWS comments awstools sso by-account	- A basic overview of the SSO Config Permission Sets by account awstools sso by-permission-set	- A basic overview of the SSO Config Permission Sets grouped by permission set awstools sso dangling	- An overview of unassigned permission sets awstools sso list-permission-sets	- A list of the SSO Permission Sets  </description>
     </item>
     
     <item>
       <title>awstools sso by-account</title>
       <link>https://arjenschwarz.github.io/awstools/awstools/awstools_sso_by-account/</link>
-      <pubDate>Sat, 16 Apr 2022 11:09:45 +0000</pubDate>
+      <pubDate>Mon, 18 Apr 2022 23:51:14 +0000</pubDate>
       
       <guid>https://arjenschwarz.github.io/awstools/awstools/awstools_sso_by-account/</guid>
       <description>awstools sso by-accountA basic overview of the SSO Config Permission Sets by account
@@ -319,7 +352,7 @@ Verbose mode will add the policies for the permissionsets in the textual output 
     <item>
       <title>awstools sso by-permission-set</title>
       <link>https://arjenschwarz.github.io/awstools/awstools/awstools_sso_by-permission-set/</link>
-      <pubDate>Sat, 16 Apr 2022 11:09:45 +0000</pubDate>
+      <pubDate>Mon, 18 Apr 2022 23:51:14 +0000</pubDate>
       
       <guid>https://arjenschwarz.github.io/awstools/awstools/awstools_sso_by-permission-set/</guid>
       <description>awstools sso by-permission-setA basic overview of the SSO Config Permission Sets grouped by permission set
@@ -331,65 +364,65 @@ Verbose mode will add the policies for the permissionsets in the textual output 
     <item>
       <title>awstools sso dangling</title>
       <link>https://arjenschwarz.github.io/awstools/awstools/awstools_sso_dangling/</link>
-      <pubDate>Sat, 16 Apr 2022 11:09:45 +0000</pubDate>
+      <pubDate>Mon, 18 Apr 2022 23:51:14 +0000</pubDate>
       
       <guid>https://arjenschwarz.github.io/awstools/awstools/awstools_sso_dangling/</guid>
       <description> awstools sso danglingAn overview of unassigned permission sets
 SynopsisLists all permission sets that aren&amp;rsquo;t assigned to an account
 Includes full details on the managed and inline policies.
-awstools sso dangling [flags]  Options -h, --help help for dangling  Options inherited from parent commands -a, --append Add to the provided output file instead of replacing it --emoji Use emoji in the output -f, --file string Optional file to save the output to -n, --namefile string Use this file to provide names -o, --output string Format for the output, currently supported are csv, json, html, dot, and drawio (default &amp;quot;json&amp;quot;) --profile string Use a specific profile --region string Use a specific region -v, --verbose Give verbose output  SEE ALSO awstools sso	- AWS Single Sign-On commands  </description>
+awstools sso dangling [flags]  Options -h, --help help for dangling  Options inherited from parent commands -a, --append Add to the provided output file instead of replacing it --config string config file (default is .awstools.yaml in current directory, or $HOME/.awstools.yaml) --emoji Use emoji in the output -f, --file string Optional file to save the output to -n, --namefile string Use this file to provide names -o, --output string Format for the output, currently supported are csv, table, json, html, dot, and drawio (default &amp;quot;json&amp;quot;) --profile string Use a specific profile --region string Use a specific region -v, --verbose Give verbose output  SEE ALSO awstools sso	- AWS Single Sign-On commands  </description>
     </item>
     
     <item>
       <title>awstools sso list-permission-sets</title>
       <link>https://arjenschwarz.github.io/awstools/awstools/awstools_sso_list-permission-sets/</link>
-      <pubDate>Sat, 16 Apr 2022 11:09:45 +0000</pubDate>
+      <pubDate>Mon, 18 Apr 2022 23:51:14 +0000</pubDate>
       
       <guid>https://arjenschwarz.github.io/awstools/awstools/awstools_sso_list-permission-sets/</guid>
-      <description> awstools sso list-permission-setsA list of the SSO Permission Sets
+      <description>awstools sso list-permission-setsA list of the SSO Permission Sets
 SynopsisProvides an overview of all the permission sets and their attached policies and deployed accounts
 By default this command gives an output showing the number of managed policies attached and whether it has an inline policy. To expand this and see the details, use the &amp;ndash;verbose (-v) flag.
-awstools sso list-permission-sets [flags]  Options -h, --help help for list-permission-sets  Options inherited from parent commands -a, --append Add to the provided output file instead of replacing it --emoji Use emoji in the output -f, --file string Optional file to save the output to -n, --namefile string Use this file to provide names -o, --output string Format for the output, currently supported are csv, json, html, dot, and drawio (default &amp;quot;json&amp;quot;) --profile string Use a specific profile --region string Use a specific region -v, --verbose Give verbose output  SEE ALSO awstools sso	- AWS Single Sign-On commands  </description>
+awstools sso list-permission-sets [flags]  Options -h, --help help for list-permission-sets  Options inherited from parent commands -a, --append Add to the provided output file instead of replacing it --config string config file (default is .</description>
     </item>
     
     <item>
       <title>awstools tgw</title>
       <link>https://arjenschwarz.github.io/awstools/awstools/awstools_tgw/</link>
-      <pubDate>Sat, 16 Apr 2022 11:09:45 +0000</pubDate>
+      <pubDate>Mon, 18 Apr 2022 23:51:14 +0000</pubDate>
       
       <guid>https://arjenschwarz.github.io/awstools/awstools/awstools_tgw/</guid>
       <description> awstools tgwTransit Gateway commands
 SynopsisVarious Transit Gateway commands
-Options -h, --help help for tgw  Options inherited from parent commands -a, --append Add to the provided output file instead of replacing it --emoji Use emoji in the output -f, --file string Optional file to save the output to -n, --namefile string Use this file to provide names -o, --output string Format for the output, currently supported are csv, json, html, dot, and drawio (default &amp;quot;json&amp;quot;) --profile string Use a specific profile --region string Use a specific region -v, --verbose Give verbose output  SEE ALSO awstools	- Various tools for dealing with complex AWS comments awstools tgw dangling	- Check for incomplete routes awstools tgw overview	- A basic overview of the Transit Gateway awstools tgw routetables	- Get an overview of connections between Transit Gateway Route Tables and attached resources  </description>
+Options -h, --help help for tgw  Options inherited from parent commands -a, --append Add to the provided output file instead of replacing it --config string config file (default is .awstools.yaml in current directory, or $HOME/.awstools.yaml) --emoji Use emoji in the output -f, --file string Optional file to save the output to -n, --namefile string Use this file to provide names -o, --output string Format for the output, currently supported are csv, table, json, html, dot, and drawio (default &amp;quot;json&amp;quot;) --profile string Use a specific profile --region string Use a specific region -v, --verbose Give verbose output  SEE ALSO awstools	- Various tools for dealing with complex AWS comments awstools tgw dangling	- Check for incomplete routes awstools tgw overview	- A basic overview of the Transit Gateway awstools tgw routetables	- Get an overview of connections between Transit Gateway Route Tables and attached resources  </description>
     </item>
     
     <item>
       <title>awstools tgw dangling</title>
       <link>https://arjenschwarz.github.io/awstools/awstools/awstools_tgw_dangling/</link>
-      <pubDate>Sat, 16 Apr 2022 11:09:45 +0000</pubDate>
+      <pubDate>Mon, 18 Apr 2022 23:51:14 +0000</pubDate>
       
       <guid>https://arjenschwarz.github.io/awstools/awstools/awstools_tgw_dangling/</guid>
-      <description> awstools tgw danglingCheck for incomplete routes
+      <description>awstools tgw danglingCheck for incomplete routes
 SynopsisCheck for incomplete routes.
-An incomplete route is defined as one that goes in only a single direction. e.g. while VPC1 connects to VPC2, there is no returning connection.  awstools tgw dangling [flags]  Options -h, --help help for dangling  Options inherited from parent commands -a, --append Add to the provided output file instead of replacing it --emoji Use emoji in the output -f, --file string Optional file to save the output to -n, --namefile string Use this file to provide names -o, --output string Format for the output, currently supported are csv, json, html, dot, and drawio (default &amp;quot;json&amp;quot;) --profile string Use a specific profile --region string Use a specific region -v, --verbose Give verbose output  SEE ALSO awstools tgw	- Transit Gateway commands  </description>
+An incomplete route is defined as one that goes in only a single direction. e.g. while VPC1 connects to VPC2, there is no returning connection.  awstools tgw dangling [flags]  Options -h, --help help for dangling  Options inherited from parent commands -a, --append Add to the provided output file instead of replacing it --config string config file (default is .</description>
     </item>
     
     <item>
       <title>awstools tgw overview</title>
       <link>https://arjenschwarz.github.io/awstools/awstools/awstools_tgw_overview/</link>
-      <pubDate>Sat, 16 Apr 2022 11:09:45 +0000</pubDate>
+      <pubDate>Mon, 18 Apr 2022 23:51:14 +0000</pubDate>
       
       <guid>https://arjenschwarz.github.io/awstools/awstools/awstools_tgw_overview/</guid>
-      <description> awstools tgw overviewA basic overview of the Transit Gateway
+      <description>awstools tgw overviewA basic overview of the Transit Gateway
 SynopsisProvides an overview of all the route tables and routes in the Transit Gateway. This can be improved on, but offers a simple text based overview with all relevant information
 If you choose the drawio output instead, you get a simple diagram showing the Transit Gateway and all resources (VPCs, VPNs, Direct Connect) attached to it.
-awstools tgw overview [flags]  Options -h, --help help for overview  Options inherited from parent commands -a, --append Add to the provided output file instead of replacing it --emoji Use emoji in the output -f, --file string Optional file to save the output to -n, --namefile string Use this file to provide names -o, --output string Format for the output, currently supported are csv, json, html, dot, and drawio (default &amp;quot;json&amp;quot;) --profile string Use a specific profile --region string Use a specific region -v, --verbose Give verbose output  SEE ALSO awstools tgw	- Transit Gateway commands  </description>
+awstools tgw overview [flags]  Options -h, --help help for overview  Options inherited from parent commands -a, --append Add to the provided output file instead of replacing it --config string config file (default is .</description>
     </item>
     
     <item>
       <title>awstools tgw routetables</title>
       <link>https://arjenschwarz.github.io/awstools/awstools/awstools_tgw_routetables/</link>
-      <pubDate>Sat, 16 Apr 2022 11:09:45 +0000</pubDate>
+      <pubDate>Mon, 18 Apr 2022 23:51:14 +0000</pubDate>
       
       <guid>https://arjenschwarz.github.io/awstools/awstools/awstools_tgw_routetables/</guid>
       <description>awstools tgw routetablesGet an overview of connections between Transit Gateway Route Tables and attached resources
@@ -400,45 +433,45 @@ Using the --resource-id (-r) flag, you can limit the output to the provided reso
     <item>
       <title>awstools version</title>
       <link>https://arjenschwarz.github.io/awstools/awstools/awstools_version/</link>
-      <pubDate>Sat, 16 Apr 2022 11:09:45 +0000</pubDate>
+      <pubDate>Mon, 18 Apr 2022 23:51:14 +0000</pubDate>
       
       <guid>https://arjenschwarz.github.io/awstools/awstools/awstools_version/</guid>
       <description> awstools versionShow the version number
 SynopsisShow awstools&#39; version number
-awstools version [flags]  Options -h, --help help for version  Options inherited from parent commands -a, --append Add to the provided output file instead of replacing it --emoji Use emoji in the output -f, --file string Optional file to save the output to -n, --namefile string Use this file to provide names -o, --output string Format for the output, currently supported are csv, json, html, dot, and drawio (default &amp;quot;json&amp;quot;) --profile string Use a specific profile --region string Use a specific region -v, --verbose Give verbose output  SEE ALSO awstools	- Various tools for dealing with complex AWS comments  </description>
+awstools version [flags]  Options -h, --help help for version  Options inherited from parent commands -a, --append Add to the provided output file instead of replacing it --config string config file (default is .awstools.yaml in current directory, or $HOME/.awstools.yaml) --emoji Use emoji in the output -f, --file string Optional file to save the output to -n, --namefile string Use this file to provide names -o, --output string Format for the output, currently supported are csv, table, json, html, dot, and drawio (default &amp;quot;json&amp;quot;) --profile string Use a specific profile --region string Use a specific region -v, --verbose Give verbose output  SEE ALSO awstools	- Various tools for dealing with complex AWS comments  </description>
     </item>
     
     <item>
       <title>awstools vpc</title>
       <link>https://arjenschwarz.github.io/awstools/awstools/awstools_vpc/</link>
-      <pubDate>Sat, 16 Apr 2022 11:09:45 +0000</pubDate>
+      <pubDate>Mon, 18 Apr 2022 23:51:14 +0000</pubDate>
       
       <guid>https://arjenschwarz.github.io/awstools/awstools/awstools_vpc/</guid>
       <description> awstools vpcVPC commands
 SynopsisCommands related to a VPC
-Options -h, --help help for vpc  Options inherited from parent commands -a, --append Add to the provided output file instead of replacing it --emoji Use emoji in the output -f, --file string Optional file to save the output to -n, --namefile string Use this file to provide names -o, --output string Format for the output, currently supported are csv, json, html, dot, and drawio (default &amp;quot;json&amp;quot;) --profile string Use a specific profile --region string Use a specific region -v, --verbose Give verbose output  SEE ALSO awstools	- Various tools for dealing with complex AWS comments awstools vpc peerings	- Get VPC Peerings awstools vpc routes	- Get VPC Routes  </description>
+Options -h, --help help for vpc  Options inherited from parent commands -a, --append Add to the provided output file instead of replacing it --config string config file (default is .awstools.yaml in current directory, or $HOME/.awstools.yaml) --emoji Use emoji in the output -f, --file string Optional file to save the output to -n, --namefile string Use this file to provide names -o, --output string Format for the output, currently supported are csv, table, json, html, dot, and drawio (default &amp;quot;json&amp;quot;) --profile string Use a specific profile --region string Use a specific region -v, --verbose Give verbose output  SEE ALSO awstools	- Various tools for dealing with complex AWS comments awstools vpc peerings	- Get VPC Peerings awstools vpc routes	- Get VPC Routes  </description>
     </item>
     
     <item>
       <title>awstools vpc peerings</title>
       <link>https://arjenschwarz.github.io/awstools/awstools/awstools_vpc_peerings/</link>
-      <pubDate>Sat, 16 Apr 2022 11:09:45 +0000</pubDate>
+      <pubDate>Mon, 18 Apr 2022 23:51:14 +0000</pubDate>
       
       <guid>https://arjenschwarz.github.io/awstools/awstools/awstools_vpc_peerings/</guid>
-      <description> awstools vpc peeringsGet VPC Peerings
+      <description>awstools vpc peeringsGet VPC Peerings
 SynopsisGet an overview of Peerings. For a graphical option consider using the dot or drawio output formats.
-awstools vpc peerings -o dot | dot -Tpng -o peerings.png awstools vpc peerings -o drawio | pbcopy  awstools vpc peerings [flags]  Options -h, --help help for peerings  Options inherited from parent commands -a, --append Add to the provided output file instead of replacing it --emoji Use emoji in the output -f, --file string Optional file to save the output to -n, --namefile string Use this file to provide names -o, --output string Format for the output, currently supported are csv, json, html, dot, and drawio (default &amp;quot;json&amp;quot;) --profile string Use a specific profile --region string Use a specific region -v, --verbose Give verbose output  SEE ALSO awstools vpc	- VPC commands  </description>
+awstools vpc peerings -o dot | dot -Tpng -o peerings.png awstools vpc peerings -o drawio | pbcopy  awstools vpc peerings [flags]  Options -h, --help help for peerings  Options inherited from parent commands -a, --append Add to the provided output file instead of replacing it --config string config file (default is .</description>
     </item>
     
     <item>
       <title>awstools vpc routes</title>
       <link>https://arjenschwarz.github.io/awstools/awstools/awstools_vpc_routes/</link>
-      <pubDate>Sat, 16 Apr 2022 11:09:45 +0000</pubDate>
+      <pubDate>Mon, 18 Apr 2022 23:51:14 +0000</pubDate>
       
       <guid>https://arjenschwarz.github.io/awstools/awstools/awstools_vpc_routes/</guid>
       <description> awstools vpc routesGet VPC Routes
 SynopsisGet an overview of the routes of all VPCs in the account.
-awstools vpc routes [flags]  Options -h, --help help for routes  Options inherited from parent commands -a, --append Add to the provided output file instead of replacing it --emoji Use emoji in the output -f, --file string Optional file to save the output to -n, --namefile string Use this file to provide names -o, --output string Format for the output, currently supported are csv, json, html, dot, and drawio (default &amp;quot;json&amp;quot;) --profile string Use a specific profile --region string Use a specific region -v, --verbose Give verbose output  SEE ALSO awstools vpc	- VPC commands  </description>
+awstools vpc routes [flags]  Options -h, --help help for routes  Options inherited from parent commands -a, --append Add to the provided output file instead of replacing it --config string config file (default is .awstools.yaml in current directory, or $HOME/.awstools.yaml) --emoji Use emoji in the output -f, --file string Optional file to save the output to -n, --namefile string Use this file to provide names -o, --output string Format for the output, currently supported are csv, table, json, html, dot, and drawio (default &amp;quot;json&amp;quot;) --profile string Use a specific profile --region string Use a specific region -v, --verbose Give verbose output  SEE ALSO awstools vpc	- VPC commands  </description>
     </item>
     
   </channel>
