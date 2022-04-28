@@ -16,8 +16,8 @@ import (
 	"github.com/emicklei/dot"
 	"github.com/jedib0t/go-pretty/v6/table"
 
-	"github.com/ArjenSchwarz/awstools/drawio"
-	"github.com/ArjenSchwarz/awstools/templates"
+	"github.com/ArjenSchwarz/awstools/lib/format/drawio"
+	"github.com/ArjenSchwarz/awstools/lib/format/templates"
 )
 
 // OutputHolder holds key-value pairs that belong together in the output

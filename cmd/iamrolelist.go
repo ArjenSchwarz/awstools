@@ -17,8 +17,8 @@ package cmd
 import (
 	"strings"
 
-	"github.com/ArjenSchwarz/awstools/drawio"
 	"github.com/ArjenSchwarz/awstools/lib/format"
+	"github.com/ArjenSchwarz/awstools/lib/format/drawio"
 
 	"github.com/ArjenSchwarz/awstools/config"
 	"github.com/ArjenSchwarz/awstools/helpers"

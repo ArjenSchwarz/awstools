@@ -3,7 +3,7 @@ package format
 import (
 	"strings"
 
-	"github.com/ArjenSchwarz/awstools/drawio"
+	"github.com/ArjenSchwarz/awstools/lib/format/drawio"
 	"github.com/jedib0t/go-pretty/v6/table"
 )
 

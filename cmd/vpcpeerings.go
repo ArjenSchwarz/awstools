@@ -4,9 +4,9 @@ import (
 	"strings"
 
 	"github.com/ArjenSchwarz/awstools/config"
-	"github.com/ArjenSchwarz/awstools/drawio"
 	"github.com/ArjenSchwarz/awstools/helpers"
 	"github.com/ArjenSchwarz/awstools/lib/format"
+	"github.com/ArjenSchwarz/awstools/lib/format/drawio"
 	"github.com/spf13/cobra"
 )
 
