@@ -3,7 +3,7 @@ package config
 import (
 	"strings"
 
-	"github.com/ArjenSchwarz/awstools/lib/format"
+	format "github.com/ArjenSchwarz/go-output"
 	"github.com/spf13/viper"
 )
 

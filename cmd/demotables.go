@@ -24,7 +24,7 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/ArjenSchwarz/awstools/lib/format"
+	format "github.com/ArjenSchwarz/go-output"
 	"github.com/spf13/cobra"
 )
 

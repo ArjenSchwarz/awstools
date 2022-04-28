@@ -17,8 +17,8 @@ package cmd
 import (
 	"strings"
 
-	"github.com/ArjenSchwarz/awstools/lib/format"
-	"github.com/ArjenSchwarz/awstools/lib/format/drawio"
+	format "github.com/ArjenSchwarz/go-output"
+	"github.com/ArjenSchwarz/go-output/drawio"
 
 	"github.com/ArjenSchwarz/awstools/config"
 	"github.com/ArjenSchwarz/awstools/helpers"
