@@ -41,7 +41,7 @@ func (config *Config) GetInt(setting string) int {
 }
 
 func (config *Config) GetSeparator() string {
-	switch config.GetLCString("output") {
+	switch config.NewOutputSettings().OutputFormat {
 	case "table":
 		return "\r\n"
 	case "dot":
@@ -53,7 +53,7 @@ func (config *Config) GetSeparator() string {
 
 // IsDrawIO returns if output is set to Draw.IO
 func (config *Config) IsDrawIO() bool {
-	return config.GetLCString("output.format") == "drawio"
+	return config.NewOutputSettings().OutputFormat == "drawio"
 }
 
 // ShouldAppend returns if the output should append
@@ -63,10 +63,10 @@ func (config *Config) ShouldAppend() bool {
 
 // ShouldCombineAndAppend returns if the output should be combined
 func (config *Config) ShouldCombineAndAppend() bool {
-	if !config.ShouldAppend() {
+	if !config.NewOutputSettings().ShouldAppend {
 		return false
 	}
-	if config.GetLCString("output.format") == "html" {
+	if config.NewOutputSettings().OutputFormat == "html" {
 		return false
 	}
 	return true

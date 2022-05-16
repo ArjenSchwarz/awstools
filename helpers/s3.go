@@ -2,6 +2,9 @@ package helpers
 
 import (
 	"context"
+	"fmt"
+	"reflect"
+	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
@@ -9,21 +12,22 @@ import (
 )
 
 type S3Bucket struct {
-	Name                           string
 	Account                        string
-	Owner                          string
-	IsPublic                       bool
-	HasEncryption                  bool
-	PublicAccessBlockConfiguration types.PublicAccessBlockConfiguration
-	EncryptionRules                []types.ServerSideEncryptionRule
-	Tags                           map[string]string
-	Region                         string
 	ACLs                           []types.Grant
-	OpenACLs                       bool
-	PublicPolicy                   bool
-	LoggingEnabled                 bool
+	EncryptionRules                []types.ServerSideEncryptionRule
+	HasEncryption                  bool
+	IsPublic                       bool
 	LoggingBucket                  string
+	LoggingEnabled                 bool
+	Name                           string
+	OpenACLs                       bool
+	Owner                          string
 	Policy                         string
+	PublicAccessBlockConfiguration types.PublicAccessBlockConfiguration
+	PublicPolicy                   bool
+	Region                         string
+	Replication                    types.ReplicationConfiguration
+	Tags                           map[string]string
 }
 
 // GetAllBuckets returns an overview of all buckets
@@ -124,9 +128,51 @@ func GetBucketDetails(svc *s3.Client) []S3Bucket {
 		if policyResp != nil && policyResp.Policy != nil {
 			bucketObject.Policy = *policyResp.Policy
 		}
-
+		replicationResp, _ := svc.GetBucketReplication(context.TODO(), &s3.GetBucketReplicationInput{Bucket: bucket.Name})
+		if replicationResp != nil && replicationResp.ReplicationConfiguration != nil {
+			bucketObject.Replication = *replicationResp.ReplicationConfiguration
+		}
 		result = append(result, bucketObject)
 
 	}
 	return result
+}
+
+func (bucket *S3Bucket) GetReplicationStrings() []string {
+	ruleslist := make([]string, 0, 0)
+	for _, rule := range bucket.Replication.Rules {
+		var filter string
+		switch v := rule.Filter.(type) {
+		// And member type is complex for when you have multiple items
+		case *types.ReplicationRuleFilterMemberAnd:
+			prefixPortion := ""
+			// Prefix is optional
+			if *v.Value.Prefix != "" {
+				prefixPortion = fmt.Sprintf("Prefix: %s, and ", *v.Value.Prefix)
+			}
+			tagsSlice := make([]string, 0, 0)
+			for _, replicationtag := range v.Value.Tags {
+				tagsSlice = append(tagsSlice, fmt.Sprintf("Tag %s:%s", *replicationtag.Key, *replicationtag.Value))
+			}
+			filter = fmt.Sprintf("%s%s", prefixPortion, strings.Join(tagsSlice, " and "))
+		case *types.ReplicationRuleFilterMemberPrefix:
+			if v.Value == "" {
+				filter = "Entire bucket"
+			} else {
+				filter = fmt.Sprintf("Prefix: %s", v.Value)
+			}
+		case *types.ReplicationRuleFilterMemberTag:
+			filter = fmt.Sprintf("Tag %s:%s", *v.Value.Key, *v.Value.Value)
+		default:
+			// This likely means that the prefix is set in the old way
+			if *rule.Prefix != "" {
+				filter = fmt.Sprintf("Prefix: %s", *rule.Prefix)
+			} else {
+				filter = fmt.Sprintf("Unknown filter %v", reflect.TypeOf(v))
+			}
+
+		}
+		ruleslist = append(ruleslist, fmt.Sprintf("%s => %s", filter, *rule.Destination.Bucket))
+	}
+	return ruleslist
 }
