@@ -15,8 +15,6 @@
 package cmd
 
 import (
-	"strings"
-
 	format "github.com/ArjenSchwarz/go-output"
 	"github.com/ArjenSchwarz/go-output/drawio"
 
@@ -41,11 +39,9 @@ func iamrolelist(cmd *cobra.Command, args []string) {
 	resultTitle := "IAM Role overview for account " + getName(helpers.GetAccountID(awsConfig.StsClient()))
 	roles, policies := helpers.GetRolesAndPolicies(settings.IsVerbose(), awsConfig.IamClient())
 	keys := []string{"Name", "Type", "AssumedFrom", "Policies", "Roles"}
-	stringSeparator := ", "
 	if settings.IsDrawIO() {
 		keys = append(keys, "Image")
 		keys = append(keys, "DrawioID")
-		stringSeparator = ","
 	}
 	output := format.OutputArray{Keys: keys, Settings: settings.NewOutputSettings()}
 	output.Settings.Title = resultTitle
@@ -58,9 +54,9 @@ func iamrolelist(cmd *cobra.Command, args []string) {
 	for _, role := range roles {
 		content := make(map[string]interface{})
 		content["Name"] = role.Name
-		content["AssumedFrom"] = strings.Join(role.CanBeAssumedFrom(), stringSeparator)
+		content["AssumedFrom"] = role.CanBeAssumedFrom()
 		content["Type"] = role.Type
-		content["Policies"] = strings.Join(role.GetPolicyNames(), stringSeparator)
+		content["Policies"] = role.GetPolicyNames()
 		if settings.IsDrawIO() {
 			content["DrawioID"] = role.ID
 			content["Image"] = drawio.AWSShape("Security Identity Compliance", "Role")
@@ -76,7 +72,7 @@ func iamrolelist(cmd *cobra.Command, args []string) {
 			content["Image"] = drawio.AWSShape("Security Identity Compliance", "Permissions")
 		}
 		content["Type"] = policy.Type
-		content["Roles"] = strings.Join(policy.GetRoleNames(), stringSeparator)
+		content["Roles"] = policy.GetRoleNames()
 		holder := format.OutputHolder{Contents: content}
 		output.AddHolder(holder)
 	}

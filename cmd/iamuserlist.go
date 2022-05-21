@@ -3,7 +3,6 @@ package cmd
 import (
 	"log"
 	"regexp"
-	"strings"
 
 	"github.com/ArjenSchwarz/awstools/config"
 	"github.com/ArjenSchwarz/awstools/helpers"
@@ -37,11 +36,9 @@ func detailUsers(cmd *cobra.Command, args []string) {
 		objectlist = append(objectlist, group)
 	}
 	keys := []string{"Name", "Type", "Groups", "Users", "PolicyNames", "InheritedPolicyNames", "Console", "API"}
-	stringSeparator := ", "
 	if settings.IsDrawIO() {
 		keys = append(keys, "Image")
 		keys = append(keys, "DrawioID")
-		stringSeparator = ","
 		if settings.IsVerbose() {
 			keys = append(keys, "AttachedToGroups")
 			keys = append(keys, "AttachedToUsers")
@@ -68,8 +65,8 @@ func detailUsers(cmd *cobra.Command, args []string) {
 				content["API"] = user.GetLastAccessKeyDate(svc).String()
 			}
 		}
-		content["Groups"] = strings.Join(object.GetGroups(), ",")
-		content["Users"] = strings.Join(object.GetUsers(), ",")
+		content["Groups"] = object.GetGroups()
+		content["Users"] = object.GetUsers()
 		directPolicyNames := make([]string, 0, len(object.GetDirectPolicies()))
 		directPolicyDetails := make([]string, 0, len(object.GetDirectPolicies()))
 		for policyname, policydetail := range object.GetDirectPolicies() {
@@ -85,14 +82,14 @@ func detailUsers(cmd *cobra.Command, args []string) {
 				policylist[policyname] = policy
 			}
 		}
-		content["PolicyNames"] = strings.Join(directPolicyNames, stringSeparator)
+		content["PolicyNames"] = directPolicyNames
 		inheritedPolicyNames := make([]string, 0, len(object.GetInheritedPolicies()))
 		inheritedPolicyDetails := make([]string, 0, len(object.GetInheritedPolicies()))
 		for policyname, policydetail := range object.GetInheritedPolicies() {
 			inheritedPolicyNames = append(inheritedPolicyNames, policyname)
 			inheritedPolicyDetails = append(inheritedPolicyDetails, policydetail)
 		}
-		content["InheritedPolicyNames"] = strings.Join(inheritedPolicyNames, stringSeparator)
+		content["InheritedPolicyNames"] = inheritedPolicyNames
 
 		if settings.IsDrawIO() {
 			if object.GetObjectType() == "User" {
@@ -112,12 +109,12 @@ func detailUsers(cmd *cobra.Command, args []string) {
 		content["Type"] = "Policy"
 		if settings.IsDrawIO() {
 			content["Image"] = drawio.AWSShape("Security Identity Compliance", "Permissions")
-			content["AttachedToUsers"] = strings.Join(policy.Users, stringSeparator)
-			content["AttachedToGroups"] = strings.Join(policy.Groups, stringSeparator)
+			content["AttachedToUsers"] = policy.Users
+			content["AttachedToGroups"] = policy.Groups
 			content["DrawioID"] = createID("Policy" + policy.Name)
 		} else {
-			content["Users"] = strings.Join(policy.Users, stringSeparator)
-			content["Groups"] = strings.Join(policy.Groups, stringSeparator)
+			content["Users"] = policy.Users
+			content["Groups"] = policy.Groups
 
 		}
 		holder := format.OutputHolder{Contents: content}

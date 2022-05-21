@@ -1,8 +1,6 @@
 package cmd
 
 import (
-	"strconv"
-
 	"github.com/ArjenSchwarz/awstools/config"
 	"github.com/ArjenSchwarz/awstools/helpers"
 	format "github.com/ArjenSchwarz/go-output"
@@ -40,7 +38,7 @@ func meshroute(cmd *cobra.Command, args []string) {
 			content["Path"] = path.Path
 			content["Node"] = path.DestinationNode
 			if settings.IsVerbose() {
-				content["Weight"] = strconv.Itoa(int(path.Weight))
+				content["Weight"] = int(path.Weight)
 				content["Router"] = path.Router
 			}
 			holder := format.OutputHolder{Contents: content}

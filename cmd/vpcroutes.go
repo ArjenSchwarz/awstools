@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/ArjenSchwarz/awstools/config"
 	"github.com/ArjenSchwarz/awstools/helpers"
@@ -39,14 +38,14 @@ func routes(cmd *cobra.Command, args []string) {
 		for _, subnet := range routetable.Subnets {
 			subnets = append(subnets, fmt.Sprintf("%v (%v)", getName(subnet), subnet))
 		}
-		content["Subnets"] = strings.Join(subnets, ",")
+		content["Subnets"] = subnets
 		content["AccountID"] = routetable.Vpc.AccountID
 		content["Account Name"] = getName(routetable.Vpc.AccountID)
 		var routelist []string
 		for _, route := range routetable.Routes {
 			routelist = append(routelist, fmt.Sprintf("%v: %v", route.DestinationCIDR, route.DestinationTarget))
 		}
-		content["Routes"] = strings.Join(routelist, ",")
+		content["Routes"] = routelist
 		holder := format.OutputHolder{Contents: content}
 		output.AddHolder(holder)
 	}
@@ -109,7 +108,7 @@ func routes(cmd *cobra.Command, args []string) {
 	// 	content["Name"] = getName(id)
 	// 	if len(entry) > 0 {
 	// 		content["AccountID"] = vpcs[id].AccountID
-	// 		content["PeeringIDs"] = strings.Join(peeringIDs, ",")
+	// 		content["PeeringIDs"] = peeringIDs
 	// 		if settings.IsDrawIO() {
 	// 			content["Image"] = drawio.ShapeAWSVPC
 	// 		}

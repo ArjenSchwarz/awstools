@@ -119,7 +119,7 @@ func createTgwOverviewDrawIO(output *format.OutputArray, gateways []helpers.Tran
 		content := make(map[string]interface{})
 		content["ID"] = mapping.ID
 		content["Name"] = mapping.Name
-		content["Destinations"] = strings.Join(mapping.Destinations, ",")
+		content["Destinations"] = mapping.Destinations
 		content["Image"] = mapping.Image
 		holder := format.OutputHolder{Contents: content}
 		output.AddHolder(holder)

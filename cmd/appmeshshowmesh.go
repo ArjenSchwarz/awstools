@@ -1,8 +1,6 @@
 package cmd
 
 import (
-	"strings"
-
 	"github.com/ArjenSchwarz/awstools/config"
 	"github.com/ArjenSchwarz/awstools/helpers"
 	format "github.com/ArjenSchwarz/go-output"
@@ -59,7 +57,7 @@ func showmesh(cmd *cobra.Command, args []string) {
 		for _, backendNode := range node.BackendNodes {
 			endpoints = append(endpoints, backendNode)
 		}
-		content["Endpoints"] = strings.Join(endpoints, ",")
+		content["Endpoints"] = endpoints
 		holder := format.OutputHolder{Contents: content}
 		output.AddHolder(holder)
 	}

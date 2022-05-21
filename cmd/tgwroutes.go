@@ -1,8 +1,6 @@
 package cmd
 
 import (
-	"strings"
-
 	"github.com/ArjenSchwarz/awstools/config"
 	"github.com/ArjenSchwarz/awstools/helpers"
 	format "github.com/ArjenSchwarz/go-output"
@@ -57,7 +55,7 @@ func tgwroutes(cmd *cobra.Command, args []string) {
 		content := make(map[string]interface{})
 		content["ID"] = rt
 		content["Name"] = getName(rt)
-		content["Destinations"] = strings.Join(connectedvpcs, ",")
+		content["Destinations"] = connectedvpcs
 		if settings.IsDrawIO() {
 			content["Image"] = drawio.AWSShape("Network Content Delivery", "Route Table")
 		}

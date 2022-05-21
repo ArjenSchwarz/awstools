@@ -53,7 +53,7 @@ func demoTables(cmd *cobra.Command, args []string) {
 			"Value":       "arn:aws:s3:::fog-awesome-stack-dev",
 			"Description": "ARN of the S3 bucket",
 			"Stack":       "awesome-stack-dev",
-			"Imported":    "Yes",
+			"Imported":    true,
 		},
 	}
 	value2 := format.OutputHolder{
@@ -62,7 +62,7 @@ func demoTables(cmd *cobra.Command, args []string) {
 			"Value":       "arn:aws:s3:::fog-awesome-stack-test",
 			"Description": "ARN of the S3 bucket",
 			"Stack":       "awesome-stack-test",
-			"Imported":    "Yes",
+			"Imported":    true,
 		},
 	}
 	value3 := format.OutputHolder{
@@ -71,7 +71,7 @@ func demoTables(cmd *cobra.Command, args []string) {
 			"Value":       "arn:aws:s3:::fog-awesome-stack-prod",
 			"Description": "ARN of the S3 bucket",
 			"Stack":       "awesome-stack-prod",
-			"Imported":    "Yes",
+			"Imported":    true,
 		},
 	}
 	value4 := format.OutputHolder{
@@ -80,7 +80,7 @@ func demoTables(cmd *cobra.Command, args []string) {
 			"Value":       "fog-demo-bucket",
 			"Description": "The S3 bucket used for demos but has an exceptionally long description so it can show a multi-line example",
 			"Stack":       "demo-resources",
-			"Imported":    "No",
+			"Imported":    true,
 		},
 	}
 	output.AddHolder(value1)

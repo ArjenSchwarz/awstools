@@ -87,7 +87,7 @@ func peerings(cmd *cobra.Command, args []string) {
 		content["Name"] = getName(id)
 		if len(entry) > 0 {
 			content["AccountID"] = vpcs[id].AccountID
-			content["PeeringIDs"] = strings.Join(peeringIDs, ",")
+			content["PeeringIDs"] = peeringIDs
 			if settings.IsDrawIO() {
 				content["Image"] = drawio.AWSShape("Network Content Delivery", "VPC")
 			}

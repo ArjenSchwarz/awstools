@@ -1,8 +1,6 @@
 package cmd
 
 import (
-	"strings"
-
 	"github.com/ArjenSchwarz/awstools/config"
 	"github.com/ArjenSchwarz/awstools/helpers"
 	format "github.com/ArjenSchwarz/go-output"
@@ -40,7 +38,6 @@ func ssoOverviewByPermissionSet(cmd *cobra.Command, args []string) {
 	output := format.OutputArray{Keys: keys, Settings: settings.NewOutputSettings()}
 	output.Settings.Title = resultTitle
 	output.Settings.SortKey = "PermissionSet"
-	stringSeparator := ", "
 	if settings.IsDrawIO() {
 		output.Settings.DrawIOHeader = createSSOPermissionsetsDrawIOHeader()
 		createSSOPermissionsetsDrawIOContents(ssoInstance, &output)
@@ -59,7 +56,7 @@ func ssoOverviewByPermissionSet(cmd *cobra.Command, args []string) {
 					content["AccountID"] = getName(account.AccountID)
 					content["Principal"] = getName(assignment.PrincipalID)
 					if settings.IsVerbose() {
-						content["ManagedPolicies"] = strings.Join(assignment.PermissionSet.GetManagedPolicyNames(), stringSeparator)
+						content["ManagedPolicies"] = assignment.PermissionSet.GetManagedPolicyNames()
 						content["InlinePolicy"] = assignment.PermissionSet.InlinePolicy
 					}
 					holder := format.OutputHolder{Contents: content}
@@ -100,7 +97,7 @@ func createSSOPermissionsetsDrawIOContents(instance helpers.SSOInstance, output 
 	content["DrawIOID"] = getName(instance.Arn)
 	content["Type"] = "SSO"
 	content["Image"] = drawio.AWSShape("Security Identity Compliance", "Single Sign-On")
-	content["Children"] = strings.Join(instance.GetPermissionSetList(), ",")
+	content["Children"] = instance.GetPermissionSetList()
 	holder := format.OutputHolder{Contents: content}
 	output.AddHolder(holder)
 	uniquefilter := []string{}
@@ -117,7 +114,7 @@ func createSSOPermissionsetsDrawIOContents(instance helpers.SSOInstance, output 
 		for _, account := range permissionset.Accounts {
 			permchildren = append(permchildren, account.AccountID+permissionset.Name)
 		}
-		content["Children"] = strings.Join(permchildren, ",")
+		content["Children"] = permchildren
 		holder := format.OutputHolder{Contents: content}
 		output.AddHolder(holder)
 		for _, account := range permissionset.Accounts {
@@ -126,7 +123,7 @@ func createSSOPermissionsetsDrawIOContents(instance helpers.SSOInstance, output 
 			content["DrawIOID"] = account.AccountID + permissionset.Name
 			content["Type"] = "Account"
 			content["Image"] = drawio.AWSShape("Security Identity Compliance", "Organizations Account")
-			content["Children"] = strings.Join(account.GetPrincipalIdsForPermissionSet(permissionset), ",")
+			content["Children"] = account.GetPrincipalIdsForPermissionSet(permissionset)
 			holder := format.OutputHolder{Contents: content}
 			output.AddHolder(holder)
 			for _, assignment := range account.AccountAssignments {

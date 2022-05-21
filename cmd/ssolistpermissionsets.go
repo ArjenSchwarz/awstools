@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/ArjenSchwarz/awstools/config"
 	"github.com/ArjenSchwarz/awstools/helpers"
@@ -33,7 +32,6 @@ func ssoListPermissionSets(cmd *cobra.Command, args []string) {
 	output := format.OutputArray{Keys: keys, Settings: settings.NewOutputSettings()}
 	output.Settings.Title = resultTitle
 	output.Settings.SortKey = "PermissionSet"
-	stringSeparator := ", "
 
 	for _, permissionset := range ssoInstance.PermissionSets {
 		permchildren := []string{}
@@ -41,20 +39,20 @@ func ssoListPermissionSets(cmd *cobra.Command, args []string) {
 		content["PermissionSet"] = permissionset.Name
 		content["Arn"] = permissionset.Arn
 		if settings.IsVerbose() {
-			content["ManagedPolicies"] = strings.Join(permissionset.GetManagedPolicyNames(), stringSeparator)
+			content["ManagedPolicies"] = permissionset.GetManagedPolicyNames()
 			content["InlinePolicy"] = permissionset.InlinePolicy
 		} else {
 			content["ManagedPolicies"] = fmt.Sprint(len(permissionset.GetManagedPolicyNames()))
-			inlinePolicy := "False"
+			inlinePolicy := false
 			if permissionset.InlinePolicy != "" {
-				inlinePolicy = "True"
+				inlinePolicy = true
 			}
 			content["InlinePolicy"] = inlinePolicy
 		}
 		for _, account := range permissionset.Accounts {
 			permchildren = append(permchildren, getName(account.AccountID))
 		}
-		content["AccountIDs"] = strings.Join(permchildren, stringSeparator)
+		content["AccountIDs"] = permchildren
 		holder := format.OutputHolder{Contents: content}
 		output.AddHolder(holder)
 	}

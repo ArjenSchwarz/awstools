@@ -81,7 +81,7 @@ func s3List(cmd *cobra.Command, args []string) {
 			}
 		}
 		if len(bucket.Replication.Rules) > 0 {
-			content["Replication"] = strings.Join(bucket.GetReplicationStrings(), settings.GetSeparator())
+			content["Replication"] = bucket.GetReplicationStrings()
 		} else {
 			content["Replication"] = false
 		}

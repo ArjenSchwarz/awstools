@@ -1,8 +1,6 @@
 package cmd
 
 import (
-	"strings"
-
 	"github.com/ArjenSchwarz/awstools/config"
 	"github.com/ArjenSchwarz/awstools/helpers"
 	format "github.com/ArjenSchwarz/go-output"
@@ -67,7 +65,7 @@ func traverseOrgStructureEntry(entry helpers.OrganizationEntry, output *format.O
 		children = append(children, child.String())
 		traverseOrgStructureEntry(child, output)
 	}
-	content["Children"] = strings.Join(children, ",")
+	content["Children"] = children
 	holder := format.OutputHolder{Contents: content}
 	output.AddHolder(holder)
 }
