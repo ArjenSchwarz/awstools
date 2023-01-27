@@ -28,6 +28,8 @@ type S3Bucket struct {
 	Region                         string
 	Replication                    types.ReplicationConfiguration
 	Tags                           map[string]string
+	Versioning                     bool
+	VersioningMFAEnabled           bool
 }
 
 // GetAllBuckets returns an overview of all buckets
@@ -131,6 +133,19 @@ func GetBucketDetails(svc *s3.Client) []S3Bucket {
 		replicationResp, _ := svc.GetBucketReplication(context.TODO(), &s3.GetBucketReplicationInput{Bucket: bucket.Name})
 		if replicationResp != nil && replicationResp.ReplicationConfiguration != nil {
 			bucketObject.Replication = *replicationResp.ReplicationConfiguration
+		}
+		versioningResp, _ := svc.GetBucketVersioning(context.TODO(), &s3.GetBucketVersioningInput{Bucket: bucket.Name})
+		if versioningResp != nil {
+			if versioningResp.Status == types.BucketVersioningStatusEnabled {
+				bucketObject.Versioning = true
+			} else {
+				bucketObject.Versioning = false
+			}
+			if versioningResp.MFADelete == types.MFADeleteStatusEnabled {
+				bucketObject.VersioningMFAEnabled = true
+			} else {
+				bucketObject.VersioningMFAEnabled = false
+			}
 		}
 		result = append(result, bucketObject)
 

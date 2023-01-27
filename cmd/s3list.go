@@ -34,7 +34,7 @@ func s3List(cmd *cobra.Command, args []string) {
 	awsConfig := config.DefaultAwsConfig(*settings)
 	resultTitle := "S3 Buckets"
 	buckets := helpers.GetBucketDetails(awsConfig.S3Client())
-	keys := []string{"Name", "AccountID", "AccountName", "Region", "Is Private", "Policy is locked down", "ACLs are locked down", "Public Access Block", "Logs to", "Encryption", "Replication"}
+	keys := []string{"Name", "AccountID", "AccountName", "Region", "Is Private", "Policy is locked down", "ACLs are locked down", "Public Access Block", "Logs to", "Encryption", "Replication", "Versioning", "Versioning MFA delete"}
 	if includeTags != "" {
 		taglist := strings.Split(includeTags, ",")
 		for _, tag := range taglist {
@@ -88,6 +88,8 @@ func s3List(cmd *cobra.Command, args []string) {
 		if settings.IsVerbose() {
 			content["Policy"] = bucket.Policy
 		}
+		content["Versioning"] = bucket.Versioning
+		content["Versioning MFA delete"] = bucket.VersioningMFAEnabled
 		holder := format.OutputHolder{Contents: content}
 		output.AddHolder(holder)
 	}
