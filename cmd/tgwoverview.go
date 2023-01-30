@@ -22,35 +22,58 @@ If you choose the drawio output instead, you get a simple diagram showing the Tr
 	Run: tgwoverview,
 }
 
+var excludeRouteTarget string
+var includeBlackhole bool
+
 func init() {
 	tgwCmd.AddCommand(tgwoverviewCmd)
+	tgwoverviewCmd.Flags().StringVarP(&excludeRouteTarget, "exclude-target", "e", "", "Optional value to exclude a specific target from the output")
+	tgwoverviewCmd.Flags().BoolVarP(&includeBlackhole, "blackhole-routes", "b", false, "Optional value to include blackhole routes")
 }
 
 func tgwoverview(cmd *cobra.Command, args []string) {
 	awsConfig := config.DefaultAwsConfig(*settings)
 	resultTitle := "Transit Gateway Routes in account " + getName(helpers.GetAccountID(awsConfig.StsClient()))
 	gateways := helpers.GetAllTransitGateways(awsConfig.Ec2Client())
-	keys := []string{"Transit Gateway Account", "Transit Gateway ID", "Route Table ID", "Route Table Name", "CIDR", "Target Name", "Target ID", "Target Type"}
+	keys := []string{"Transit Gateway Account", "Transit Gateway", "Route Table", "CIDR", "Target", "Target Type", "State"}
 	if settings.IsDrawIO() {
 		keys = []string{"ID", "Name", "Destinations", "Image"}
 	}
 	output := format.OutputArray{Keys: keys, Settings: settings.NewOutputSettings()}
 	output.Settings.Title = resultTitle
+	output.Settings.SortKey = "Route Table"
 	if settings.IsDrawIO() {
 		createTgwOverviewDrawIO(&output, gateways)
 	} else {
 		for _, gateway := range gateways {
 			for _, routetable := range gateway.RouteTables {
 				for _, route := range routetable.Routes {
+					if excludeRouteTarget == route.Attachment.ResourceID {
+						continue
+					}
+					if !includeBlackhole && route.State == "blackhole" {
+						continue
+					}
 					content := make(map[string]interface{})
-					content["Transit Gateway Account"] = gateway.AccountID
-					content["Transit Gateway ID"] = gateway.ID
-					content["Route Table ID"] = routetable.ID
-					content["Route Table Name"] = routetable.Name
+					content["Transit Gateway Account"] = getNameWithId(gateway.AccountID)
+					content["Transit Gateway"] = getNameWithId(gateway.ID)
+					content["Route Table"] = getNameWithId(routetable.ID)
 					content["CIDR"] = route.CIDR
-					content["Target Name"] = getName(route.Attachment.ResourceID)
-					content["Target ID"] = route.Attachment.ResourceID
+					if route.Attachment.ResourceID != "" {
+						content["Target"] = getNameWithId(route.Attachment.ResourceID)
+					} else {
+						content["Target"] = ""
+					}
 					content["Target Type"] = helpers.TypeByResourceID(route.Attachment.ResourceID)
+					state := route.State
+					if output.Settings.UseEmoji {
+						if route.State == "blackhole" {
+							state = "❌ " + state
+						} else {
+							state = "✅ " + state
+						}
+					}
+					content["State"] = state
 					holder := format.OutputHolder{Contents: content}
 					output.AddHolder(holder)
 				}

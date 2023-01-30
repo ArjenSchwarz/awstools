@@ -86,6 +86,7 @@ func initConfig() {
 	}
 }
 
+// getName looks for the name of a resource in the namefile and returns that
 func getName(id string) string {
 	if settings.GetString("output.namefile") != "" {
 		nameFile, err := ioutil.ReadFile(settings.GetString("output.namefile"))
@@ -102,6 +103,16 @@ func getName(id string) string {
 		}
 	}
 	return id
+}
+
+// getNameWithId returns the name of a resource followed by the (id).
+// If no name is found, it will just return the id
+func getNameWithId(id string) string {
+	name := getName(id)
+	if name == id {
+		return id
+	}
+	return fmt.Sprintf("%v (%v)", name, id)
 }
 
 func contains(s []string, e string) bool {

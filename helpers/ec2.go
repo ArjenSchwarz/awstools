@@ -347,7 +347,7 @@ func GetRouteTablesForTransitGateway(tgwID string, svc *ec2.Client) map[string]T
 		result[routetable.ID] = routetable
 	}
 	for _, routetable := range result {
-		routetable.Routes = GetActiveRoutesForTransitGatewayRouteTable(routetable.ID, svc)
+		routetable.Routes = append(GetActiveRoutesForTransitGatewayRouteTable(routetable.ID, svc), GetBlackholeRoutesForTransitGatewayRouteTable(routetable.ID, svc)...)
 		routetable.SourceAttachments = GetSourceAttachmentsForTransitGatewayRouteTable(routetable.ID, svc)
 		result[routetable.ID] = routetable
 	}
@@ -405,6 +405,34 @@ func GetActiveRoutesForTransitGatewayRouteTable(routetableID string, svc *ec2.Cl
 				ID:         *route.TransitGatewayAttachments[0].TransitGatewayAttachmentId,
 				ResourceID: resourceid,
 			},
+			RouteType: string(route.Type),
+		}
+		result = append(result, tgwroute)
+	}
+	return result
+}
+
+// GetBlackholeRoutesForTransitGatewayRouteTable returns all routes that are currently active for a Transit Gateway route table
+func GetBlackholeRoutesForTransitGatewayRouteTable(routetableID string, svc *ec2.Client) []TransitGatewayRoute {
+	var result []TransitGatewayRoute
+	desiredState := "blackhole"
+	params := &ec2.SearchTransitGatewayRoutesInput{
+		TransitGatewayRouteTableId: &routetableID,
+		Filters: []types.Filter{
+			{
+				Name:   aws.String("state"),
+				Values: []string{desiredState},
+			},
+		},
+	}
+	resp, err := svc.SearchTransitGatewayRoutes(context.TODO(), params)
+	if err != nil {
+		panic(err)
+	}
+	for _, route := range resp.Routes {
+		tgwroute := TransitGatewayRoute{
+			State:     string(route.State),
+			CIDR:      *route.DestinationCidrBlock,
 			RouteType: string(route.Type),
 		}
 		result = append(result, tgwroute)

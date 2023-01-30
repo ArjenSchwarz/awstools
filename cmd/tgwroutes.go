@@ -42,6 +42,7 @@ func tgwroutes(cmd *cobra.Command, args []string) {
 	}
 	output := format.OutputArray{Keys: keys, Settings: settings.NewOutputSettings()}
 	output.Settings.Title = resultTitle
+	output.Settings.SortKey = "TargetGateway"
 	if settings.IsDrawIO() {
 		output.Settings.DrawIOHeader = createTgwRoutesDrawIOHeader()
 	}
@@ -66,7 +67,12 @@ func tgwroutes(cmd *cobra.Command, args []string) {
 		content := make(map[string]interface{})
 		content["ID"] = resourceid
 		content["Name"] = getName(resourceid)
-		content["TargetGateway"] = tgw
+		if getName(tgw) != tgw && getName(tgw) != "" {
+			content["TargetGateway"] = getNameWithId(tgw)
+		} else {
+			content["TargetGateway"] = tgw
+		}
+
 		if settings.IsDrawIO() {
 			switch helpers.TypeByResourceID(resourceid) {
 			case "vpc":
