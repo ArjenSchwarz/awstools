@@ -168,7 +168,7 @@ This will generate an overview of all available tables and what they look like s
 The dot format outputs a dot compatible file that you can then convert into an image using a tool like graphviz.
 
 ```bash
-$ awstools appmesh showmesh -m bookinfo-mesh -o dot                                                                   14:15:04
+$ awstools appmesh showmesh -m bookinfo-mesh -o dot
 digraph  {
 
   n5[label="details-v1-appmesh-bookinfo"];

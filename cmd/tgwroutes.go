@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"fmt"
+
 	"github.com/ArjenSchwarz/awstools/config"
 	"github.com/ArjenSchwarz/awstools/helpers"
 	format "github.com/ArjenSchwarz/go-output"
@@ -26,10 +28,12 @@ var tgwroutetablesCmd = &cobra.Command{
 }
 
 var tgwresourceid string
+var simplelist bool
 
 func init() {
 	tgwCmd.AddCommand(tgwroutetablesCmd)
 	tgwroutetablesCmd.Flags().StringVarP(&tgwresourceid, "resource-id", "r", "", "The id of the resource you want to limit to")
+	tgwroutetablesCmd.Flags().BoolVarP(&simplelist, "list", "l", false, "Only show a simple list of routes")
 }
 
 func tgwroutes(cmd *cobra.Command, args []string) {
@@ -39,6 +43,10 @@ func tgwroutes(cmd *cobra.Command, args []string) {
 	keys := []string{"ID", "Name", "Destinations", "TargetGateway"}
 	if settings.IsDrawIO() {
 		keys = append(keys, "Image")
+	}
+	if simplelist {
+		simplelistOnly(awsConfig)
+		return
 	}
 	output := format.OutputArray{Keys: keys, Settings: settings.NewOutputSettings()}
 	output.Settings.Title = resultTitle
@@ -81,6 +89,40 @@ func tgwroutes(cmd *cobra.Command, args []string) {
 				content["Image"] = drawio.AWSShape("Network Content Delivery", "Site-to-Site VPN")
 			}
 		}
+		holder := format.OutputHolder{Contents: content}
+		output.AddHolder(holder)
+	}
+	output.Write()
+}
+
+func simplelistOnly(awsConfig config.AWSConfig) {
+	keys := []string{"CIDR", "Target", "Route Type", "State"}
+	output := format.OutputArray{Keys: keys, Settings: settings.NewOutputSettings()}
+	output.Settings.Title = fmt.Sprintf("Simple route list for %s", tgwresourceid)
+	output.Settings.SortKey = "CIDR"
+
+	activeroutes := helpers.GetActiveRoutesForTransitGatewayRouteTable(tgwresourceid, awsConfig.Ec2Client())
+	blackholeroutes := helpers.GetBlackholeRoutesForTransitGatewayRouteTable(tgwresourceid, awsConfig.Ec2Client())
+
+	for _, route := range activeroutes {
+		content := make(map[string]interface{})
+		content["CIDR"] = route.CIDR
+		content["Target"] = getName(route.Attachment.ResourceID)
+		// content["Target Type"] = getName(route.Attachment.ResourceType)
+		content["Route Type"] = route.RouteType
+		content["State"] = route.State
+
+		holder := format.OutputHolder{Contents: content}
+		output.AddHolder(holder)
+	}
+	for _, route := range blackholeroutes {
+		content := make(map[string]interface{})
+		content["CIDR"] = route.CIDR
+		content["Target"] = "-"
+		// content["Target Type"] = "-"
+		content["Route Type"] = route.RouteType
+		content["State"] = route.State
+
 		holder := format.OutputHolder{Contents: content}
 		output.AddHolder(holder)
 	}

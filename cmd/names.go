@@ -38,7 +38,7 @@ func names(cmd *cobra.Command, args []string) {
 	names = append(names, helpers.GetAccountAlias(awsConfig.IamClient(), awsConfig.StsClient()))
 	allNames := helpers.FlattenStringMaps(names)
 	jsonString, _ := json.Marshal(allNames)
-	err := format.PrintByteSlice(jsonString, settings.GetString("output.file"))
+	err := format.PrintByteSlice(jsonString, settings.GetString("output.file"), format.NewOutputSettings().S3Bucket)
 	if err != nil {
 		log.Fatal(err.Error())
 	}
