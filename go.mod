@@ -27,7 +27,7 @@ require (
 	github.com/mattn/go-isatty v0.0.14 // indirect
 	github.com/pelletier/go-toml/v2 v2.0.1 // indirect
 	github.com/rivo/uniseg v0.2.0 // indirect
-	gopkg.in/yaml.v3 v3.0.0-20220512140231-539c8e751b99 // indirect
+	gopkg.in/yaml.v3 v3.0.0 // indirect
 )
 
 require (
