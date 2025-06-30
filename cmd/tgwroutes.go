@@ -83,7 +83,7 @@ func tgwroutes(cmd *cobra.Command, args []string) {
 
 		if settings.IsDrawIO() {
 			switch helpers.TypeByResourceID(resourceid) {
-			case "vpc":
+			case vpcResourceType:
 				content["Image"] = drawio.AWSShape("Network Content Delivery", "VPC")
 			case "vpn":
 				content["Image"] = drawio.AWSShape("Network Content Delivery", "Site-to-Site VPN")
@@ -157,7 +157,7 @@ func filterGateway(gateways []helpers.TransitGateway) (map[string]string, map[st
 		}
 	}
 	// For VPC pass over everything and remove what's not relevant
-	if limitertype == "vpc" {
+	if limitertype == vpcResourceType {
 		attachedtgwrts := []string{}
 		for tgwid, destinationvpcs := range tgwrts {
 			if !contains(destinationvpcs, tgwresourceid) && tgwid != attachedresources[tgwresourceid] {

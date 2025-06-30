@@ -16,7 +16,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 )
 
-//AWSConfig is a holder for AWS Config type information
+// AWSConfig is a holder for AWS Config type information
 type AWSConfig struct {
 	AccountAlias string
 	AccountID    string
@@ -83,42 +83,42 @@ func (config *AWSConfig) IAMClient() *iam.Client {
 	return iam.NewFromConfig(config.Config)
 }
 
-//AppmeshClient returns an AppMesh Client
+// AppmeshClient returns an AppMesh Client
 func (config *AWSConfig) AppmeshClient() *appmesh.Client {
 	return appmesh.NewFromConfig(config.Config)
 }
 
-//CloudformationClient returns an cloudformation Client
+// CloudformationClient returns an cloudformation Client
 func (config *AWSConfig) CloudformationClient() *cloudformation.Client {
 	return cloudformation.NewFromConfig(config.Config)
 }
 
-//Ec2Client returns an ec2 Client
+// Ec2Client returns an ec2 Client
 func (config *AWSConfig) Ec2Client() *ec2.Client {
 	return ec2.NewFromConfig(config.Config)
 }
 
-//RdsClient returns an rds Client
+// RdsClient returns an rds Client
 func (config *AWSConfig) RdsClient() *rds.Client {
 	return rds.NewFromConfig(config.Config)
 }
 
-//IamClient returns an IAM Client
+// IamClient returns an IAM Client
 func (config *AWSConfig) IamClient() *iam.Client {
 	return iam.NewFromConfig(config.Config)
 }
 
-//OrganizationsClient returns an organizations Client
+// OrganizationsClient returns an organizations Client
 func (config *AWSConfig) OrganizationsClient() *organizations.Client {
 	return organizations.NewFromConfig(config.Config)
 }
 
-//SsoClient returns an SSO Client
+// SsoClient returns an SSO Client
 func (config *AWSConfig) SsoClient() *ssoadmin.Client {
 	return ssoadmin.NewFromConfig(config.Config)
 }
 
-//S3Client returns an S3 Client
+// S3Client returns an S3 Client
 func (config *AWSConfig) S3Client() *s3.Client {
 	return s3.NewFromConfig(config.Config)
 }

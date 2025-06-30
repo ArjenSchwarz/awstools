@@ -38,20 +38,20 @@ type SSOPermissionSet struct {
 	Instance        *SSOInstance
 }
 
-//SSOPolicy represents a Managed Policy
+// SSOPolicy represents a Managed Policy
 type SSOPolicy struct {
 	Arn  string
 	Name string
 	// Policy string
 }
 
-//SSOAccount represents an AWS account managed by AWS
+// SSOAccount represents an AWS account managed by AWS
 type SSOAccount struct {
 	AccountID          string
 	AccountAssignments []SSOAccountAssignment
 }
 
-//SSOAccountAssignment represents which principals are tied to an account using which permission set
+// SSOAccountAssignment represents which principals are tied to an account using which permission set
 type SSOAccountAssignment struct {
 	PrincipalType string
 	PrincipalID   string
@@ -206,7 +206,7 @@ func (instance *SSOInstance) addAssignmentsToAccount(account SSOAccount) {
 	}
 }
 
-//GetAccountList returns a list of the account numbers in the SSO Instance
+// GetAccountList returns a list of the account numbers in the SSO Instance
 func (instance *SSOInstance) GetAccountList() []string {
 	accounts := []string{}
 	for _, account := range instance.Accounts {
@@ -215,7 +215,7 @@ func (instance *SSOInstance) GetAccountList() []string {
 	return accounts
 }
 
-//GetPermissionSetList returns a list of the permission sets in the SSO Instance
+// GetPermissionSetList returns a list of the permission sets in the SSO Instance
 func (instance *SSOInstance) GetPermissionSetList() []string {
 	permissionsets := []string{}
 	for _, permissionset := range instance.PermissionSets {
@@ -232,7 +232,7 @@ func (account *SSOAccount) addAssignmentToAccount(assignment SSOAccountAssignmen
 	account.AccountAssignments = append(assignments, assignment)
 }
 
-//GetPrincipalIdsForPermissionSet returns the ids of the principals that have been assigned to the provided permission set
+// GetPrincipalIdsForPermissionSet returns the ids of the principals that have been assigned to the provided permission set
 func (account *SSOAccount) GetPrincipalIdsForPermissionSet(permissionset SSOPermissionSet) []string {
 	accountchildren := []string{}
 	for _, assignment := range account.AccountAssignments {
@@ -243,7 +243,7 @@ func (account *SSOAccount) GetPrincipalIdsForPermissionSet(permissionset SSOPerm
 	return accountchildren
 }
 
-//GetManagedPolicyNames returns a slice containing the names of the policies attached to the permission set
+// GetManagedPolicyNames returns a slice containing the names of the policies attached to the permission set
 func (permissionset *SSOPermissionSet) GetManagedPolicyNames() []string {
 	policynames := []string{}
 	for _, policy := range permissionset.ManagedPolicies {
@@ -252,7 +252,7 @@ func (permissionset *SSOPermissionSet) GetManagedPolicyNames() []string {
 	return policynames
 }
 
-//GetAssignmentIdsByAccount returns the assigment's principal IDs
+// GetAssignmentIdsByAccount returns the assigment's principal IDs
 func (permissionset *SSOPermissionSet) GetAssignmentIdsByAccount(accountnr string) []string {
 	result := []string{}
 	for _, account := range permissionset.Accounts {

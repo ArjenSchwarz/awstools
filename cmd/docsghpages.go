@@ -34,11 +34,11 @@ url: %s
 			name := filepath.Base(filename)
 			base := strings.TrimSuffix(name, path.Ext(name))
 			url := "/awstools/" + strings.ToLower(base) + "/"
-			return fmt.Sprintf(fmTemplate, now, strings.Replace(base, "_", " ", -1), base, url)
+			return fmt.Sprintf(fmTemplate, now, strings.ReplaceAll(base, "_", " "), base, url)
 		}
 		linkHandler := func(name string) string {
 			base := strings.TrimSuffix(name, path.Ext(name))
-			return "#" + strings.Replace(strings.ToLower(base), "_", "-", -1)
+			return "#" + strings.ReplaceAll(strings.ToLower(base), "_", "-")
 		}
 		rootCmd.DisableAutoGenTag = true
 		err := doc.GenMarkdownTreeCustom(rootCmd, docsdir, filePrepender, linkHandler)

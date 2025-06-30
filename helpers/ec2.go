@@ -78,7 +78,7 @@ func GetAllEC2ResourceNames(svc *ec2.Client) map[string]string {
 	return result
 }
 
-//addAllVPCNames returns the names of all vpcs in a map
+// addAllVPCNames returns the names of all vpcs in a map
 func addAllVPCNames(svc *ec2.Client, result map[string]string) map[string]string {
 	resp, err := svc.DescribeVpcs(context.TODO(), &ec2.DescribeVpcsInput{})
 	if err != nil {
@@ -146,7 +146,7 @@ func addAllTransitGatewayNames(svc *ec2.Client, result map[string]string) map[st
 	return result
 }
 
-//addAllVPCNames returns the names of all vpns in a map
+// addAllVPCNames returns the names of all vpns in a map
 func addAllVpnNames(svc *ec2.Client, result map[string]string) map[string]string {
 	resp, err := svc.DescribeVpnConnections(context.TODO(), &ec2.DescribeVpnConnectionsInput{})
 	if err != nil {
@@ -211,7 +211,7 @@ type VPCRoute struct {
 	DestinationTarget string
 }
 
-//GetAllVPCRouteTables returns all the Routetables in the account and region
+// GetAllVPCRouteTables returns all the Routetables in the account and region
 func GetAllVPCRouteTables(svc *ec2.Client) []VPCRouteTable {
 	var result []VPCRouteTable
 	resp, err := svc.DescribeRouteTables(context.TODO(), &ec2.DescribeRouteTablesInput{})
@@ -482,4 +482,83 @@ func getNameFromTags(tags []types.Tag) string {
 		}
 	}
 	return ""
+}
+
+func GetNetworkInterfaces(svc *ec2.Client) []types.NetworkInterface {
+	params := &ec2.DescribeNetworkInterfacesInput{}
+	resp, err := svc.DescribeNetworkInterfaces(context.TODO(), params)
+	if err != nil {
+		panic(err)
+	}
+	return resp.NetworkInterfaces
+}
+
+func GetTransitGatewayFromNetworkInterface(netinterface types.NetworkInterface, svc *ec2.Client) string {
+	params := &ec2.DescribeTransitGatewayVpcAttachmentsInput{
+		Filters: []types.Filter{
+			{
+				Name:   aws.String("vpc-id"),
+				Values: []string{*netinterface.VpcId},
+			},
+		},
+	}
+	resp, err := svc.DescribeTransitGatewayVpcAttachments(context.Background(), params)
+	if err != nil {
+		panic(err)
+	}
+	if len(resp.TransitGatewayVpcAttachments) > 0 {
+		if stringInSlice(*netinterface.SubnetId, resp.TransitGatewayVpcAttachments[0].SubnetIds) {
+			return *resp.TransitGatewayVpcAttachments[0].TransitGatewayAttachmentId
+		}
+	}
+	return ""
+}
+
+func GetVPCEndpointFromNetworkInterface(netinterface types.NetworkInterface, svc *ec2.Client) *types.VpcEndpoint {
+	// TODO: Consider caching this
+	params := &ec2.DescribeVpcEndpointsInput{
+		Filters: []types.Filter{
+			{
+				Name:   aws.String("vpc-id"),
+				Values: []string{*netinterface.VpcId},
+			},
+		},
+	}
+	resp, err := svc.DescribeVpcEndpoints(context.Background(), params)
+	if err != nil {
+		panic(err)
+	}
+	if len(resp.VpcEndpoints) > 0 {
+		for _, endpoint := range resp.VpcEndpoints {
+			if stringInSlice(*netinterface.NetworkInterfaceId, endpoint.NetworkInterfaceIds) {
+				return &endpoint
+			}
+		}
+	}
+	return nil
+}
+
+func GetNatGatewayFromNetworkInterface(netinterface types.NetworkInterface, svc *ec2.Client) *types.NatGateway {
+	params := &ec2.DescribeNatGatewaysInput{
+		Filter: []types.Filter{
+			{
+				Name:   aws.String("vpc-id"),
+				Values: []string{*netinterface.VpcId},
+			},
+		},
+	}
+	resp, err := svc.DescribeNatGateways(context.Background(), params)
+	if err != nil {
+		panic(err)
+	}
+	if len(resp.NatGateways) > 0 {
+		for _, natgw := range resp.NatGateways {
+			for _, address := range natgw.NatGatewayAddresses {
+				if *address.NetworkInterfaceId == *netinterface.NetworkInterfaceId {
+					return &natgw
+				}
+			}
+		}
+	}
+	return nil
 }

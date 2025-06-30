@@ -24,8 +24,8 @@ func GetRDSName(rdsname *string, svc *rds.Client) string {
 	return ""
 }
 
-//GetAllRdsResourceNames gets a list of all names for RDS objects
-//TODO: clusters, subnet groups, parameter groups, option groups
+// GetAllRdsResourceNames gets a list of all names for RDS objects
+// TODO: clusters, subnet groups, parameter groups, option groups
 func GetAllRdsResourceNames(svc *rds.Client) map[string]string {
 	result := make(map[string]string)
 	result = addAllInstanceNames(svc, result)

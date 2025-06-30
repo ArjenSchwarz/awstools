@@ -32,7 +32,7 @@ func ssoOverviewByAccount(cmd *cobra.Command, args []string) {
 	awsConfig := config.DefaultAwsConfig(*settings)
 	resultTitle := "SSO Overview per account"
 	ssoInstance := helpers.GetSSOAccountInstance(awsConfig.SsoClient())
-	keys := []string{"AccountID", "PermissionSet", "Principal"}
+	keys := []string{"AccountID", permissionSetColumn, "Principal"}
 	if settings.IsVerbose() {
 		keys = append(keys, "ManagedPolicies", "InlinePolicy")
 	}
@@ -51,7 +51,7 @@ func ssoOverviewByAccount(cmd *cobra.Command, args []string) {
 				for _, assignment := range account.AccountAssignments {
 					content := make(map[string]interface{})
 					content["AccountID"] = getName(account.AccountID)
-					content["PermissionSet"] = assignment.PermissionSet.Name
+					content[permissionSetColumn] = assignment.PermissionSet.Name
 					content["Principal"] = getName(assignment.PrincipalID)
 					if settings.IsVerbose() {
 						content["ManagedPolicies"] = assignment.PermissionSet.GetManagedPolicyNames()
@@ -121,7 +121,7 @@ func createSSOAccountDrawIOContents(instance helpers.SSOInstance, output *format
 				content := make(map[string]interface{})
 				content["Name"] = getName(assignment.PermissionSet.Name)
 				content["DrawIOID"] = getName(assignment.PermissionSet.Name + account.AccountID)
-				content["Type"] = "PermissionSet"
+				content["Type"] = permissionSetColumn
 				content["Image"] = drawio.AWSShape("Security Identity Compliance", "Permissions")
 				content["Children"] = assignment.PermissionSet.GetAssignmentIdsByAccount(account.AccountID)
 				holder := format.OutputHolder{Contents: content}

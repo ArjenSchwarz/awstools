@@ -3,7 +3,6 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"os"
 
 	"github.com/ArjenSchwarz/awstools/config"
@@ -49,14 +48,30 @@ func init() {
 	rootCmd.PersistentFlags().String("region", "", "Use a specific region")
 	rootCmd.PersistentFlags().Bool("emoji", false, "Use emoji in the output")
 
-	viper.BindPFlag("output.verbose", rootCmd.PersistentFlags().Lookup("verbose"))
-	viper.BindPFlag("output.format", rootCmd.PersistentFlags().Lookup("output"))
-	viper.BindPFlag("aws.profile", rootCmd.PersistentFlags().Lookup("profile"))
-	viper.BindPFlag("aws.region", rootCmd.PersistentFlags().Lookup("region"))
-	viper.BindPFlag("output.file", rootCmd.PersistentFlags().Lookup("file"))
-	viper.BindPFlag("output.append", rootCmd.PersistentFlags().Lookup("append"))
-	viper.BindPFlag("output.namefile", rootCmd.PersistentFlags().Lookup("namefile"))
-	viper.BindPFlag("output.use-emoji", rootCmd.PersistentFlags().Lookup("emoji"))
+	if err := viper.BindPFlag("output.verbose", rootCmd.PersistentFlags().Lookup("verbose")); err != nil {
+		panic(err)
+	}
+	if err := viper.BindPFlag("output.format", rootCmd.PersistentFlags().Lookup("output")); err != nil {
+		panic(err)
+	}
+	if err := viper.BindPFlag("aws.profile", rootCmd.PersistentFlags().Lookup("profile")); err != nil {
+		panic(err)
+	}
+	if err := viper.BindPFlag("aws.region", rootCmd.PersistentFlags().Lookup("region")); err != nil {
+		panic(err)
+	}
+	if err := viper.BindPFlag("output.file", rootCmd.PersistentFlags().Lookup("file")); err != nil {
+		panic(err)
+	}
+	if err := viper.BindPFlag("output.append", rootCmd.PersistentFlags().Lookup("append")); err != nil {
+		panic(err)
+	}
+	if err := viper.BindPFlag("output.namefile", rootCmd.PersistentFlags().Lookup("namefile")); err != nil {
+		panic(err)
+	}
+	if err := viper.BindPFlag("output.use-emoji", rootCmd.PersistentFlags().Lookup("emoji")); err != nil {
+		panic(err)
+	}
 
 	viper.SetDefault("output.table.style", "Default")
 	viper.SetDefault("output.table.max-column-width", 50)
@@ -89,7 +104,7 @@ func initConfig() {
 // getName looks for the name of a resource in the namefile and returns that
 func getName(id string) string {
 	if settings.GetString("output.namefile") != "" {
-		nameFile, err := ioutil.ReadFile(settings.GetString("output.namefile"))
+		nameFile, err := os.ReadFile(settings.GetString("output.namefile"))
 		if err != nil {
 			panic(err)
 		}

@@ -3,7 +3,6 @@ package helpers
 import (
 	"context"
 	"fmt"
-	"reflect"
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -54,8 +53,8 @@ func GetBucketDetails(svc *s3.Client) []S3Bucket {
 		isPublic := false
 		policyIsPublic := false
 		if statusresp != nil {
-			isPublic = statusresp.PolicyStatus.IsPublic
-			policyIsPublic = statusresp.PolicyStatus.IsPublic
+			isPublic = aws.ToBool(statusresp.PolicyStatus.IsPublic)
+			policyIsPublic = aws.ToBool(statusresp.PolicyStatus.IsPublic)
 		}
 		aclresp, _ := svc.GetBucketAcl(context.TODO(), &s3.GetBucketAclInput{Bucket: bucket.Name})
 		acls := make([]types.Grant, 0)
@@ -73,18 +72,16 @@ func GetBucketDetails(svc *s3.Client) []S3Bucket {
 		// PublicAccessBlock overrides other public making settings
 		publicresp, _ := svc.GetPublicAccessBlock(context.TODO(), &s3.GetPublicAccessBlockInput{Bucket: bucket.Name})
 		if publicresp != nil {
-			if (publicresp.PublicAccessBlockConfiguration.IgnorePublicAcls || !openacls) && publicresp.PublicAccessBlockConfiguration.RestrictPublicBuckets {
+			if (aws.ToBool(publicresp.PublicAccessBlockConfiguration.IgnorePublicAcls) || !openacls) && aws.ToBool(publicresp.PublicAccessBlockConfiguration.RestrictPublicBuckets) {
 				isPublic = false
 			}
 		}
 
 		locationresp, err := svc.GetBucketLocation(context.TODO(), &s3.GetBucketLocationInput{Bucket: bucket.Name})
-		if err != nil {
-			panic(err)
-		}
-
 		region := "us-east-1"
-		if locationresp.LocationConstraint != "" {
+		if err != nil {
+			region = "ERROR"
+		} else if locationresp.LocationConstraint != "" {
 			region = string(locationresp.LocationConstraint)
 		}
 		bucketObject := S3Bucket{
@@ -154,40 +151,40 @@ func GetBucketDetails(svc *s3.Client) []S3Bucket {
 }
 
 func (bucket *S3Bucket) GetReplicationStrings() []string {
-	ruleslist := make([]string, 0, 0)
+	ruleslist := make([]string, 0)
 	for _, rule := range bucket.Replication.Rules {
 		var filter string
-		switch v := rule.Filter.(type) {
-		// And member type is complex for when you have multiple items
-		case *types.ReplicationRuleFilterMemberAnd:
-			prefixPortion := ""
-			// Prefix is optional
-			if *v.Value.Prefix != "" {
-				prefixPortion = fmt.Sprintf("Prefix: %s, and ", *v.Value.Prefix)
-			}
-			tagsSlice := make([]string, 0, 0)
-			for _, replicationtag := range v.Value.Tags {
-				tagsSlice = append(tagsSlice, fmt.Sprintf("Tag %s:%s", *replicationtag.Key, *replicationtag.Value))
-			}
-			filter = fmt.Sprintf("%s%s", prefixPortion, strings.Join(tagsSlice, " and "))
-		case *types.ReplicationRuleFilterMemberPrefix:
-			if v.Value == "" {
-				filter = "Entire bucket"
+		if rule.Filter != nil {
+			// Check if it's an And filter (complex)
+			if rule.Filter.And != nil {
+				prefixPortion := ""
+				// Prefix is optional
+				if aws.ToString(rule.Filter.And.Prefix) != "" {
+					prefixPortion = fmt.Sprintf("Prefix: %s, and ", aws.ToString(rule.Filter.And.Prefix))
+				}
+				tagsSlice := make([]string, 0)
+				for _, replicationtag := range rule.Filter.And.Tags {
+					tagsSlice = append(tagsSlice, fmt.Sprintf("Tag %s:%s", aws.ToString(replicationtag.Key), aws.ToString(replicationtag.Value)))
+				}
+				filter = fmt.Sprintf("%s%s", prefixPortion, strings.Join(tagsSlice, " and "))
+			} else if rule.Filter.Prefix != nil {
+				// Simple prefix filter
+				if aws.ToString(rule.Filter.Prefix) == "" {
+					filter = "Entire bucket"
+				} else {
+					filter = fmt.Sprintf("Prefix: %s", aws.ToString(rule.Filter.Prefix))
+				}
+			} else if rule.Filter.Tag != nil {
+				// Simple tag filter
+				filter = fmt.Sprintf("Tag %s:%s", aws.ToString(rule.Filter.Tag.Key), aws.ToString(rule.Filter.Tag.Value))
 			} else {
-				filter = fmt.Sprintf("Prefix: %s", v.Value)
+				filter = "Unknown filter"
 			}
-		case *types.ReplicationRuleFilterMemberTag:
-			filter = fmt.Sprintf("Tag %s:%s", *v.Value.Key, *v.Value.Value)
-		default:
-			// This likely means that the prefix is set in the old way
-			if *rule.Prefix != "" {
-				filter = fmt.Sprintf("Prefix: %s", *rule.Prefix)
-			} else {
-				filter = fmt.Sprintf("Unknown filter %v", reflect.TypeOf(v))
-			}
-
+		} else {
+			// No filter specified
+			filter = "Entire bucket"
 		}
-		ruleslist = append(ruleslist, fmt.Sprintf("%s => %s", filter, *rule.Destination.Bucket))
+		ruleslist = append(ruleslist, fmt.Sprintf("%s => %s", filter, aws.ToString(rule.Destination.Bucket)))
 	}
 	return ruleslist
 }

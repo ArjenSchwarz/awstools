@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(go:*)",
+      "Bash(make test:*)",
+      "Bash(grep:*)",
+      "Bash(make:*)",
+      "Bash(git --no-pager status)",
+      "Bash(git --no-pager diff --cached --name-status)",
+      "Bash(git --no-pager diff --name-status)",
+      "Bash(git --no-pager branch --show-current)"
+    ],
+    "deny": []
+  }
+}

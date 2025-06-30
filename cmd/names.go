@@ -10,8 +10,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var appendTo *bool
-
 // namesCmd represents the names command
 var namesCmd = &cobra.Command{
 	Use:   "names",

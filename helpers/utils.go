@@ -2,7 +2,7 @@ package helpers
 
 import (
 	"encoding/json"
-	"io/ioutil"
+	"os"
 	"strings"
 )
 
@@ -18,7 +18,7 @@ func stringInSlice(a string, list []string) bool {
 
 // GetStringMapFromJSONFile parses a JSON file and returns it as a string map
 func GetStringMapFromJSONFile(filename string) map[string]string {
-	originalfile, err := ioutil.ReadFile(filename)
+	originalfile, err := os.ReadFile(filename)
 	if err != nil {
 		panic(err)
 	}

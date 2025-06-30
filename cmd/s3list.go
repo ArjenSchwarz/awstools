@@ -7,6 +7,7 @@ import (
 	"github.com/ArjenSchwarz/awstools/config"
 	"github.com/ArjenSchwarz/awstools/helpers"
 	format "github.com/ArjenSchwarz/go-output"
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/spf13/cobra"
 )
@@ -105,12 +106,12 @@ func s3EncryptionToString(rules []types.ServerSideEncryptionRule) string {
 }
 
 func parsePublicAccessBlock(config types.PublicAccessBlockConfiguration) string {
-	if config.BlockPublicAcls && config.BlockPublicPolicy && config.IgnorePublicAcls && config.RestrictPublicBuckets {
+	if aws.ToBool(config.BlockPublicAcls) && aws.ToBool(config.BlockPublicPolicy) && aws.ToBool(config.IgnorePublicAcls) && aws.ToBool(config.RestrictPublicBuckets) {
 		return "All true"
 	}
-	if !config.BlockPublicAcls && !config.BlockPublicPolicy && !config.IgnorePublicAcls && !config.RestrictPublicBuckets {
+	if !aws.ToBool(config.BlockPublicAcls) && !aws.ToBool(config.BlockPublicPolicy) && !aws.ToBool(config.IgnorePublicAcls) && !aws.ToBool(config.RestrictPublicBuckets) {
 		return "All false"
 	}
 	return fmt.Sprintf("Block Public ACLs: %v, Block Public Policy: %v, Ignore Public ACLs: %v, Restrict Public Buckets: %v",
-		config.BlockPublicAcls, config.BlockPublicPolicy, config.IgnorePublicAcls, config.RestrictPublicBuckets)
+		aws.ToBool(config.BlockPublicAcls), aws.ToBool(config.BlockPublicPolicy), aws.ToBool(config.IgnorePublicAcls), aws.ToBool(config.RestrictPublicBuckets))
 }

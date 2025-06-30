@@ -31,7 +31,7 @@ func orgstructure(cmd *cobra.Command, args []string) {
 	awsConfig := config.DefaultAwsConfig(*settings)
 	resultTitle := "AWS Organization Structure"
 	organization := helpers.GetFullOrganization(awsConfig.OrganizationsClient())
-	keys := []string{"Name", "Type", "Children"}
+	keys := []string{"Name", "Type", childrenColumn}
 	if settings.IsDrawIO() {
 		keys = append(keys, "Image")
 	}
@@ -41,7 +41,7 @@ func orgstructure(cmd *cobra.Command, args []string) {
 		output.Settings.DrawIOHeader = createOrganizationsStructureDrawIOHeader()
 	}
 	if output.Settings.NeedsFromToColumns() {
-		output.Settings.AddFromToColumns("Name", "Children")
+		output.Settings.AddFromToColumns("Name", childrenColumn)
 	}
 	traverseOrgStructureEntry(organization, &output)
 	output.Write()
@@ -56,7 +56,7 @@ func traverseOrgStructureEntry(entry helpers.OrganizationEntry, output *format.O
 	content := make(map[string]interface{})
 	content["Name"] = entry.String()
 	content["Type"] = entry.Type
-	content["Children"] = entry.String()
+	content[childrenColumn] = entry.String()
 	if settings.IsDrawIO() {
 		content["Image"] = imageConversion[entry.Type]
 	}
@@ -65,7 +65,7 @@ func traverseOrgStructureEntry(entry helpers.OrganizationEntry, output *format.O
 		children = append(children, child.String())
 		traverseOrgStructureEntry(child, output)
 	}
-	content["Children"] = children
+	content[childrenColumn] = children
 	holder := format.OutputHolder{Contents: content}
 	output.AddHolder(holder)
 }
@@ -76,7 +76,7 @@ func createOrganizationsStructureDrawIOHeader() drawio.Header {
 	drawioheader.SetLayout(drawio.LayoutVerticalTree)
 	connection := drawio.NewConnection()
 	connection.Invert = false
-	connection.From = "Children"
+	connection.From = childrenColumn
 	connection.To = "Name"
 	drawioheader.AddConnection(connection)
 	return drawioheader

@@ -53,10 +53,7 @@ func showmesh(cmd *cobra.Command, args []string) {
 		if settings.IsDrawIO() {
 			content["Image"] = drawio.AWSShape("Containers", "Container")
 		}
-		endpoints := []string{}
-		for _, backendNode := range node.BackendNodes {
-			endpoints = append(endpoints, backendNode)
-		}
+		endpoints := append([]string{}, node.BackendNodes...)
 		content["Endpoints"] = endpoints
 		holder := format.OutputHolder{Contents: content}
 		output.AddHolder(holder)

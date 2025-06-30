@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"log"
 	"regexp"
 
 	"github.com/ArjenSchwarz/awstools/config"
@@ -10,6 +9,8 @@ import (
 	"github.com/ArjenSchwarz/go-output/drawio"
 	"github.com/spf13/cobra"
 )
+
+var alphanumRegex = regexp.MustCompile("[^a-zA-Z0-9]+")
 
 // userlistCmd represents the userlist command
 var userlistCmd = &cobra.Command{
@@ -35,7 +36,7 @@ func detailUsers(cmd *cobra.Command, args []string) {
 	for _, group := range grouplist {
 		objectlist = append(objectlist, group)
 	}
-	keys := []string{"Name", "Type", "Groups", "Users", "PolicyNames", "InheritedPolicyNames", "Console", "API"}
+	keys := []string{nameColumn, "Type", "Groups", "Users", "PolicyNames", "InheritedPolicyNames", "Console", "API"}
 	if settings.IsDrawIO() {
 		keys = append(keys, "Image")
 		keys = append(keys, "DrawioID")
@@ -50,12 +51,12 @@ func detailUsers(cmd *cobra.Command, args []string) {
 		output.Settings.DrawIOHeader = createIamuserlistDrawIOHeader()
 	}
 	if output.Settings.NeedsFromToColumns() {
-		output.Settings.AddFromToColumns("Name", "Groups")
+		output.Settings.AddFromToColumns(nameColumn, "Groups")
 	}
 	policylist := make(map[string]helpers.AttachedIAMPolicy)
 	for _, object := range objectlist {
 		content := make(map[string]interface{})
-		content["Name"] = object.GetName()
+		content[nameColumn] = object.GetName()
 		content["Type"] = object.GetObjectType()
 		if user, ok := object.(helpers.IAMUser); ok {
 			if user.HasUsedPassword() {
@@ -68,10 +69,8 @@ func detailUsers(cmd *cobra.Command, args []string) {
 		content["Groups"] = object.GetGroups()
 		content["Users"] = object.GetUsers()
 		directPolicyNames := make([]string, 0, len(object.GetDirectPolicies()))
-		directPolicyDetails := make([]string, 0, len(object.GetDirectPolicies()))
-		for policyname, policydetail := range object.GetDirectPolicies() {
+		for policyname := range object.GetDirectPolicies() {
 			directPolicyNames = append(directPolicyNames, policyname)
-			directPolicyDetails = append(directPolicyDetails, policydetail)
 			if settings.IsVerbose() {
 				// Get the attached policies
 				policy := helpers.AttachedIAMPolicy{Name: policyname}
@@ -84,10 +83,8 @@ func detailUsers(cmd *cobra.Command, args []string) {
 		}
 		content["PolicyNames"] = directPolicyNames
 		inheritedPolicyNames := make([]string, 0, len(object.GetInheritedPolicies()))
-		inheritedPolicyDetails := make([]string, 0, len(object.GetInheritedPolicies()))
-		for policyname, policydetail := range object.GetInheritedPolicies() {
+		for policyname := range object.GetInheritedPolicies() {
 			inheritedPolicyNames = append(inheritedPolicyNames, policyname)
-			inheritedPolicyDetails = append(inheritedPolicyDetails, policydetail)
 		}
 		content["InheritedPolicyNames"] = inheritedPolicyNames
 
@@ -105,7 +102,7 @@ func detailUsers(cmd *cobra.Command, args []string) {
 	// This will only happen when verbose is set
 	for _, policy := range policylist {
 		content := make(map[string]interface{})
-		content["Name"] = policy.Name
+		content[nameColumn] = policy.Name
 		content["Type"] = "Policy"
 		if settings.IsDrawIO() {
 			content["Image"] = drawio.AWSShape("Security Identity Compliance", "Permissions")
@@ -131,14 +128,14 @@ func createIamuserlistDrawIOHeader() drawio.Header {
 	drawioheader.SetLayout(drawio.LayoutHorizontalFlow)
 	connection := drawio.NewConnection()
 	connection.From = "Groups"
-	connection.To = "Name"
+	connection.To = nameColumn
 	connection.Invert = false
 	connection.Label = "Member of"
 	drawioheader.AddConnection(connection)
 	if settings.IsVerbose() {
 		connection2 := drawio.NewConnection()
 		connection2.From = "PolicyNames"
-		connection2.To = "Name"
+		connection2.To = nameColumn
 		connection2.Invert = false
 		connection2.Label = "Has Policy"
 		drawioheader.AddConnection(connection2)
@@ -148,11 +145,7 @@ func createIamuserlistDrawIOHeader() drawio.Header {
 
 func createID(toclean string) string {
 	// Make a Regex to say we only want letters and numbers
-	reg, err := regexp.Compile("[^a-zA-Z0-9]+")
-	if err != nil {
-		log.Fatal(err)
-	}
-	return reg.ReplaceAllString(toclean, "")
+	return alphanumRegex.ReplaceAllString(toclean, "")
 }
 
 func init() {

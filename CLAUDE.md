@@ -1,0 +1,82 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Development Commands
+
+```bash
+# Format Go code (always run after modifying .go files)
+go fmt
+
+# Run tests (always run after finishing tasks involving .go files)
+go test ./...
+
+# Build and test locally
+make local
+
+# Run linting and tests
+make test
+
+# Build the project
+make build
+```
+
+## Architecture Overview
+
+awstools is a CLI application built with Go and the Cobra framework for AWS resource management and analysis. The application focuses on complex AWS operations that require multiple CLI calls.
+
+### Core Structure
+
+- **main.go**: Entry point that delegates to cmd package
+- **cmd/**: Contains all CLI command definitions using Cobra framework
+  - **root.go**: Base command configuration with global flags and settings
+  - Individual command files for each AWS service (iam.go, vpc.go, s3.go, etc.)
+- **helpers/**: Core business logic and AWS SDK interactions
+  - Service-specific helpers (ec2.go, s3.go, iam.go, etc.)
+  - **utils.go**: Common utility functions
+- **config/**: Configuration management using Viper
+  - **config.go**: Global configuration structure and methods
+  - **awsconfig.go**: AWS-specific configuration handling
+
+### Key Design Patterns
+
+1. **Command Pattern**: Each AWS service has its own command file in cmd/ with corresponding helper functions
+2. **Configuration Management**: Uses Viper for config files (.awstools.yaml) and environment variables
+3. **Output Flexibility**: Supports multiple output formats (JSON, CSV, table, HTML, dot, drawio, mermaid) via github.com/ArjenSchwarz/go-output
+4. **AWS SDK v2**: Uses aws-sdk-go-v2 for all AWS interactions
+5. **Naming Resolution**: Optional naming files for human-readable resource names
+
+### AWS Services Integration
+
+The application integrates with these AWS services:
+- IAM (users, roles, policies)
+- VPC (routes, peering, security groups)
+- CloudFormation (stacks, resources)
+- Organizations (structure, accounts)
+- SSO (permission sets, accounts)
+- S3 (bucket listing, versioning)
+- App Mesh (meshes, nodes, routes)
+- Transit Gateway (routes, attachments)
+- EC2 (instances, ENIs)
+
+### Configuration System
+
+- Config files: .awstools.yaml (local directory or home directory)
+- Supports YAML, JSON, and TOML formats
+- AWS credentials from standard locations (env vars, ~/.aws/credentials, IAM roles)
+- Profile and region overrides via flags
+- Naming files for resource name resolution
+
+### Output System
+
+All commands support consistent output options:
+- Multiple formats: json (default), csv, table, html, dot, drawio, mermaid
+- File output with append capability for multi-account data collection
+- Verbose mode for additional details
+- Emoji support for enhanced visual output
+
+## Agent use
+
+1. Use tools when available. Consider the Makefile for some of these tools. e.g. `make go-functions` will list all functions in the project and `make test` will run linting and unit tests.
+2. Prefer simple solutions over complex ones.
+3. Verify all changes before stating a task is completed

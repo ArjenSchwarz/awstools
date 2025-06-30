@@ -28,15 +28,15 @@ func ssoListPermissionSets(cmd *cobra.Command, args []string) {
 	awsConfig := config.DefaultAwsConfig(*settings)
 	resultTitle := "SSO Overview per permission set"
 	ssoInstance := helpers.GetSSOAccountInstance(awsConfig.SsoClient())
-	keys := []string{"PermissionSet", "AccountIDs", "Arn", "ManagedPolicies", "InlinePolicy"}
+	keys := []string{permissionSetColumn, "AccountIDs", "Arn", "ManagedPolicies", "InlinePolicy"}
 	output := format.OutputArray{Keys: keys, Settings: settings.NewOutputSettings()}
 	output.Settings.Title = resultTitle
-	output.Settings.SortKey = "PermissionSet"
+	output.Settings.SortKey = permissionSetColumn
 
 	for _, permissionset := range ssoInstance.PermissionSets {
 		permchildren := []string{}
 		content := make(map[string]interface{})
-		content["PermissionSet"] = permissionset.Name
+		content[permissionSetColumn] = permissionset.Name
 		content["Arn"] = permissionset.Arn
 		if settings.IsVerbose() {
 			content["ManagedPolicies"] = permissionset.GetManagedPolicyNames()

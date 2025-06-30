@@ -125,7 +125,7 @@ func createTgwOverviewDrawIO(output *format.OutputArray, gateways []helpers.Tran
 			}
 			image := ""
 			switch helpers.TypeByResourceID(resourceid) {
-			case "vpc":
+			case vpcResourceType:
 				image = drawio.AWSShape("Network Content Delivery", "VPC")
 			case "vpn":
 				image = drawio.AWSShape("Network Content Delivery", "Site-to-Site VPN")

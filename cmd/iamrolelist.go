@@ -38,7 +38,7 @@ func iamrolelist(cmd *cobra.Command, args []string) {
 	awsConfig := config.DefaultAwsConfig(*settings)
 	resultTitle := "IAM Role overview for account " + getName(helpers.GetAccountID(awsConfig.StsClient()))
 	roles, policies := helpers.GetRolesAndPolicies(settings.IsVerbose(), awsConfig.IamClient())
-	keys := []string{"Name", "Type", "AssumedFrom", "Policies", "Roles"}
+	keys := []string{nameColumn, "Type", "AssumedFrom", "Policies", "Roles"}
 	if settings.IsDrawIO() {
 		keys = append(keys, "Image")
 		keys = append(keys, "DrawioID")
@@ -49,11 +49,11 @@ func iamrolelist(cmd *cobra.Command, args []string) {
 		output.Settings.DrawIOHeader = createIamrolelistDrawIOHeader()
 	}
 	if output.Settings.NeedsFromToColumns() {
-		output.Settings.AddFromToColumns("Name", "Policies")
+		output.Settings.AddFromToColumns(nameColumn, "Policies")
 	}
 	for _, role := range roles {
 		content := make(map[string]interface{})
-		content["Name"] = role.Name
+		content[nameColumn] = role.Name
 		content["AssumedFrom"] = role.CanBeAssumedFrom()
 		content["Type"] = role.Type
 		content["Policies"] = role.GetPolicyNames()
@@ -66,7 +66,7 @@ func iamrolelist(cmd *cobra.Command, args []string) {
 	}
 	for policyname, policy := range policies {
 		content := make(map[string]interface{})
-		content["Name"] = policyname
+		content[nameColumn] = policyname
 		if settings.IsDrawIO() {
 			content["DrawioID"] = policyname
 			content["Image"] = drawio.AWSShape("Security Identity Compliance", "Permissions")
@@ -87,7 +87,7 @@ func createIamrolelistDrawIOHeader() drawio.Header {
 	drawioheader.SetLayout(drawio.LayoutHorizontalFlow)
 	connection := drawio.NewConnection()
 	connection.From = "Policies"
-	connection.To = "Name"
+	connection.To = nameColumn
 	connection.Invert = false
 	connection.Label = "Has Policy"
 	drawioheader.AddConnection(connection)
