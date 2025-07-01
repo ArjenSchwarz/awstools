@@ -2,12 +2,31 @@ on: [push, pull_request]
 
 jobs:
   test:
-    name: Build binary
+    name: Build and test
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-go@v3
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
         with:
-          go-version: '1.18' # The Go version to download (if necessary) and use.
-      - run: go build
+          go-version: '1.24.1' # The Go version to download (if necessary) and use.
+      
+      - name: Check go fmt
+        run: |
+          if [ "$(gofmt -s -l . | wc -l)" -gt 0 ]; then
+            echo "The following files are not formatted:"
+            gofmt -s -l .
+            exit 1
+          fi
+      
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+          args: --timeout=5m
+      
+      - name: Build binary
+        run: go build
+      
+      - name: Run tests
+        run: go test ./...

@@ -14,10 +14,10 @@ jobs:
         goarch: [amd64, arm64]
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     - name: Set APP_VERSION env
       run: echo APP_VERSION=$(echo ${GITHUB_REF} | rev | cut -d'/' -f 1 | rev ) >> ${GITHUB_ENV}
-    - uses: wangyoucao577/go-release-action@v1.25
+    - uses: wangyoucao577/go-release-action@v1.53
       with:
         github_token: ${{ secrets.GITHUB_TOKEN }}
         goos: ${{ matrix.goos }}
@@ -30,10 +30,10 @@ jobs:
     name: Build binary and documentation
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-go@v3
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
         with:
-          go-version: '1.18' # The Go version to download (if necessary) and use.
+          go-version: '1.24.1' # The Go version to download (if necessary) and use.
       - name: Build awstools and generate documentation
         run: |
           go build -o awstools
@@ -42,7 +42,7 @@ jobs:
       - name: Set up Hugo
         uses: peaceiris/actions-hugo@v2.4.13
         with:
-          hugo-version: '0.92.0'
+          hugo-version: 'latest'
           extended: true
       - name: Build Hugo
         run: |
