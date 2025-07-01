@@ -27,7 +27,7 @@ func init() {
 	organizationsCmd.AddCommand(structureCmd)
 }
 
-func orgstructure(cmd *cobra.Command, args []string) {
+func orgstructure(_ *cobra.Command, _ []string) {
 	awsConfig := config.DefaultAwsConfig(*settings)
 	resultTitle := "AWS Organization Structure"
 	organization := helpers.GetFullOrganization(awsConfig.OrganizationsClient())

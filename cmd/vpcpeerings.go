@@ -26,7 +26,7 @@ func init() {
 	vpcCmd.AddCommand(peeringsCmd)
 }
 
-func peerings(cmd *cobra.Command, args []string) {
+func peerings(_ *cobra.Command, _ []string) {
 	awsConfig := config.DefaultAwsConfig(*settings)
 	resultTitle := "VPC Peerings for account " + getName(helpers.GetAccountID(awsConfig.StsClient()))
 	peerings := helpers.GetAllVpcPeers(awsConfig.Ec2Client())
@@ -91,10 +91,8 @@ func peerings(cmd *cobra.Command, args []string) {
 			if settings.IsDrawIO() {
 				content["Image"] = drawio.AWSShape("Network Content Delivery", "VPC")
 			}
-		} else {
-			if settings.IsDrawIO() {
-				content["Image"] = drawio.AWSShape("Network Content Delivery", "Peering Connection")
-			}
+		} else if settings.IsDrawIO() {
+			content["Image"] = drawio.AWSShape("Network Content Delivery", "Peering Connection")
 		}
 		holder := format.OutputHolder{Contents: content}
 		output.AddHolder(holder)

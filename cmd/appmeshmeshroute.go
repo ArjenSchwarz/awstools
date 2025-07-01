@@ -19,7 +19,7 @@ func init() {
 	appmeshCmd.AddCommand(meshrouteCmd)
 }
 
-func meshroute(cmd *cobra.Command, args []string) {
+func meshroute(_ *cobra.Command, _ []string) {
 	resultTitle := "Overview of the routes in the mesh"
 	awsConfig := config.DefaultAwsConfig(*settings)
 	svc := awsConfig.AppmeshClient()

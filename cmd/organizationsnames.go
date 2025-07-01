@@ -26,7 +26,7 @@ func init() {
 	organizationsCmd.AddCommand(orgnamesCmd)
 }
 
-func orgnames(cmd *cobra.Command, args []string) {
+func orgnames(_ *cobra.Command, _ []string) {
 	awsConfig := config.DefaultAwsConfig(*settings)
 	organization := helpers.GetFullOrganization(awsConfig.OrganizationsClient())
 	result := make(map[string]string)

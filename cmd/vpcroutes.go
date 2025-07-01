@@ -21,7 +21,7 @@ func init() {
 	vpcCmd.AddCommand(routesCmd)
 }
 
-func routes(cmd *cobra.Command, args []string) {
+func routes(_ *cobra.Command, _ []string) {
 	awsConfig := config.DefaultAwsConfig(*settings)
 	resultTitle := "VPC Routes for account " + getName(helpers.GetAccountID(awsConfig.StsClient()))
 	routes := helpers.GetAllVPCRouteTables(awsConfig.Ec2Client())

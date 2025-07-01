@@ -31,7 +31,7 @@ func init() {
 	tgwoverviewCmd.Flags().BoolVarP(&includeBlackhole, "blackhole-routes", "b", false, "Optional value to include blackhole routes")
 }
 
-func tgwoverview(cmd *cobra.Command, args []string) {
+func tgwoverview(_ *cobra.Command, _ []string) {
 	awsConfig := config.DefaultAwsConfig(*settings)
 	resultTitle := "Transit Gateway Routes in account " + getName(helpers.GetAccountID(awsConfig.StsClient()))
 	gateways := helpers.GetAllTransitGateways(awsConfig.Ec2Client())
@@ -55,12 +55,12 @@ func tgwoverview(cmd *cobra.Command, args []string) {
 						continue
 					}
 					content := make(map[string]interface{})
-					content["Transit Gateway Account"] = getNameWithId(gateway.AccountID)
-					content["Transit Gateway"] = getNameWithId(gateway.ID)
-					content["Route Table"] = getNameWithId(routetable.ID)
+					content["Transit Gateway Account"] = getNameWithID(gateway.AccountID)
+					content["Transit Gateway"] = getNameWithID(gateway.ID)
+					content["Route Table"] = getNameWithID(routetable.ID)
 					content["CIDR"] = route.CIDR
 					if route.Attachment.ResourceID != "" {
-						content["Target"] = getNameWithId(route.Attachment.ResourceID)
+						content["Target"] = getNameWithID(route.Attachment.ResourceID)
 					} else {
 						content["Target"] = ""
 					}

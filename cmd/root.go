@@ -120,9 +120,9 @@ func getName(id string) string {
 	return id
 }
 
-// getNameWithId returns the name of a resource followed by the (id).
+// getNameWithID returns the name of a resource followed by the (id).
 // If no name is found, it will just return the id
-func getNameWithId(id string) string {
+func getNameWithID(id string) string {
 	name := getName(id)
 	if name == id {
 		return id

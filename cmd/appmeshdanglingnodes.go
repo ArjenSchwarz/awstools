@@ -19,7 +19,7 @@ func init() {
 	appmeshCmd.AddCommand(danglingnodesCmd)
 }
 
-func danglingnodes(cmd *cobra.Command, args []string) {
+func danglingnodes(_ *cobra.Command, _ []string) {
 	resultTitle := "App Mesh Unattached Nodes for mesh " + *meshname
 	awsConfig := config.DefaultAwsConfig(*settings)
 	svc := awsConfig.AppmeshClient()

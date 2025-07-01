@@ -18,7 +18,7 @@ var docsghpagesCmd = &cobra.Command{
 	Short: "Generate documentation for awstools' gh pages site",
 	Long: `Generate documentation for awstools in Markdown format
 This is used for the documentation in the GitHub Pages site, but can be run separately.`,
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(_ *cobra.Command, _ []string) {
 		docsdir = "docs/content/commands"
 
 		const fmTemplate = `---

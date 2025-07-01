@@ -28,7 +28,7 @@ func init() {
 
 }
 
-func ssoOverviewByAccount(cmd *cobra.Command, args []string) {
+func ssoOverviewByAccount(_ *cobra.Command, _ []string) {
 	awsConfig := config.DefaultAwsConfig(*settings)
 	resultTitle := "SSO Overview per account"
 	ssoInstance := helpers.GetSSOAccountInstance(awsConfig.SsoClient())
@@ -39,13 +39,14 @@ func ssoOverviewByAccount(cmd *cobra.Command, args []string) {
 	output := format.OutputArray{Keys: keys, Settings: settings.NewOutputSettings()}
 	output.Settings.Title = resultTitle
 	output.Settings.SortKey = "AccountID"
-	if settings.IsDrawIO() {
+	switch {
+	case settings.IsDrawIO():
 		output.Settings.DrawIOHeader = createSSOAccountsDrawIOHeader()
 		createSSOAccountDrawIOContents(ssoInstance, &output)
-	} else if output.Settings.NeedsFromToColumns() {
+	case output.Settings.NeedsFromToColumns():
 		output.Settings.AddFromToColumns("DrawIOID", "Children")
 		createSSOAccountDrawIOContents(ssoInstance, &output)
-	} else {
+	default:
 		for _, account := range ssoInstance.Accounts {
 			if filteredSSOAccount(account) {
 				for _, assignment := range account.AccountAssignments {
@@ -123,7 +124,7 @@ func createSSOAccountDrawIOContents(instance helpers.SSOInstance, output *format
 				content["DrawIOID"] = getName(assignment.PermissionSet.Name + account.AccountID)
 				content["Type"] = permissionSetColumn
 				content["Image"] = drawio.AWSShape("Security Identity Compliance", "Permissions")
-				content["Children"] = assignment.PermissionSet.GetAssignmentIdsByAccount(account.AccountID)
+				content["Children"] = assignment.PermissionSet.GetAssignmentIDsByAccount(account.AccountID)
 				holder := format.OutputHolder{Contents: content}
 				output.AddHolder(holder)
 			}

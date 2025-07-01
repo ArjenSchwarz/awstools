@@ -19,6 +19,8 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 */
+
+// Package cmd provides command-line interface implementations for awstools
 package cmd
 
 import (
@@ -43,7 +45,7 @@ func init() {
 	demoCmd.AddCommand(demosettingsCmd)
 }
 
-func demosettings(cmd *cobra.Command, args []string) {
+func demosettings(_ *cobra.Command, _ []string) {
 	fmt.Print(`While you can provide many settings as command-line flags, for some settings it makes more sense to use a settings file.
 
 Fog provides the option to create a settings file in different formats: YAML, JSON, or TOML and you can always override its values with a flag when you run your command.

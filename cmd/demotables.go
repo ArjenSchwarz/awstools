@@ -19,6 +19,8 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 */
+
+// Package cmd provides command-line interface implementations for awstools
 package cmd
 
 import (
@@ -40,7 +42,7 @@ func init() {
 	demoCmd.AddCommand(tablesCmd)
 }
 
-func demoTables(cmd *cobra.Command, args []string) {
+func demoTables(_ *cobra.Command, _ []string) {
 	keys := []string{"Export", "Description", "Stack", "Value", "Imported"}
 	title := "CloudFormation Export values demo"
 	output := format.OutputArray{Keys: keys, Settings: settings.NewOutputSettings()}

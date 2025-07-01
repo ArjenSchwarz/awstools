@@ -22,24 +22,24 @@ var enisCmd = &cobra.Command{
 	Run: enis,
 }
 
-var vpceenis_split bool
+var vpceenisSplit bool
 
 func init() {
 	vpcCmd.AddCommand(enisCmd)
-	enisCmd.Flags().BoolVar(&vpceenis_split, "split", false, "Split the result by subnet")
+	enisCmd.Flags().BoolVar(&vpceenisSplit, "split", false, "Split the result by subnet")
 }
 
-func enis(cmd *cobra.Command, args []string) {
+func enis(_ *cobra.Command, _ []string) {
 	awsConfig := config.DefaultAwsConfig(*settings)
 	names := helpers.GetAllEC2ResourceNames(awsConfig.Ec2Client())
 	resultTitle := "VPC ENIs for account " + getName(helpers.GetAccountID(awsConfig.StsClient()))
 	interfaces := helpers.GetNetworkInterfaces(awsConfig.Ec2Client())
 	output := format.OutputArray{Settings: settings.NewOutputSettings()}
-	if vpceenis_split {
+	if vpceenisSplit {
 		output.Settings.SeparateTables = true
 		groups := splitBySubnet(interfaces)
 		for subnet, group := range groups {
-			printENIs(group, names, fmt.Sprintf("%s - %s: %s", resultTitle, getNameAndIdFromMap(*group[0].VpcId, names), getNameAndIdFromMap(subnet, names)), true)
+			printENIs(group, names, fmt.Sprintf("%s - %s: %s", resultTitle, getNameAndIDFromMap(*group[0].VpcId, names), getNameAndIDFromMap(subnet, names)), true)
 		}
 	} else {
 		printENIs(interfaces, names, resultTitle, false)
@@ -70,10 +70,10 @@ func printENIs(interfaces []types.NetworkInterface, names map[string]string, res
 		}
 		content["ENI"] = *netinterface.NetworkInterfaceId
 		content["Type"] = netinterface.InterfaceType
-		content["Attachment"] = getNameAndIdFromMap(getAttachment(netinterface), names)
+		content["Attachment"] = getNameAndIDFromMap(getAttachment(netinterface), names)
 		content["IPs"] = iparray
-		content["VPC"] = getNameAndIdFromMap(*netinterface.VpcId, names)
-		content["Subnet"] = getNameAndIdFromMap(*netinterface.SubnetId, names)
+		content["VPC"] = getNameAndIDFromMap(*netinterface.VpcId, names)
+		content["Subnet"] = getNameAndIDFromMap(*netinterface.SubnetId, names)
 		output.AddContents(content)
 	}
 	output.AddToBuffer()
@@ -112,7 +112,7 @@ func getAttachment(netinterface types.NetworkInterface) string {
 	return ""
 }
 
-func getNameAndIdFromMap(id string, names map[string]string) string {
+func getNameAndIDFromMap(id string, names map[string]string) string {
 	if names[id] != "" {
 		if id == names[id] {
 			return id

@@ -28,7 +28,7 @@ func init() {
 	appmeshCmd.AddCommand(showmeshCmd)
 }
 
-func showmesh(cmd *cobra.Command, args []string) {
+func showmesh(_ *cobra.Command, _ []string) {
 	resultTitle := "Virtual node connections for mesh " + *meshname
 	awsConfig := config.DefaultAwsConfig(*settings)
 	svc := awsConfig.AppmeshClient()

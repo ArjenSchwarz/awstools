@@ -23,7 +23,7 @@ The drawio output format links the users to groups and (in verbose mode) both of
 	Run: detailUsers,
 }
 
-func detailUsers(cmd *cobra.Command, args []string) {
+func detailUsers(_ *cobra.Command, _ []string) {
 	awsConfig := config.DefaultAwsConfig(*settings)
 	resultTitle := "IAM User overview for account " + getName(helpers.GetAccountID(awsConfig.StsClient()))
 	svc := awsConfig.IamClient()

@@ -36,7 +36,7 @@ func init() {
 	tgwroutetablesCmd.Flags().BoolVarP(&simplelist, "list", "l", false, "Only show a simple list of routes")
 }
 
-func tgwroutes(cmd *cobra.Command, args []string) {
+func tgwroutes(_ *cobra.Command, _ []string) {
 	awsConfig := config.DefaultAwsConfig(*settings)
 	resultTitle := "Overview of all routes"
 	gateways := helpers.GetAllTransitGateways(awsConfig.Ec2Client())
@@ -76,7 +76,7 @@ func tgwroutes(cmd *cobra.Command, args []string) {
 		content["ID"] = resourceid
 		content["Name"] = getName(resourceid)
 		if getName(tgw) != tgw && getName(tgw) != "" {
-			content["TargetGateway"] = getNameWithId(tgw)
+			content["TargetGateway"] = getNameWithID(tgw)
 		} else {
 			content["TargetGateway"] = tgw
 		}

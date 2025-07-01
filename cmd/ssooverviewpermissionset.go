@@ -27,7 +27,7 @@ func init() {
 	ssoOverviewByPermissionSetCmd.Flags().StringVarP(&ssoresourceid, "resource-id", "r", "", "The permission set name or arn you want to limit to")
 }
 
-func ssoOverviewByPermissionSet(cmd *cobra.Command, args []string) {
+func ssoOverviewByPermissionSet(_ *cobra.Command, _ []string) {
 	awsConfig := config.DefaultAwsConfig(*settings)
 	resultTitle := "SSO Overview per permission set"
 	ssoInstance := helpers.GetSSOAccountInstance(awsConfig.SsoClient())
@@ -38,13 +38,14 @@ func ssoOverviewByPermissionSet(cmd *cobra.Command, args []string) {
 	output := format.OutputArray{Keys: keys, Settings: settings.NewOutputSettings()}
 	output.Settings.Title = resultTitle
 	output.Settings.SortKey = "PermissionSet"
-	if settings.IsDrawIO() {
+	switch {
+	case settings.IsDrawIO():
 		output.Settings.DrawIOHeader = createSSOPermissionsetsDrawIOHeader()
 		createSSOPermissionsetsDrawIOContents(ssoInstance, &output)
-	} else if output.Settings.NeedsFromToColumns() {
+	case output.Settings.NeedsFromToColumns():
 		output.Settings.AddFromToColumns("DrawIOID", "Children")
 		createSSOPermissionsetsDrawIOContents(ssoInstance, &output)
-	} else {
+	default:
 		for _, permissionset := range ssoInstance.PermissionSets {
 			if !filteredSSOPermissionSet(permissionset) {
 				continue
@@ -123,7 +124,7 @@ func createSSOPermissionsetsDrawIOContents(instance helpers.SSOInstance, output 
 			content["DrawIOID"] = account.AccountID + permissionset.Name
 			content["Type"] = "Account"
 			content["Image"] = drawio.AWSShape("Security Identity Compliance", "Organizations Account")
-			content["Children"] = account.GetPrincipalIdsForPermissionSet(permissionset)
+			content["Children"] = account.GetPrincipalIDsForPermissionSet(permissionset)
 			holder := format.OutputHolder{Contents: content}
 			output.AddHolder(holder)
 			for _, assignment := range account.AccountAssignments {

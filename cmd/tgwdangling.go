@@ -23,7 +23,7 @@ func init() {
 	tgwCmd.AddCommand(tgwdanglingCmd)
 }
 
-func tgwdangling(cmd *cobra.Command, args []string) {
+func tgwdangling(_ *cobra.Command, _ []string) {
 	awsConfig := config.DefaultAwsConfig(*settings)
 	resultTitle := "Transit Gateway uni-directional routes"
 	gateways := helpers.GetAllTransitGateways(awsConfig.Ec2Client())

@@ -24,7 +24,7 @@ func init() {
 	ssoCmd.AddCommand(ssoListPermissionSetsCmd)
 }
 
-func ssoListPermissionSets(cmd *cobra.Command, args []string) {
+func ssoListPermissionSets(_ *cobra.Command, _ []string) {
 	awsConfig := config.DefaultAwsConfig(*settings)
 	resultTitle := "SSO Overview per permission set"
 	ssoInstance := helpers.GetSSOAccountInstance(awsConfig.SsoClient())

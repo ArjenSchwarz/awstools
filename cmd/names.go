@@ -25,7 +25,7 @@ func init() {
 	rootCmd.AddCommand(namesCmd)
 }
 
-func names(cmd *cobra.Command, args []string) {
+func names(_ *cobra.Command, _ []string) {
 	awsConfig := config.DefaultAwsConfig(*settings)
 	var names []map[string]string
 	if settings.ShouldCombineAndAppend() {

@@ -21,7 +21,7 @@ func init() {
 	ssoCmd.AddCommand(ssoDanglingCmd)
 }
 
-func ssoDangling(cmd *cobra.Command, args []string) {
+func ssoDangling(_ *cobra.Command, _ []string) {
 	awsConfig := config.DefaultAwsConfig(*settings)
 	resultTitle := "Dangling Permission Sets"
 	ssoInstance := helpers.GetSSOAccountInstance(awsConfig.SsoClient())

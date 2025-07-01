@@ -19,6 +19,8 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 */
+
+// Package cmd provides command-line interface implementations for awstools
 package cmd
 
 import (
@@ -27,6 +29,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// Version holds the current version string for awstools
 var Version = "dev"
 
 // versionCmd represents the version command
@@ -34,7 +37,7 @@ var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Show the version number",
 	Long:  `Show awstools' version number`,
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(_ *cobra.Command, _ []string) {
 		fmt.Println(Version)
 	},
 }

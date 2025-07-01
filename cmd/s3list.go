@@ -31,7 +31,7 @@ func init() {
 	s3listCmd.Flags().StringVarP(&includeTags, "include-tags", "t", "", "Optional tag values to show in output")
 }
 
-func s3List(cmd *cobra.Command, args []string) {
+func s3List(_ *cobra.Command, _ []string) {
 	awsConfig := config.DefaultAwsConfig(*settings)
 	resultTitle := "S3 Buckets"
 	buckets := helpers.GetBucketDetails(awsConfig.S3Client())

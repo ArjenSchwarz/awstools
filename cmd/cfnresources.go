@@ -34,7 +34,7 @@ func init() {
 	cfnCmd.AddCommand(resourcesCmd)
 }
 
-func listResources(cmd *cobra.Command, args []string) {
+func listResources(_ *cobra.Command, _ []string) {
 	awsConfig := config.DefaultAwsConfig(*settings)
 	resultTitle := "CloudFormation resources for stack " + *stackname
 	unparsedResources := helpers.GetNestedCloudFormationResources(stackname, awsConfig.CloudformationClient())
