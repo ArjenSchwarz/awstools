@@ -10,6 +10,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 )
 
+// S3Bucket represents detailed information about an S3 bucket including security, encryption, and configuration settings
 type S3Bucket struct {
 	Account                        string
 	ACLs                           []types.Grant
@@ -32,6 +33,7 @@ type S3Bucket struct {
 }
 
 // GetAllBuckets returns an overview of all buckets
+// GetAllBuckets retrieves all S3 buckets and returns them along with the owner name
 func GetAllBuckets(svc *s3.Client) ([]types.Bucket, string) {
 	params := &s3.ListBucketsInput{}
 	resp, err := svc.ListBuckets(context.TODO(), params)
@@ -44,6 +46,7 @@ func GetAllBuckets(svc *s3.Client) ([]types.Bucket, string) {
 	return resp.Buckets, *resp.Owner.DisplayName
 }
 
+// GetBucketDetails retrieves detailed information for all S3 buckets including encryption, versioning, and policies
 func GetBucketDetails(svc *s3.Client) []S3Bucket {
 	buckets, owner := GetAllBuckets(svc)
 	result := make([]S3Bucket, 0)
@@ -150,13 +153,15 @@ func GetBucketDetails(svc *s3.Client) []S3Bucket {
 	return result
 }
 
+// GetReplicationStrings returns a slice of string representations of the bucket's replication rules
 func (bucket *S3Bucket) GetReplicationStrings() []string {
 	ruleslist := make([]string, 0)
 	for _, rule := range bucket.Replication.Rules {
 		var filter string
 		if rule.Filter != nil {
 			// Check if it's an And filter (complex)
-			if rule.Filter.And != nil {
+			switch {
+			case rule.Filter.And != nil:
 				prefixPortion := ""
 				// Prefix is optional
 				if aws.ToString(rule.Filter.And.Prefix) != "" {
@@ -167,17 +172,17 @@ func (bucket *S3Bucket) GetReplicationStrings() []string {
 					tagsSlice = append(tagsSlice, fmt.Sprintf("Tag %s:%s", aws.ToString(replicationtag.Key), aws.ToString(replicationtag.Value)))
 				}
 				filter = fmt.Sprintf("%s%s", prefixPortion, strings.Join(tagsSlice, " and "))
-			} else if rule.Filter.Prefix != nil {
+			case rule.Filter.Prefix != nil:
 				// Simple prefix filter
 				if aws.ToString(rule.Filter.Prefix) == "" {
 					filter = "Entire bucket"
 				} else {
 					filter = fmt.Sprintf("Prefix: %s", aws.ToString(rule.Filter.Prefix))
 				}
-			} else if rule.Filter.Tag != nil {
+			case rule.Filter.Tag != nil:
 				// Simple tag filter
 				filter = fmt.Sprintf("Tag %s:%s", aws.ToString(rule.Filter.Tag.Key), aws.ToString(rule.Filter.Tag.Value))
-			} else {
+			default:
 				filter = "Unknown filter"
 			}
 		} else {

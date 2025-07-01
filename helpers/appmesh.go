@@ -1,3 +1,4 @@
+// Package helpers provides business logic and AWS SDK interactions for various AWS services
 package helpers
 
 import (
@@ -267,5 +268,6 @@ func (service *AppMeshVirtualService) AddPath(path AppMeshVirtualServicePath) {
 	if service.VirtualServicePaths != nil {
 		paths = service.VirtualServicePaths
 	}
-	service.VirtualServicePaths = append(paths, path)
+	paths = append(paths, path)
+	service.VirtualServicePaths = paths
 }

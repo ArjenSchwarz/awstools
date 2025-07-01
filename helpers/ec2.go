@@ -484,6 +484,7 @@ func getNameFromTags(tags []types.Tag) string {
 	return ""
 }
 
+// GetNetworkInterfaces retrieves all network interfaces in the region
 func GetNetworkInterfaces(svc *ec2.Client) []types.NetworkInterface {
 	params := &ec2.DescribeNetworkInterfacesInput{}
 	resp, err := svc.DescribeNetworkInterfaces(context.TODO(), params)
@@ -493,6 +494,7 @@ func GetNetworkInterfaces(svc *ec2.Client) []types.NetworkInterface {
 	return resp.NetworkInterfaces
 }
 
+// GetTransitGatewayFromNetworkInterface returns the Transit Gateway attachment ID for a network interface
 func GetTransitGatewayFromNetworkInterface(netinterface types.NetworkInterface, svc *ec2.Client) string {
 	params := &ec2.DescribeTransitGatewayVpcAttachmentsInput{
 		Filters: []types.Filter{
@@ -514,6 +516,7 @@ func GetTransitGatewayFromNetworkInterface(netinterface types.NetworkInterface, 
 	return ""
 }
 
+// GetVPCEndpointFromNetworkInterface returns the VPC endpoint associated with a network interface
 func GetVPCEndpointFromNetworkInterface(netinterface types.NetworkInterface, svc *ec2.Client) *types.VpcEndpoint {
 	// TODO: Consider caching this
 	params := &ec2.DescribeVpcEndpointsInput{
@@ -538,6 +541,7 @@ func GetVPCEndpointFromNetworkInterface(netinterface types.NetworkInterface, svc
 	return nil
 }
 
+// GetNatGatewayFromNetworkInterface returns the NAT gateway associated with a network interface
 func GetNatGatewayFromNetworkInterface(netinterface types.NetworkInterface, svc *ec2.Client) *types.NatGateway {
 	params := &ec2.DescribeNatGatewaysInput{
 		Filter: []types.Filter{

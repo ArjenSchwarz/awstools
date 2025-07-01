@@ -1,3 +1,4 @@
+// Package config provides configuration management for AWS connections and settings
 package config
 
 import (
@@ -78,7 +79,7 @@ func (config *AWSConfig) StsClient() *sts.Client {
 	return sts.NewFromConfig(config.Config)
 }
 
-// StsClient returns an STS Client
+// IAMClient returns an IAM Client
 func (config *AWSConfig) IAMClient() *iam.Client {
 	return iam.NewFromConfig(config.Config)
 }

@@ -19,9 +19,9 @@ func GetSSOAccountInstance(svc *ssoadmin.Client) SSOInstance {
 type SSOInstance struct {
 	IdentityStoreID string
 	Arn             string
-	//PermissionSets contains the permission sets the instance has
+	// PermissionSets contains the permission sets the instance has
 	PermissionSets []SSOPermissionSet
-	//Accounts contains the accounts with permission sets, those permission sets, and who has access
+	// Accounts contains the accounts with permission sets, those permission sets, and who has access
 	Accounts map[string]SSOAccount
 }
 
@@ -188,7 +188,8 @@ func (permissionset *SSOPermissionSet) addAccount(account SSOAccount) {
 	if len(permissionset.Accounts) != 0 {
 		accounts = permissionset.Accounts
 	}
-	permissionset.Accounts = append(accounts, account)
+	accounts = append(accounts, account)
+	permissionset.Accounts = accounts
 	permissionset.Instance.addAssignmentsToAccount(account)
 }
 
@@ -229,11 +230,12 @@ func (account *SSOAccount) addAssignmentToAccount(assignment SSOAccountAssignmen
 	if len(account.AccountAssignments) != 0 {
 		assignments = account.AccountAssignments
 	}
-	account.AccountAssignments = append(assignments, assignment)
+	assignments = append(assignments, assignment)
+	account.AccountAssignments = assignments
 }
 
-// GetPrincipalIdsForPermissionSet returns the ids of the principals that have been assigned to the provided permission set
-func (account *SSOAccount) GetPrincipalIdsForPermissionSet(permissionset SSOPermissionSet) []string {
+// GetPrincipalIDsForPermissionSet returns the ids of the principals that have been assigned to the provided permission set
+func (account *SSOAccount) GetPrincipalIDsForPermissionSet(permissionset SSOPermissionSet) []string {
 	accountchildren := []string{}
 	for _, assignment := range account.AccountAssignments {
 		if assignment.PermissionSet.Name == permissionset.Name {
@@ -252,8 +254,8 @@ func (permissionset *SSOPermissionSet) GetManagedPolicyNames() []string {
 	return policynames
 }
 
-// GetAssignmentIdsByAccount returns the assigment's principal IDs
-func (permissionset *SSOPermissionSet) GetAssignmentIdsByAccount(accountnr string) []string {
+// GetAssignmentIDsByAccount returns the assigment's principal IDs
+func (permissionset *SSOPermissionSet) GetAssignmentIDsByAccount(accountnr string) []string {
 	result := []string{}
 	for _, account := range permissionset.Accounts {
 		if account.AccountID == accountnr {
