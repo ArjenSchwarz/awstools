@@ -2,6 +2,30 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2025-07-02 14:42:05] - Added comprehensive unit tests for config package
+
+### Added
+- Created comprehensive unit test suite covering all functions in the config package
+- Tests for Config struct methods (GetLCString, GetOutputFormat, GetString, GetBool, GetInt, etc.)
+- Tests for output formatting and separator logic
+- Tests for AWS client creation methods in AWSConfig struct
+- Tests for AWS configuration handling with profile and region support
+
+### Technical Details
+- 397 lines of comprehensive test coverage across both config.go and awsconfig.go
+- Table-driven tests with subtests for different scenarios
+- Mock-friendly tests that handle AWS credential requirements gracefully
+- All tests pass with proper Go formatting standards
+- Added testify/assert dependency for improved test assertions
+
+### Files Added
+- `config/config_test.go` - Unit tests for Config struct methods and output settings
+- `config/awsconfig_test.go` - Unit tests for AWSConfig struct and AWS client creation
+
+### Dependencies Updated
+- `go.mod` - Added github.com/stretchr/testify v1.10.0 for enhanced testing capabilities
+- `go.sum` - Updated dependency checksums and removed unused dependencies
+
 ## [2025-01-01 00:00:00] - Added comprehensive unit tests for helpers package
 
 ### Added

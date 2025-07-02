@@ -9,7 +9,13 @@
       "Bash(git --no-pager diff --cached --name-status)",
       "Bash(git --no-pager diff --name-status)",
       "Bash(git --no-pager branch --show-current)",
-      "Bash(rg:*)"
+      "Bash(rg:*)",
+      "Bash(git --no-pager diff --staged --name-only)",
+      "Bash(git --no-pager diff --staged --stat)",
+      "Bash(git add:*)",
+      "Bash(git --no-pager diff --staged)",
+      "Bash(git --no-pager diff)",
+      "Bash(git --no-pager log --oneline -5)"
     ],
     "deny": []
   }
