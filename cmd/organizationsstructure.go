@@ -77,7 +77,7 @@ func createOrganizationsStructureDrawIOHeader() drawio.Header {
 	connection := drawio.NewConnection()
 	connection.Invert = false
 	connection.From = childrenColumn
-	connection.To = "Name"
+	connection.To = nameColumn
 	drawioheader.AddConnection(connection)
 	return drawioheader
 }

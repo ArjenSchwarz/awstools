@@ -784,19 +784,20 @@ func FormatRouteTableInfo(routeTable *types.RouteTable) (string, []string) {
 		}
 
 		target := ""
-		if route.GatewayId != nil {
+		switch {
+		case route.GatewayId != nil:
 			target = *route.GatewayId
-		} else if route.NatGatewayId != nil {
+		case route.NatGatewayId != nil:
 			target = *route.NatGatewayId
-		} else if route.VpcPeeringConnectionId != nil {
+		case route.VpcPeeringConnectionId != nil:
 			target = *route.VpcPeeringConnectionId
-		} else if route.NetworkInterfaceId != nil {
+		case route.NetworkInterfaceId != nil:
 			target = *route.NetworkInterfaceId
-		} else if route.TransitGatewayId != nil {
+		case route.TransitGatewayId != nil:
 			target = *route.TransitGatewayId
-		} else if route.EgressOnlyInternetGatewayId != nil {
+		case route.EgressOnlyInternetGatewayId != nil:
 			target = *route.EgressOnlyInternetGatewayId
-		} else {
+		default:
 			target = "local"
 		}
 

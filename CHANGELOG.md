@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2025-07-03] - Fixed linting issues and updated development guidelines
+
+### Fixed
+- Fixed goconst linting issue by using existing nameColumn constant instead of hardcoded "Name" string
+- Fixed gocritic linting issue by converting if-else chain to switch statement for better readability
+- Reduced linting issues from 2 to 0
+
+### Changed
+- Updated CLAUDE.md with additional development guidelines about generated text in commits and pull requests
+- Improved code structure in route table target identification logic
+
+### Technical Details
+- Converted if-else chain in `FormatRouteTableInfo` function to switch statement for better performance
+- Used consistent naming constants across the codebase
+- Enhanced development documentation with Claude-specific guidance
+
 ## [2025-07-03] - Added VPC overview command and IP usage analysis
 
 ### Added
