@@ -17,7 +17,9 @@
       "Bash(git --no-pager diff)",
       "Bash(git --no-pager log --oneline -5)",
       "Bash(./awstools-temp:*)",
-      "Bash(git --no-pager:*)"
+      "Bash(git --no-pager:*)",
+      "Bash(gh pr view:*)",
+      "Bash(gh api:*)"
     ],
     "deny": []
   }

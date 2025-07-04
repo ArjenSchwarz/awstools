@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2025-07-03] - Refactored VPC overview code following PR review feedback
+
+### Changed
+- Eliminated code duplication by creating centralized `GetResourceDisplayNameWithGlobalLookup` helper function
+- Enhanced documentation for `analyzeSubnetIPUsage` function with comprehensive parameter and return value descriptions
+- Centralized resource naming logic to ensure consistent behavior across the codebase
+
+### Fixed
+- Removed unused functions `getENIUsageType` and `getENIAttachmentDetails` to reduce code maintenance burden
+- Added string constants for repeated ENI service types to fix goconst linting issues
+- All linting issues resolved (0 issues remaining)
+
+### Technical Details
+- Created reusable helper supporting both global naming lookup and tag-based fallback
+- Updated cmd/vpcoverview.go to use centralized helper instead of local duplicate implementation
+- Added constants: `vpcEndpointType`, `interfaceType`, `lambdaFunctionType`, `awsServiceType`
+- Enhanced function documentation explaining IP usage analysis process and performance optimizations
+
 ## [2025-07-03] - Fixed linting issues and updated development guidelines
 
 ### Fixed

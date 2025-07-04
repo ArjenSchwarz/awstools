@@ -11,6 +11,14 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
 )
 
+// ENI and service type constants
+const (
+	vpcEndpointType    = "VPC Endpoint"
+	interfaceType      = "interface"
+	lambdaFunctionType = "Lambda Function"
+	awsServiceType     = "AWS Service"
+)
+
 // GetEc2Name returns the name of the provided EC2 Resource
 func GetEc2Name(ec2name string, svc *ec2.Client) string {
 	params := &ec2.DescribeInstancesInput{
@@ -163,16 +171,41 @@ func addAllVpnNames(svc *ec2.Client, result map[string]string) map[string]string
 	return result
 }
 
-// getResourceDisplayNameFromTags provides tiered name lookup for AWS resources using getName and tags
-// This is a helper version for use within the helpers package
+// getResourceDisplayNameFromTags provides tiered name lookup for AWS resources
+// 1. Checks Name tag on the resource
+// 2. Falls back to the resource ID
+// Returns either "Name (ID)" or just "ID" if no name found
 func getResourceDisplayNameFromTags(resourceID string, tags []types.Tag) string {
-	// Try using existing tag-based name lookup first
+	// Try tag-based name lookup first
 	nameFromTags := getNameFromTags(tags)
 
 	// Format the display name
 	if nameFromTags != "" && nameFromTags != resourceID {
 		return nameFromTags + " (" + resourceID + ")"
 	}
+	return resourceID
+}
+
+// GetResourceDisplayNameWithGlobalLookup provides comprehensive tiered name lookup for AWS resources
+// 1. First tries global naming lookup using the provided lookup function
+// 2. Then checks Name tag on the resource
+// 3. Finally falls back to the resource ID
+// Returns either "Name (ID)" or just "ID" if no name found
+func GetResourceDisplayNameWithGlobalLookup(resourceID string, tags []types.Tag, globalLookupFunc func(string) string) string {
+	// Try global lookup first (if provided)
+	if globalLookupFunc != nil {
+		nameFromGlobal := globalLookupFunc(resourceID)
+		if nameFromGlobal != "" && nameFromGlobal != resourceID {
+			return nameFromGlobal + " (" + resourceID + ")"
+		}
+	}
+
+	// Try tag-based name lookup
+	nameFromTags := getNameFromTags(tags)
+	if nameFromTags != "" && nameFromTags != resourceID {
+		return nameFromTags + " (" + resourceID + ")"
+	}
+
 	return resourceID
 }
 
@@ -915,15 +948,11 @@ func compareIPs(ip1, ip2 net.IP) int {
 
 // identifyAWSReservedIPs identifies AWS reserved IP addresses in a subnet
 // Returns a map with IP address as key and usage description as value
-func identifyAWSReservedIPs(cidr string) (map[string]string, error) {
-	ips, err := generateIPRange(cidr)
-	if err != nil {
-		return nil, err
-	}
-
+// Takes a pre-generated list of IPs to avoid duplicating IP range generation
+func identifyAWSReservedIPs(ips []net.IP) map[string]string {
 	reserved := make(map[string]string)
 	if len(ips) == 0 {
-		return reserved, nil
+		return reserved
 	}
 
 	// First IP (network address)
@@ -949,11 +978,16 @@ func identifyAWSReservedIPs(cidr string) (map[string]string, error) {
 		reserved[ips[len(ips)-1].String()] = "Broadcast address"
 	}
 
-	return reserved, nil
+	return reserved
 }
 
 // mapNetworkInterfacesToIPs maps network interfaces to their IP addresses
+// Optimized version that creates a lookup cache once to avoid N+1 API calls
+// when processing many ENIs (e.g., DescribeVpcEndpoints, DescribeInstances, etc.)
 func mapNetworkInterfacesToIPs(networkInterfaces []types.NetworkInterface, subnetID string, svc *ec2.Client) map[string]IPAddressInfo {
+	// Create cache once for all ENI lookups to avoid N+1 API calls
+	cache := NewENILookupCache(svc, networkInterfaces)
+
 	ipMap := make(map[string]IPAddressInfo)
 
 	for _, eni := range networkInterfaces {
@@ -962,8 +996,8 @@ func mapNetworkInterfacesToIPs(networkInterfaces []types.NetworkInterface, subne
 				if privateIP.PrivateIpAddress != nil {
 					ipInfo := IPAddressInfo{
 						IPAddress:      *privateIP.PrivateIpAddress,
-						UsageType:      getENIUsageType(eni, svc),
-						AttachmentInfo: getENIAttachmentDetails(eni, svc),
+						UsageType:      getENIUsageTypeOptimized(eni, cache),
+						AttachmentInfo: getENIAttachmentDetailsOptimized(eni, cache),
 					}
 
 					// Add public IP if present
@@ -980,12 +1014,12 @@ func mapNetworkInterfacesToIPs(networkInterfaces []types.NetworkInterface, subne
 	return ipMap
 }
 
-// getENIUsageType returns the general category of what the ENI is used for
-func getENIUsageType(eni types.NetworkInterface, svc *ec2.Client) string {
+// getENIUsageTypeOptimized returns the general category of what the ENI is used for
+// Uses cache to avoid repeated API calls
+func getENIUsageTypeOptimized(eni types.NetworkInterface, cache *ENILookupCache) string {
 	// Check if it's a VPC endpoint first (highest priority)
-	endpoint := GetVPCEndpointFromNetworkInterface(eni, svc)
-	if endpoint != nil {
-		return "VPC Endpoint"
+	if _, exists := cache.EndpointsByENI[*eni.NetworkInterfaceId]; exists {
+		return vpcEndpointType
 	}
 
 	// Handle EC2 instances
@@ -994,16 +1028,16 @@ func getENIUsageType(eni types.NetworkInterface, svc *ec2.Client) string {
 	}
 
 	// Handle specific interface types (if not 'interface')
-	if eni.InterfaceType != "interface" {
+	if eni.InterfaceType != interfaceType {
 		switch eni.InterfaceType {
 		case types.NetworkInterfaceTypeTransitGateway:
 			return "Transit Gateway"
 		case types.NetworkInterfaceTypeNatGateway:
 			return "NAT Gateway"
 		case types.NetworkInterfaceTypeVpcEndpoint:
-			return "VPC Endpoint"
+			return vpcEndpointType
 		case types.NetworkInterfaceTypeLambda:
-			return "Lambda Function"
+			return lambdaFunctionType
 		case "quicksight":
 			return "QuickSight"
 		case "network_load_balancer":
@@ -1011,7 +1045,7 @@ func getENIUsageType(eni types.NetworkInterface, svc *ec2.Client) string {
 		case "gateway_load_balancer":
 			return "Gateway Load Balancer"
 		default:
-			return "AWS Service"
+			return awsServiceType
 		}
 	}
 
@@ -1025,7 +1059,7 @@ func getENIUsageType(eni types.NetworkInterface, svc *ec2.Client) string {
 			return "RDS Database"
 		}
 		if strings.Contains(desc, "lambda") {
-			return "Lambda Function"
+			return lambdaFunctionType
 		}
 		if strings.Contains(desc, "vpc") {
 			return "VPC Service"
@@ -1046,7 +1080,7 @@ func getENIUsageType(eni types.NetworkInterface, svc *ec2.Client) string {
 			return "CodeBuild"
 		}
 		// If description contains service keywords, it's likely a service
-		return "AWS Service"
+		return awsServiceType
 	}
 
 	// Unattached or unknown
@@ -1057,11 +1091,11 @@ func getENIUsageType(eni types.NetworkInterface, svc *ec2.Client) string {
 	return "Unknown"
 }
 
-// getENIAttachmentDetails returns specific details about what the ENI is attached to
-func getENIAttachmentDetails(eni types.NetworkInterface, svc *ec2.Client) string {
+// getENIAttachmentDetailsOptimized returns specific details about what the ENI is attached to
+// Uses cache to avoid repeated API calls
+func getENIAttachmentDetailsOptimized(eni types.NetworkInterface, cache *ENILookupCache) string {
 	// Priority 1: Check if it's a VPC endpoint (following JS script logic)
-	endpoint := GetVPCEndpointFromNetworkInterface(eni, svc)
-	if endpoint != nil {
+	if endpoint, exists := cache.EndpointsByENI[*eni.NetworkInterfaceId]; exists {
 		// Extract service name (last part after dots, like 's3', 'ec2')
 		serviceParts := strings.Split(*endpoint.ServiceName, ".")
 		shortServiceName := serviceParts[len(serviceParts)-1]
@@ -1070,26 +1104,26 @@ func getENIAttachmentDetails(eni types.NetworkInterface, svc *ec2.Client) string
 
 	// Priority 2: Handle EC2 instances
 	if eni.Attachment != nil && eni.Attachment.InstanceId != nil {
-		instanceName := GetEc2Name(*eni.Attachment.InstanceId, svc)
-		if instanceName != "" && instanceName != *eni.Attachment.InstanceId {
-			return *eni.Attachment.InstanceId + " (" + instanceName + ")"
+		instanceID := *eni.Attachment.InstanceId
+		if instanceName, exists := cache.InstanceNames[instanceID]; exists && instanceName != "" && instanceName != instanceID {
+			return instanceID + " (" + instanceName + ")"
 		}
-		return *eni.Attachment.InstanceId
+		return instanceID
 	}
 
 	// Priority 3: Handle specific interface types (if not 'interface')
-	if eni.InterfaceType != "interface" {
+	if eni.InterfaceType != interfaceType {
 		switch eni.InterfaceType {
 		case types.NetworkInterfaceTypeTransitGateway:
-			tgwID := GetTransitGatewayFromNetworkInterface(eni, svc)
-			if tgwID != "" {
-				return tgwID
+			if eni.VpcId != nil {
+				if tgwID, exists := cache.TransitGateways[*eni.VpcId]; exists {
+					return tgwID
+				}
 			}
 			return "Unknown Transit Gateway"
 
 		case types.NetworkInterfaceTypeNatGateway:
-			natgw := GetNatGatewayFromNetworkInterface(eni, svc)
-			if natgw != nil {
+			if natgw, exists := cache.NATGatewaysByENI[*eni.NetworkInterfaceId]; exists {
 				natName := getNameFromTags(natgw.Tags)
 				if natName != "" && natName != *natgw.NatGatewayId {
 					return *natgw.NatGatewayId + " (" + natName + ")"
@@ -1127,7 +1161,28 @@ func getENIAttachmentDetails(eni types.NetworkInterface, svc *ec2.Client) string
 }
 
 // analyzeSubnetIPUsage provides comprehensive IP usage analysis for a subnet
-// Returns: ipDetails, usedIPs, availableIPs, awsReservedIPs, serviceIPs, error
+//
+// This function performs detailed analysis of IP address allocation within a subnet by:
+// 1. Generating all possible IP addresses in the subnet's CIDR range
+// 2. Identifying AWS reserved IPs (network, router, DNS, future use, broadcast)
+// 3. Mapping active network interfaces to their IP addresses
+// 4. Categorizing each IP as either AWS reserved or service-related
+//
+// Parameters:
+//   - subnet: The AWS subnet to analyze
+//   - networkInterfaces: All network interfaces to check for IP usage
+//   - svc: EC2 client for additional AWS API calls (used for ENI lookups)
+//
+// Returns:
+//   - ipDetails: Detailed information about each IP address in use
+//   - usedIPs: Total count of IP addresses currently allocated
+//   - availableIPs: Count of IP addresses available for new allocations
+//   - awsReservedIPs: Count of IPs reserved by AWS (network, router, DNS, etc.)
+//   - serviceIPs: Count of IPs allocated to AWS services or EC2 instances
+//   - error: Any error encountered during analysis
+//
+// Note: This function uses optimized batch API calls via ENILookupCache to avoid N+1 queries
+// when analyzing large numbers of network interfaces.
 func analyzeSubnetIPUsage(subnet types.Subnet, networkInterfaces []types.NetworkInterface, svc *ec2.Client) ([]IPAddressInfo, int, int, int, int, error) {
 	cidr := *subnet.CidrBlock
 
@@ -1137,11 +1192,8 @@ func analyzeSubnetIPUsage(subnet types.Subnet, networkInterfaces []types.Network
 		return nil, 0, 0, 0, 0, err
 	}
 
-	// Get AWS reserved IPs
-	reservedIPs, err := identifyAWSReservedIPs(cidr)
-	if err != nil {
-		return nil, 0, 0, 0, 0, err
-	}
+	// Get AWS reserved IPs using the same IP list to avoid duplication
+	reservedIPs := identifyAWSReservedIPs(allIPs)
 
 	// Map ENIs to IPs
 	eniIPMap := mapNetworkInterfacesToIPs(networkInterfaces, *subnet.SubnetId, svc)
@@ -1176,4 +1228,210 @@ func analyzeSubnetIPUsage(subnet types.Subnet, networkInterfaces []types.Network
 	availableIPs := totalIPs - usedCount
 
 	return ipDetails, usedCount, availableIPs, awsReservedCount, serviceIPsCount, nil
+}
+
+// ENILookupCache contains pre-fetched AWS resource data to avoid N+1 API calls
+// This cache dramatically improves performance when analyzing many ENIs by batching
+// API calls instead of making individual requests for each ENI's attachment details.
+//
+// Performance benefits:
+// - VPC Endpoints: 1 batched DescribeVpcEndpoints call vs N individual calls
+// - EC2 Instances: Batched DescribeInstances calls vs N individual calls
+// - NAT Gateways: 1 batched DescribeNatGateways call vs N individual calls
+// - Transit Gateways: 1 batched DescribeTransitGatewayVpcAttachments call vs N individual calls
+//
+// For 100 ENIs, this reduces API calls from ~400 to ~4, significantly improving
+// performance and reducing the chance of hitting AWS API rate limits.
+type ENILookupCache struct {
+	VPCEndpoints     map[string]*types.VpcEndpoint // VPC ID -> endpoints in that VPC
+	InstanceNames    map[string]string             // Instance ID -> name
+	TransitGateways  map[string]string             // VPC ID -> TGW attachment ID
+	NATGateways      map[string]*types.NatGateway  // VPC ID -> NAT gateways in that VPC
+	EndpointsByENI   map[string]*types.VpcEndpoint // ENI ID -> VPC endpoint
+	NATGatewaysByENI map[string]*types.NatGateway  // ENI ID -> NAT gateway
+}
+
+// NewENILookupCache creates and populates a cache with all required AWS resource data
+func NewENILookupCache(svc *ec2.Client, networkInterfaces []types.NetworkInterface) *ENILookupCache {
+	cache := &ENILookupCache{
+		VPCEndpoints:     make(map[string]*types.VpcEndpoint),
+		InstanceNames:    make(map[string]string),
+		TransitGateways:  make(map[string]string),
+		NATGateways:      make(map[string]*types.NatGateway),
+		EndpointsByENI:   make(map[string]*types.VpcEndpoint),
+		NATGatewaysByENI: make(map[string]*types.NatGateway),
+	}
+
+	// Collect unique VPC IDs and instance IDs from ENIs
+	vpcIDs := make(map[string]bool)
+	instanceIDs := make(map[string]bool)
+
+	for _, eni := range networkInterfaces {
+		if eni.VpcId != nil {
+			vpcIDs[*eni.VpcId] = true
+		}
+		if eni.Attachment != nil && eni.Attachment.InstanceId != nil {
+			instanceIDs[*eni.Attachment.InstanceId] = true
+		}
+	}
+
+	// Batch fetch VPC endpoints for all unique VPCs
+	cache.batchFetchVPCEndpoints(svc, vpcIDs)
+
+	// Batch fetch instance names for all unique instances
+	cache.batchFetchInstanceNames(svc, instanceIDs)
+
+	// Batch fetch NAT gateways for all unique VPCs
+	cache.batchFetchNATGateways(svc, vpcIDs)
+
+	// Batch fetch transit gateway attachments for all unique VPCs
+	cache.batchFetchTransitGateways(svc, vpcIDs)
+
+	return cache
+}
+
+// batchFetchVPCEndpoints fetches all VPC endpoints for the given VPCs in batches
+func (cache *ENILookupCache) batchFetchVPCEndpoints(svc *ec2.Client, vpcIDs map[string]bool) {
+	if len(vpcIDs) == 0 {
+		return
+	}
+
+	// Convert VPC IDs to slice for API call
+	vpcIDList := make([]string, 0, len(vpcIDs))
+	for vpcID := range vpcIDs {
+		vpcIDList = append(vpcIDList, vpcID)
+	}
+
+	// Fetch all VPC endpoints for these VPCs
+	params := &ec2.DescribeVpcEndpointsInput{
+		Filters: []types.Filter{
+			{
+				Name:   aws.String("vpc-id"),
+				Values: vpcIDList,
+			},
+		},
+	}
+
+	resp, err := svc.DescribeVpcEndpoints(context.Background(), params)
+	if err != nil {
+		panic(err)
+	}
+
+	// Index endpoints by ENI ID for fast lookup
+	for _, endpoint := range resp.VpcEndpoints {
+		for _, eniID := range endpoint.NetworkInterfaceIds {
+			cache.EndpointsByENI[eniID] = &endpoint
+		}
+	}
+}
+
+// batchFetchInstanceNames fetches all instance names for the given instances
+func (cache *ENILookupCache) batchFetchInstanceNames(svc *ec2.Client, instanceIDs map[string]bool) {
+	if len(instanceIDs) == 0 {
+		return
+	}
+
+	// Convert instance IDs to slice for API call
+	instanceIDList := make([]string, 0, len(instanceIDs))
+	for instanceID := range instanceIDs {
+		instanceIDList = append(instanceIDList, instanceID)
+	}
+
+	// Fetch all instances in batches (DescribeInstances has a limit)
+	const batchSize = 100 // AWS limit for DescribeInstances
+	for i := 0; i < len(instanceIDList); i += batchSize {
+		end := i + batchSize
+		if end > len(instanceIDList) {
+			end = len(instanceIDList)
+		}
+
+		params := &ec2.DescribeInstancesInput{
+			InstanceIds: instanceIDList[i:end],
+		}
+
+		resp, err := svc.DescribeInstances(context.TODO(), params)
+		if err != nil {
+			// If an instance doesn't exist, continue with others
+			continue
+		}
+
+		// Extract names from instances
+		for _, reservation := range resp.Reservations {
+			for _, instance := range reservation.Instances {
+				if instance.InstanceId != nil {
+					cache.InstanceNames[*instance.InstanceId] = getNameFromTags(instance.Tags)
+				}
+			}
+		}
+	}
+}
+
+// batchFetchNATGateways fetches all NAT gateways for the given VPCs
+func (cache *ENILookupCache) batchFetchNATGateways(svc *ec2.Client, vpcIDs map[string]bool) {
+	if len(vpcIDs) == 0 {
+		return
+	}
+
+	// Convert VPC IDs to slice for API call
+	vpcIDList := make([]string, 0, len(vpcIDs))
+	for vpcID := range vpcIDs {
+		vpcIDList = append(vpcIDList, vpcID)
+	}
+
+	params := &ec2.DescribeNatGatewaysInput{
+		Filter: []types.Filter{
+			{
+				Name:   aws.String("vpc-id"),
+				Values: vpcIDList,
+			},
+		},
+	}
+
+	resp, err := svc.DescribeNatGateways(context.Background(), params)
+	if err != nil {
+		panic(err)
+	}
+
+	// Index NAT gateways by ENI ID for fast lookup
+	for _, natgw := range resp.NatGateways {
+		for _, address := range natgw.NatGatewayAddresses {
+			if address.NetworkInterfaceId != nil {
+				cache.NATGatewaysByENI[*address.NetworkInterfaceId] = &natgw
+			}
+		}
+	}
+}
+
+// batchFetchTransitGateways fetches transit gateway attachments for the given VPCs
+func (cache *ENILookupCache) batchFetchTransitGateways(svc *ec2.Client, vpcIDs map[string]bool) {
+	if len(vpcIDs) == 0 {
+		return
+	}
+
+	// Convert VPC IDs to slice for API call
+	vpcIDList := make([]string, 0, len(vpcIDs))
+	for vpcID := range vpcIDs {
+		vpcIDList = append(vpcIDList, vpcID)
+	}
+
+	params := &ec2.DescribeTransitGatewayVpcAttachmentsInput{
+		Filters: []types.Filter{
+			{
+				Name:   aws.String("vpc-id"),
+				Values: vpcIDList,
+			},
+		},
+	}
+
+	resp, err := svc.DescribeTransitGatewayVpcAttachments(context.Background(), params)
+	if err != nil {
+		panic(err)
+	}
+
+	// Index TGW attachments by VPC ID for lookup
+	for _, attachment := range resp.TransitGatewayVpcAttachments {
+		if attachment.VpcId != nil && attachment.TransitGatewayAttachmentId != nil {
+			cache.TransitGateways[*attachment.VpcId] = *attachment.TransitGatewayAttachmentId
+		}
+	}
 }

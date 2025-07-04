@@ -33,34 +33,9 @@ func init() {
 	overviewCmd.Flags().StringVar(&vpcIDFilter, "vpc", "", "Filter by VPC ID (e.g., vpc-12345678)")
 }
 
-// getResourceDisplayName provides tiered name lookup for AWS resources
-// 1. First tries getName() for global naming lookup
-// 2. Then checks Name tag on the resource
-// 3. Finally falls back to the resource ID
-// Returns either "Name (ID)" or just "ID" if no name found
+// getResourceDisplayName provides tiered name lookup for AWS resources using the centralized helper
 func getResourceDisplayName(resourceID string, tags []types.Tag) string {
-	// Try getName first (global naming lookup)
-	nameFromGlobal := getName(resourceID)
-
-	var resourceName string
-	if nameFromGlobal != "" && nameFromGlobal != resourceID {
-		// getName returned a meaningful name
-		resourceName = nameFromGlobal
-	} else {
-		// Check Name tag directly on the resource
-		for _, tag := range tags {
-			if tag.Key != nil && *tag.Key == "Name" && tag.Value != nil && *tag.Value != "" {
-				resourceName = *tag.Value
-				break
-			}
-		}
-	}
-
-	// Format the display name
-	if resourceName != "" && resourceName != resourceID {
-		return resourceName + " (" + resourceID + ")"
-	}
-	return resourceID
+	return helpers.GetResourceDisplayNameWithGlobalLookup(resourceID, tags, getName)
 }
 
 func vpcOverview(_ *cobra.Command, _ []string) {
