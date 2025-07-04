@@ -19,7 +19,8 @@
       "Bash(./awstools-temp:*)",
       "Bash(git --no-pager:*)",
       "Bash(gh pr view:*)",
-      "Bash(gh api:*)"
+      "Bash(gh api:*)",
+      "WebFetch(domain:github.com)"
     ],
     "deny": []
   }
