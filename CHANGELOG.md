@@ -2,6 +2,74 @@
 
 All notable changes to this project will be documented in this file.
 
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+## [2025-07-03] - Refactored VPC overview code following PR review feedback
+
+### Changed
+- Eliminated code duplication by creating centralized `GetResourceDisplayNameWithGlobalLookup` helper function
+- Enhanced documentation for `analyzeSubnetIPUsage` function with comprehensive parameter and return value descriptions
+- Centralized resource naming logic to ensure consistent behavior across the codebase
+
+### Fixed
+- Removed unused functions `getENIUsageType` and `getENIAttachmentDetails` to reduce code maintenance burden
+- Added string constants for repeated ENI service types to fix goconst linting issues
+- All linting issues resolved (0 issues remaining)
+
+### Technical Details
+- Created reusable helper supporting both global naming lookup and tag-based fallback
+- Updated cmd/vpcoverview.go to use centralized helper instead of local duplicate implementation
+- Added constants: `vpcEndpointType`, `interfaceType`, `lambdaFunctionType`, `awsServiceType`
+- Enhanced function documentation explaining IP usage analysis process and performance optimizations
+
+## [2025-07-03] - Fixed linting issues and updated development guidelines
+
+### Fixed
+- Fixed goconst linting issue by using existing nameColumn constant instead of hardcoded "Name" string
+- Fixed gocritic linting issue by converting if-else chain to switch statement for better readability
+- Reduced linting issues from 2 to 0
+
+### Changed
+- Updated CLAUDE.md with additional development guidelines about generated text in commits and pull requests
+- Improved code structure in route table target identification logic
+
+### Technical Details
+- Converted if-else chain in `FormatRouteTableInfo` function to switch statement for better performance
+- Used consistent naming constants across the codebase
+- Enhanced development documentation with Claude-specific guidance
+
+## [2025-07-03] - Added VPC overview command and IP usage analysis
+
+### Added
+- New `vpc overview` command providing comprehensive VPC resource utilization analysis
+- Detailed subnet IP address allocation and usage tracking
+- VPC usage summary statistics with filtering capabilities
+- Enhanced Claude Code configuration with design and task generation commands
+
+### Technical Details
+- VPC overview command supports filtering by specific VPC ID using `--vpc` flag
+- IP address analysis includes AWS reserved IPs, service IPs, and availability tracking
+- Tiered resource naming using both global naming and Name tags
+- Route table analysis to distinguish public vs private subnets
+- Support for multiple output formats (JSON, CSV, table, HTML, etc.)
+
+### Files Added
+- `cmd/vpcoverview.go` - VPC overview command implementation (227 lines)
+- `plans/vpc-overview/design.md` - Comprehensive design documentation
+- `plans/vpc-overview/requirements.md` - Feature requirements specification
+- `plans/vpc-overview/tasks.md` - Implementation task breakdown
+- `plans/vpc-overview/eni-analyser.js` - ENI analysis utility script
+- `.claude/commands/design.md` - Design document generation command
+- `.claude/commands/tasks.md` - Task list generation command
+
+### Files Modified
+- `helpers/ec2.go` - Added VPC usage analysis functions (618 lines of additions)
+- `.claude/settings.local.json` - Enhanced tool permissions for development
+- `CHANGELOG.md` - Updated format to follow Keep a Changelog standard
+
 ## [2025-07-02 14:42:05] - Added comprehensive unit tests for config package
 
 ### Added
@@ -42,7 +110,7 @@ All notable changes to this project will be documented in this file.
 
 ### Files Added
 - `helpers/appmesh_test.go` - App Mesh structure and route testing
-- `helpers/cfn_test.go` - CloudFormation stack resource testing  
+- `helpers/cfn_test.go` - CloudFormation stack resource testing
 - `helpers/ec2_test.go` - EC2, VPC, Transit Gateway testing
 - `helpers/iam_test.go` - IAM user, group, and policy testing
 - `helpers/iamroles_test.go` - IAM role and policy document testing

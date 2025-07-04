@@ -2,11 +2,21 @@ package helpers
 
 import (
 	"context"
+	"net"
+	"sort"
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
+)
+
+// ENI and service type constants
+const (
+	vpcEndpointType    = "VPC Endpoint"
+	interfaceType      = "interface"
+	lambdaFunctionType = "Lambda Function"
+	awsServiceType     = "AWS Service"
 )
 
 // GetEc2Name returns the name of the provided EC2 Resource
@@ -159,6 +169,44 @@ func addAllVpnNames(svc *ec2.Client, result map[string]string) map[string]string
 		}
 	}
 	return result
+}
+
+// getResourceDisplayNameFromTags provides tiered name lookup for AWS resources
+// 1. Checks Name tag on the resource
+// 2. Falls back to the resource ID
+// Returns either "Name (ID)" or just "ID" if no name found
+func getResourceDisplayNameFromTags(resourceID string, tags []types.Tag) string {
+	// Try tag-based name lookup first
+	nameFromTags := getNameFromTags(tags)
+
+	// Format the display name
+	if nameFromTags != "" && nameFromTags != resourceID {
+		return nameFromTags + " (" + resourceID + ")"
+	}
+	return resourceID
+}
+
+// GetResourceDisplayNameWithGlobalLookup provides comprehensive tiered name lookup for AWS resources
+// 1. First tries global naming lookup using the provided lookup function
+// 2. Then checks Name tag on the resource
+// 3. Finally falls back to the resource ID
+// Returns either "Name (ID)" or just "ID" if no name found
+func GetResourceDisplayNameWithGlobalLookup(resourceID string, tags []types.Tag, globalLookupFunc func(string) string) string {
+	// Try global lookup first (if provided)
+	if globalLookupFunc != nil {
+		nameFromGlobal := globalLookupFunc(resourceID)
+		if nameFromGlobal != "" && nameFromGlobal != resourceID {
+			return nameFromGlobal + " (" + resourceID + ")"
+		}
+	}
+
+	// Try tag-based name lookup
+	nameFromTags := getNameFromTags(tags)
+	if nameFromTags != "" && nameFromTags != resourceID {
+		return nameFromTags + " (" + resourceID + ")"
+	}
+
+	return resourceID
 }
 
 // VpcPeering represents a VPC Peering object
@@ -509,8 +557,10 @@ func GetTransitGatewayFromNetworkInterface(netinterface types.NetworkInterface, 
 		panic(err)
 	}
 	if len(resp.TransitGatewayVpcAttachments) > 0 {
-		if stringInSlice(*netinterface.SubnetId, resp.TransitGatewayVpcAttachments[0].SubnetIds) {
-			return *resp.TransitGatewayVpcAttachments[0].TransitGatewayAttachmentId
+		for _, subnetID := range resp.TransitGatewayVpcAttachments[0].SubnetIds {
+			if subnetID == *netinterface.SubnetId {
+				return *resp.TransitGatewayVpcAttachments[0].TransitGatewayAttachmentId
+			}
 		}
 	}
 	return ""
@@ -533,8 +583,10 @@ func GetVPCEndpointFromNetworkInterface(netinterface types.NetworkInterface, svc
 	}
 	if len(resp.VpcEndpoints) > 0 {
 		for _, endpoint := range resp.VpcEndpoints {
-			if stringInSlice(*netinterface.NetworkInterfaceId, endpoint.NetworkInterfaceIds) {
-				return &endpoint
+			for _, eniID := range endpoint.NetworkInterfaceIds {
+				if eniID == *netinterface.NetworkInterfaceId {
+					return &endpoint
+				}
 			}
 		}
 	}
@@ -565,4 +617,821 @@ func GetNatGatewayFromNetworkInterface(netinterface types.NetworkInterface, svc 
 		}
 	}
 	return nil
+}
+
+// VPCOverview represents the complete VPC usage analysis
+type VPCOverview struct {
+	VPCs    []VPCUsageInfo  `json:"vpcs"`
+	Summary VPCUsageSummary `json:"summary"`
+}
+
+// VPCUsageInfo contains detailed information about a single VPC
+type VPCUsageInfo struct {
+	ID      string            `json:"id"`
+	Name    string            `json:"name"`
+	CIDR    string            `json:"cidr"`
+	Tags    []types.Tag       `json:"tags,omitempty"`
+	Subnets []SubnetUsageInfo `json:"subnets"`
+}
+
+// SubnetUsageInfo contains detailed subnet usage information
+type SubnetUsageInfo struct {
+	ID           string          `json:"id"`
+	Name         string          `json:"name"`
+	CIDR         string          `json:"cidr"`
+	VPCId        string          `json:"vpc_id"`
+	VPCName      string          `json:"vpc_name"`
+	Tags         []types.Tag     `json:"tags,omitempty"`
+	IsPublic     bool            `json:"is_public"`
+	TotalIPs     int             `json:"total_ips"`
+	AvailableIPs int             `json:"available_ips"`
+	UsedIPs      int             `json:"used_ips"`
+	IPDetails    []IPAddressInfo `json:"ip_details,omitempty"`
+}
+
+// IPAddressInfo contains information about individual IP addresses
+type IPAddressInfo struct {
+	IPAddress      string `json:"ip_address"`
+	UsageType      string `json:"usage_type"`
+	AttachmentInfo string `json:"attachment_info"`
+	PublicIP       string `json:"public_ip,omitempty"`
+}
+
+// VPCUsageSummary contains aggregate VPC usage statistics
+type VPCUsageSummary struct {
+	TotalVPCs      int `json:"total_vpcs"`
+	TotalSubnets   int `json:"total_subnets"`
+	TotalIPs       int `json:"total_ips"`
+	UsedIPs        int `json:"used_ips"`
+	AWSReservedIPs int `json:"aws_reserved_ips"`
+	ServiceIPs     int `json:"service_ips"`
+	AvailableIPs   int `json:"available_ips"`
+}
+
+// GetVPCUsageOverview retrieves comprehensive VPC usage information
+func GetVPCUsageOverview(svc *ec2.Client) VPCOverview {
+	vpcs := retrieveVPCData(svc)
+	subnets := retrieveSubnetData(svc)
+	networkInterfaces := retrieveNetworkInterfaces(svc)
+	routeTables := retrieveRouteTables(svc)
+
+	var vpcUsageInfos []VPCUsageInfo
+	var summary VPCUsageSummary
+
+	for _, vpc := range vpcs {
+		vpcInfo := VPCUsageInfo{
+			ID:   *vpc.VpcId,
+			Name: getNameFromTags(vpc.Tags),
+			CIDR: *vpc.CidrBlock,
+			Tags: vpc.Tags,
+		}
+
+		var vpcSubnets []SubnetUsageInfo
+		for _, subnet := range subnets {
+			if *subnet.VpcId == *vpc.VpcId {
+				// Calculate total IPs
+				totalIPs, _, err := calculateSubnetStats(*subnet.CidrBlock)
+				if err != nil {
+					panic(err)
+				}
+
+				// Analyze detailed IP usage
+				ipDetails, usedIPs, availableIPs, awsReservedIPs, serviceIPs, err := analyzeSubnetIPUsage(subnet, networkInterfaces, svc)
+				if err != nil {
+					panic(err)
+				}
+
+				subnetInfo := SubnetUsageInfo{
+					ID:           *subnet.SubnetId,
+					Name:         getNameFromTags(subnet.Tags),
+					CIDR:         *subnet.CidrBlock,
+					VPCId:        *subnet.VpcId,
+					VPCName:      vpcInfo.Name,
+					Tags:         subnet.Tags,
+					IsPublic:     isPublicSubnet(*subnet.SubnetId, routeTables),
+					TotalIPs:     totalIPs,
+					AvailableIPs: availableIPs,
+					UsedIPs:      usedIPs,
+					IPDetails:    ipDetails,
+				}
+				vpcSubnets = append(vpcSubnets, subnetInfo)
+
+				// Update summary
+				summary.TotalIPs += totalIPs
+				summary.UsedIPs += usedIPs
+				summary.AvailableIPs += availableIPs
+				summary.AWSReservedIPs += awsReservedIPs
+				summary.ServiceIPs += serviceIPs
+			}
+		}
+		vpcInfo.Subnets = vpcSubnets
+		vpcUsageInfos = append(vpcUsageInfos, vpcInfo)
+	}
+
+	summary.TotalVPCs = len(vpcUsageInfos)
+	for _, vpc := range vpcUsageInfos {
+		summary.TotalSubnets += len(vpc.Subnets)
+	}
+
+	return VPCOverview{
+		VPCs:    vpcUsageInfos,
+		Summary: summary,
+	}
+}
+
+// retrieveVPCData fetches all VPCs using DescribeVpcs API
+func retrieveVPCData(svc *ec2.Client) []types.Vpc {
+	resp, err := svc.DescribeVpcs(context.TODO(), &ec2.DescribeVpcsInput{})
+	if err != nil {
+		panic(err)
+	}
+	return resp.Vpcs
+}
+
+// retrieveSubnetData fetches all subnets using DescribeSubnets API
+func retrieveSubnetData(svc *ec2.Client) []types.Subnet {
+	resp, err := svc.DescribeSubnets(context.TODO(), &ec2.DescribeSubnetsInput{})
+	if err != nil {
+		panic(err)
+	}
+	return resp.Subnets
+}
+
+// retrieveNetworkInterfaces fetches all network interfaces using DescribeNetworkInterfaces API
+func retrieveNetworkInterfaces(svc *ec2.Client) []types.NetworkInterface {
+	resp, err := svc.DescribeNetworkInterfaces(context.TODO(), &ec2.DescribeNetworkInterfacesInput{})
+	if err != nil {
+		panic(err)
+	}
+	return resp.NetworkInterfaces
+}
+
+// retrieveRouteTables fetches all route tables using DescribeRouteTables API
+func retrieveRouteTables(svc *ec2.Client) []types.RouteTable {
+	resp, err := svc.DescribeRouteTables(context.TODO(), &ec2.DescribeRouteTablesInput{})
+	if err != nil {
+		panic(err)
+	}
+	return resp.RouteTables
+}
+
+// GetSubnetRouteTable finds the route table associated with a specific subnet
+func GetSubnetRouteTable(subnetID string, routeTables []types.RouteTable) *types.RouteTable {
+	// First check for explicit subnet associations
+	for _, routeTable := range routeTables {
+		for _, association := range routeTable.Associations {
+			if association.SubnetId != nil && *association.SubnetId == subnetID {
+				return &routeTable
+			}
+		}
+	}
+
+	// If no explicit association found, use the main route table
+	for _, routeTable := range routeTables {
+		for _, association := range routeTable.Associations {
+			if association.Main != nil && *association.Main {
+				return &routeTable
+			}
+		}
+	}
+
+	return nil
+}
+
+// FormatRouteTableInfo formats route table information similar to vpc routes command
+func FormatRouteTableInfo(routeTable *types.RouteTable) (string, []string) {
+	if routeTable == nil {
+		return "No route table", []string{}
+	}
+
+	// Use the same tiered lookup as other resources
+	rtDisplay := getResourceDisplayNameFromTags(*routeTable.RouteTableId, routeTable.Tags)
+
+	var routeList []string
+	for _, route := range routeTable.Routes {
+		destCIDR := ""
+		if route.DestinationCidrBlock != nil {
+			destCIDR = *route.DestinationCidrBlock
+		} else if route.DestinationIpv6CidrBlock != nil {
+			destCIDR = *route.DestinationIpv6CidrBlock
+		}
+
+		target := ""
+		switch {
+		case route.GatewayId != nil:
+			target = *route.GatewayId
+		case route.NatGatewayId != nil:
+			target = *route.NatGatewayId
+		case route.VpcPeeringConnectionId != nil:
+			target = *route.VpcPeeringConnectionId
+		case route.NetworkInterfaceId != nil:
+			target = *route.NetworkInterfaceId
+		case route.TransitGatewayId != nil:
+			target = *route.TransitGatewayId
+		case route.EgressOnlyInternetGatewayId != nil:
+			target = *route.EgressOnlyInternetGatewayId
+		default:
+			target = "local"
+		}
+
+		if destCIDR != "" && target != "" {
+			routeList = append(routeList, destCIDR+": "+target)
+		}
+	}
+
+	return rtDisplay, routeList
+}
+
+// isPublicSubnet determines if a subnet is public based on route table analysis
+func isPublicSubnet(subnetID string, routeTables []types.RouteTable) bool {
+	routeTable := GetSubnetRouteTable(subnetID, routeTables)
+	if routeTable == nil {
+		return false
+	}
+
+	// Check routes for internet gateway
+	return hasInternetGatewayRoute(*routeTable)
+}
+
+// hasInternetGatewayRoute checks if a route table has a route to an internet gateway
+func hasInternetGatewayRoute(routeTable types.RouteTable) bool {
+	for _, route := range routeTable.Routes {
+		// Check for internet gateway route
+		if route.GatewayId != nil && strings.HasPrefix(*route.GatewayId, "igw-") {
+			// Check if it's a default route (0.0.0.0/0) or covers broad ranges
+			if route.DestinationCidrBlock != nil {
+				cidr := *route.DestinationCidrBlock
+				if cidr == "0.0.0.0/0" {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+// parseCIDR parses a CIDR block and returns network information
+func parseCIDR(cidr string) (*net.IPNet, error) {
+	_, ipnet, err := net.ParseCIDR(cidr)
+	return ipnet, err
+}
+
+// generateIPRange generates all IP addresses in a subnet CIDR block
+func generateIPRange(cidr string) ([]net.IP, error) {
+	ipnet, err := parseCIDR(cidr)
+	if err != nil {
+		return nil, err
+	}
+
+	var ips []net.IP
+	for ip := ipnet.IP.Mask(ipnet.Mask); ipnet.Contains(ip); incrementIP(ip) {
+		ips = append(ips, net.IP(make([]byte, len(ip))))
+		copy(ips[len(ips)-1], ip)
+	}
+	return ips, nil
+}
+
+// incrementIP increments an IP address by one
+func incrementIP(ip net.IP) {
+	for j := len(ip) - 1; j >= 0; j-- {
+		ip[j]++
+		if ip[j] > 0 {
+			break
+		}
+	}
+}
+
+// calculateSubnetStats calculates total and available IP counts for a subnet
+func calculateSubnetStats(cidr string) (int, int, error) {
+	ipnet, err := parseCIDR(cidr)
+	if err != nil {
+		return 0, 0, err
+	}
+
+	ones, bits := ipnet.Mask.Size()
+	totalIPs := 1 << uint(bits-ones)
+
+	// AWS reserves first 4 and last IP in each subnet
+	availableIPs := totalIPs - 5
+	if availableIPs < 0 {
+		availableIPs = 0
+	}
+
+	return totalIPs, availableIPs, nil
+}
+
+// sortIPAddresses sorts IP addresses in ascending numerical order
+func sortIPAddresses(ips []net.IP) {
+	sort.Slice(ips, func(i, j int) bool {
+		return compareIPs(ips[i], ips[j]) < 0
+	})
+}
+
+// compareIPs compares two IP addresses for sorting
+func compareIPs(ip1, ip2 net.IP) int {
+	ip1 = ip1.To4()
+	ip2 = ip2.To4()
+	if ip1 == nil || ip2 == nil {
+		return 0
+	}
+
+	for i := 0; i < 4; i++ {
+		if ip1[i] < ip2[i] {
+			return -1
+		}
+		if ip1[i] > ip2[i] {
+			return 1
+		}
+	}
+	return 0
+}
+
+// identifyAWSReservedIPs identifies AWS reserved IP addresses in a subnet
+// Returns a map with IP address as key and usage description as value
+// Takes a pre-generated list of IPs to avoid duplicating IP range generation
+func identifyAWSReservedIPs(ips []net.IP) map[string]string {
+	reserved := make(map[string]string)
+	if len(ips) == 0 {
+		return reserved
+	}
+
+	// First IP (network address)
+	reserved[ips[0].String()] = "Network address"
+
+	// Second IP (VPC router)
+	if len(ips) > 1 {
+		reserved[ips[1].String()] = "VPC router"
+	}
+
+	// Third IP (DNS server)
+	if len(ips) > 2 {
+		reserved[ips[2].String()] = "DNS server"
+	}
+
+	// Fourth IP (future use)
+	if len(ips) > 3 {
+		reserved[ips[3].String()] = "Reserved for future use"
+	}
+
+	// Last IP (broadcast address)
+	if len(ips) > 4 {
+		reserved[ips[len(ips)-1].String()] = "Broadcast address"
+	}
+
+	return reserved
+}
+
+// mapNetworkInterfacesToIPs maps network interfaces to their IP addresses
+// Optimized version that creates a lookup cache once to avoid N+1 API calls
+// when processing many ENIs (e.g., DescribeVpcEndpoints, DescribeInstances, etc.)
+func mapNetworkInterfacesToIPs(networkInterfaces []types.NetworkInterface, subnetID string, svc *ec2.Client) map[string]IPAddressInfo {
+	// Create cache once for all ENI lookups to avoid N+1 API calls
+	cache := NewENILookupCache(svc, networkInterfaces)
+
+	ipMap := make(map[string]IPAddressInfo)
+
+	for _, eni := range networkInterfaces {
+		if eni.SubnetId != nil && *eni.SubnetId == subnetID {
+			for _, privateIP := range eni.PrivateIpAddresses {
+				if privateIP.PrivateIpAddress != nil {
+					ipInfo := IPAddressInfo{
+						IPAddress:      *privateIP.PrivateIpAddress,
+						UsageType:      getENIUsageTypeOptimized(eni, cache),
+						AttachmentInfo: getENIAttachmentDetailsOptimized(eni, cache),
+					}
+
+					// Add public IP if present
+					if privateIP.Association != nil && privateIP.Association.PublicIp != nil {
+						ipInfo.PublicIP = *privateIP.Association.PublicIp
+					}
+
+					ipMap[*privateIP.PrivateIpAddress] = ipInfo
+				}
+			}
+		}
+	}
+
+	return ipMap
+}
+
+// getENIUsageTypeOptimized returns the general category of what the ENI is used for
+// Uses cache to avoid repeated API calls
+func getENIUsageTypeOptimized(eni types.NetworkInterface, cache *ENILookupCache) string {
+	// Check if it's a VPC endpoint first (highest priority)
+	if _, exists := cache.EndpointsByENI[*eni.NetworkInterfaceId]; exists {
+		return vpcEndpointType
+	}
+
+	// Handle EC2 instances
+	if eni.Attachment != nil && eni.Attachment.InstanceId != nil {
+		return "EC2 Instance"
+	}
+
+	// Handle specific interface types (if not 'interface')
+	if eni.InterfaceType != interfaceType {
+		switch eni.InterfaceType {
+		case types.NetworkInterfaceTypeTransitGateway:
+			return "Transit Gateway"
+		case types.NetworkInterfaceTypeNatGateway:
+			return "NAT Gateway"
+		case types.NetworkInterfaceTypeVpcEndpoint:
+			return vpcEndpointType
+		case types.NetworkInterfaceTypeLambda:
+			return lambdaFunctionType
+		case "quicksight":
+			return "QuickSight"
+		case "network_load_balancer":
+			return "Network Load Balancer"
+		case "gateway_load_balancer":
+			return "Gateway Load Balancer"
+		default:
+			return awsServiceType
+		}
+	}
+
+	// Handle by description for common services (following JS script logic)
+	if eni.Description != nil {
+		desc := strings.ToLower(*eni.Description)
+		if strings.Contains(desc, "elb") {
+			return "Load Balancer"
+		}
+		if strings.Contains(desc, "rds") {
+			return "RDS Database"
+		}
+		if strings.Contains(desc, "lambda") {
+			return lambdaFunctionType
+		}
+		if strings.Contains(desc, "vpc") {
+			return "VPC Service"
+		}
+		if strings.Contains(desc, "elasticache") {
+			return "ElastiCache"
+		}
+		if strings.Contains(desc, "efs") {
+			return "EFS Mount Target"
+		}
+		if strings.Contains(desc, "redshift") {
+			return "Redshift Cluster"
+		}
+		if strings.Contains(desc, "apigateway") {
+			return "API Gateway"
+		}
+		if strings.Contains(desc, "codebuild") {
+			return "CodeBuild"
+		}
+		// If description contains service keywords, it's likely a service
+		return awsServiceType
+	}
+
+	// Unattached or unknown
+	if eni.Attachment == nil {
+		return "Unattached ENI"
+	}
+
+	return "Unknown"
+}
+
+// getENIAttachmentDetailsOptimized returns specific details about what the ENI is attached to
+// Uses cache to avoid repeated API calls
+func getENIAttachmentDetailsOptimized(eni types.NetworkInterface, cache *ENILookupCache) string {
+	// Priority 1: Check if it's a VPC endpoint (following JS script logic)
+	if endpoint, exists := cache.EndpointsByENI[*eni.NetworkInterfaceId]; exists {
+		// Extract service name (last part after dots, like 's3', 'ec2')
+		serviceParts := strings.Split(*endpoint.ServiceName, ".")
+		shortServiceName := serviceParts[len(serviceParts)-1]
+		return *endpoint.VpcEndpointId + " (" + shortServiceName + ")"
+	}
+
+	// Priority 2: Handle EC2 instances
+	if eni.Attachment != nil && eni.Attachment.InstanceId != nil {
+		instanceID := *eni.Attachment.InstanceId
+		if instanceName, exists := cache.InstanceNames[instanceID]; exists && instanceName != "" && instanceName != instanceID {
+			return instanceID + " (" + instanceName + ")"
+		}
+		return instanceID
+	}
+
+	// Priority 3: Handle specific interface types (if not 'interface')
+	if eni.InterfaceType != interfaceType {
+		switch eni.InterfaceType {
+		case types.NetworkInterfaceTypeTransitGateway:
+			if eni.VpcId != nil {
+				if tgwID, exists := cache.TransitGateways[*eni.VpcId]; exists {
+					return tgwID
+				}
+			}
+			return "Unknown Transit Gateway"
+
+		case types.NetworkInterfaceTypeNatGateway:
+			if natgw, exists := cache.NATGatewaysByENI[*eni.NetworkInterfaceId]; exists {
+				natName := getNameFromTags(natgw.Tags)
+				if natName != "" && natName != *natgw.NatGatewayId {
+					return *natgw.NatGatewayId + " (" + natName + ")"
+				}
+				return *natgw.NatGatewayId
+			}
+			return "Unknown NAT Gateway"
+
+		default:
+			// For other interface types, return the description if available
+			if eni.Description != nil {
+				return *eni.Description
+			}
+			return string(eni.InterfaceType)
+		}
+	}
+
+	// Priority 4: Check description for service keywords (following JS script logic)
+	if eni.Description != nil {
+		desc := strings.ToLower(*eni.Description)
+		if strings.Contains(desc, "elb") || strings.Contains(desc, "rds") ||
+			strings.Contains(desc, "lambda") || strings.Contains(desc, "vpc") {
+			return *eni.Description
+		}
+		// Return description for any service-like ENI
+		return *eni.Description
+	}
+
+	// Priority 5: Unattached or unknown
+	if eni.Attachment == nil {
+		return "Unattached"
+	}
+
+	return "N/A"
+}
+
+// analyzeSubnetIPUsage provides comprehensive IP usage analysis for a subnet
+//
+// This function performs detailed analysis of IP address allocation within a subnet by:
+// 1. Generating all possible IP addresses in the subnet's CIDR range
+// 2. Identifying AWS reserved IPs (network, router, DNS, future use, broadcast)
+// 3. Mapping active network interfaces to their IP addresses
+// 4. Categorizing each IP as either AWS reserved or service-related
+//
+// Parameters:
+//   - subnet: The AWS subnet to analyze
+//   - networkInterfaces: All network interfaces to check for IP usage
+//   - svc: EC2 client for additional AWS API calls (used for ENI lookups)
+//
+// Returns:
+//   - ipDetails: Detailed information about each IP address in use
+//   - usedIPs: Total count of IP addresses currently allocated
+//   - availableIPs: Count of IP addresses available for new allocations
+//   - awsReservedIPs: Count of IPs reserved by AWS (network, router, DNS, etc.)
+//   - serviceIPs: Count of IPs allocated to AWS services or EC2 instances
+//   - error: Any error encountered during analysis
+//
+// Note: This function uses optimized batch API calls via ENILookupCache to avoid N+1 queries
+// when analyzing large numbers of network interfaces.
+func analyzeSubnetIPUsage(subnet types.Subnet, networkInterfaces []types.NetworkInterface, svc *ec2.Client) ([]IPAddressInfo, int, int, int, int, error) {
+	cidr := *subnet.CidrBlock
+
+	// Get all IPs in the subnet
+	allIPs, err := generateIPRange(cidr)
+	if err != nil {
+		return nil, 0, 0, 0, 0, err
+	}
+
+	// Get AWS reserved IPs using the same IP list to avoid duplication
+	reservedIPs := identifyAWSReservedIPs(allIPs)
+
+	// Map ENIs to IPs
+	eniIPMap := mapNetworkInterfacesToIPs(networkInterfaces, *subnet.SubnetId, svc)
+
+	var ipDetails []IPAddressInfo
+	usedCount := 0
+	awsReservedCount := 0
+	serviceIPsCount := 0
+
+	// Sort IPs for ordered output
+	sortIPAddresses(allIPs)
+
+	for _, ip := range allIPs {
+		ipStr := ip.String()
+
+		if awsUsage, isReserved := reservedIPs[ipStr]; isReserved {
+			ipDetails = append(ipDetails, IPAddressInfo{
+				IPAddress:      ipStr,
+				UsageType:      "RESERVED BY AWS",
+				AttachmentInfo: awsUsage,
+			})
+			usedCount++
+			awsReservedCount++
+		} else if eniInfo, exists := eniIPMap[ipStr]; exists {
+			ipDetails = append(ipDetails, eniInfo)
+			usedCount++
+			serviceIPsCount++
+		}
+	}
+
+	totalIPs := len(allIPs)
+	availableIPs := totalIPs - usedCount
+
+	return ipDetails, usedCount, availableIPs, awsReservedCount, serviceIPsCount, nil
+}
+
+// ENILookupCache contains pre-fetched AWS resource data to avoid N+1 API calls
+// This cache dramatically improves performance when analyzing many ENIs by batching
+// API calls instead of making individual requests for each ENI's attachment details.
+//
+// Performance benefits:
+// - VPC Endpoints: 1 batched DescribeVpcEndpoints call vs N individual calls
+// - EC2 Instances: Batched DescribeInstances calls vs N individual calls
+// - NAT Gateways: 1 batched DescribeNatGateways call vs N individual calls
+// - Transit Gateways: 1 batched DescribeTransitGatewayVpcAttachments call vs N individual calls
+//
+// For 100 ENIs, this reduces API calls from ~400 to ~4, significantly improving
+// performance and reducing the chance of hitting AWS API rate limits.
+type ENILookupCache struct {
+	VPCEndpoints     map[string]*types.VpcEndpoint // VPC ID -> endpoints in that VPC
+	InstanceNames    map[string]string             // Instance ID -> name
+	TransitGateways  map[string]string             // VPC ID -> TGW attachment ID
+	NATGateways      map[string]*types.NatGateway  // VPC ID -> NAT gateways in that VPC
+	EndpointsByENI   map[string]*types.VpcEndpoint // ENI ID -> VPC endpoint
+	NATGatewaysByENI map[string]*types.NatGateway  // ENI ID -> NAT gateway
+}
+
+// NewENILookupCache creates and populates a cache with all required AWS resource data
+func NewENILookupCache(svc *ec2.Client, networkInterfaces []types.NetworkInterface) *ENILookupCache {
+	cache := &ENILookupCache{
+		VPCEndpoints:     make(map[string]*types.VpcEndpoint),
+		InstanceNames:    make(map[string]string),
+		TransitGateways:  make(map[string]string),
+		NATGateways:      make(map[string]*types.NatGateway),
+		EndpointsByENI:   make(map[string]*types.VpcEndpoint),
+		NATGatewaysByENI: make(map[string]*types.NatGateway),
+	}
+
+	// Collect unique VPC IDs and instance IDs from ENIs
+	vpcIDs := make(map[string]bool)
+	instanceIDs := make(map[string]bool)
+
+	for _, eni := range networkInterfaces {
+		if eni.VpcId != nil {
+			vpcIDs[*eni.VpcId] = true
+		}
+		if eni.Attachment != nil && eni.Attachment.InstanceId != nil {
+			instanceIDs[*eni.Attachment.InstanceId] = true
+		}
+	}
+
+	// Batch fetch VPC endpoints for all unique VPCs
+	cache.batchFetchVPCEndpoints(svc, vpcIDs)
+
+	// Batch fetch instance names for all unique instances
+	cache.batchFetchInstanceNames(svc, instanceIDs)
+
+	// Batch fetch NAT gateways for all unique VPCs
+	cache.batchFetchNATGateways(svc, vpcIDs)
+
+	// Batch fetch transit gateway attachments for all unique VPCs
+	cache.batchFetchTransitGateways(svc, vpcIDs)
+
+	return cache
+}
+
+// batchFetchVPCEndpoints fetches all VPC endpoints for the given VPCs in batches
+func (cache *ENILookupCache) batchFetchVPCEndpoints(svc *ec2.Client, vpcIDs map[string]bool) {
+	if len(vpcIDs) == 0 {
+		return
+	}
+
+	// Convert VPC IDs to slice for API call
+	vpcIDList := make([]string, 0, len(vpcIDs))
+	for vpcID := range vpcIDs {
+		vpcIDList = append(vpcIDList, vpcID)
+	}
+
+	// Fetch all VPC endpoints for these VPCs
+	params := &ec2.DescribeVpcEndpointsInput{
+		Filters: []types.Filter{
+			{
+				Name:   aws.String("vpc-id"),
+				Values: vpcIDList,
+			},
+		},
+	}
+
+	resp, err := svc.DescribeVpcEndpoints(context.Background(), params)
+	if err != nil {
+		panic(err)
+	}
+
+	// Index endpoints by ENI ID for fast lookup
+	for _, endpoint := range resp.VpcEndpoints {
+		for _, eniID := range endpoint.NetworkInterfaceIds {
+			cache.EndpointsByENI[eniID] = &endpoint
+		}
+	}
+}
+
+// batchFetchInstanceNames fetches all instance names for the given instances
+func (cache *ENILookupCache) batchFetchInstanceNames(svc *ec2.Client, instanceIDs map[string]bool) {
+	if len(instanceIDs) == 0 {
+		return
+	}
+
+	// Convert instance IDs to slice for API call
+	instanceIDList := make([]string, 0, len(instanceIDs))
+	for instanceID := range instanceIDs {
+		instanceIDList = append(instanceIDList, instanceID)
+	}
+
+	// Fetch all instances in batches (DescribeInstances has a limit)
+	const batchSize = 100 // AWS limit for DescribeInstances
+	for i := 0; i < len(instanceIDList); i += batchSize {
+		end := i + batchSize
+		if end > len(instanceIDList) {
+			end = len(instanceIDList)
+		}
+
+		params := &ec2.DescribeInstancesInput{
+			InstanceIds: instanceIDList[i:end],
+		}
+
+		resp, err := svc.DescribeInstances(context.TODO(), params)
+		if err != nil {
+			// If an instance doesn't exist, continue with others
+			continue
+		}
+
+		// Extract names from instances
+		for _, reservation := range resp.Reservations {
+			for _, instance := range reservation.Instances {
+				if instance.InstanceId != nil {
+					cache.InstanceNames[*instance.InstanceId] = getNameFromTags(instance.Tags)
+				}
+			}
+		}
+	}
+}
+
+// batchFetchNATGateways fetches all NAT gateways for the given VPCs
+func (cache *ENILookupCache) batchFetchNATGateways(svc *ec2.Client, vpcIDs map[string]bool) {
+	if len(vpcIDs) == 0 {
+		return
+	}
+
+	// Convert VPC IDs to slice for API call
+	vpcIDList := make([]string, 0, len(vpcIDs))
+	for vpcID := range vpcIDs {
+		vpcIDList = append(vpcIDList, vpcID)
+	}
+
+	params := &ec2.DescribeNatGatewaysInput{
+		Filter: []types.Filter{
+			{
+				Name:   aws.String("vpc-id"),
+				Values: vpcIDList,
+			},
+		},
+	}
+
+	resp, err := svc.DescribeNatGateways(context.Background(), params)
+	if err != nil {
+		panic(err)
+	}
+
+	// Index NAT gateways by ENI ID for fast lookup
+	for _, natgw := range resp.NatGateways {
+		for _, address := range natgw.NatGatewayAddresses {
+			if address.NetworkInterfaceId != nil {
+				cache.NATGatewaysByENI[*address.NetworkInterfaceId] = &natgw
+			}
+		}
+	}
+}
+
+// batchFetchTransitGateways fetches transit gateway attachments for the given VPCs
+func (cache *ENILookupCache) batchFetchTransitGateways(svc *ec2.Client, vpcIDs map[string]bool) {
+	if len(vpcIDs) == 0 {
+		return
+	}
+
+	// Convert VPC IDs to slice for API call
+	vpcIDList := make([]string, 0, len(vpcIDs))
+	for vpcID := range vpcIDs {
+		vpcIDList = append(vpcIDList, vpcID)
+	}
+
+	params := &ec2.DescribeTransitGatewayVpcAttachmentsInput{
+		Filters: []types.Filter{
+			{
+				Name:   aws.String("vpc-id"),
+				Values: vpcIDList,
+			},
+		},
+	}
+
+	resp, err := svc.DescribeTransitGatewayVpcAttachments(context.Background(), params)
+	if err != nil {
+		panic(err)
+	}
+
+	// Index TGW attachments by VPC ID for lookup
+	for _, attachment := range resp.TransitGatewayVpcAttachments {
+		if attachment.VpcId != nil && attachment.TransitGatewayAttachmentId != nil {
+			cache.TransitGateways[*attachment.VpcId] = *attachment.TransitGatewayAttachmentId
+		}
+	}
 }
