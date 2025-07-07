@@ -154,14 +154,9 @@ Get comprehensive VPC IP usage analysis:
 $ awstools vpc overview --output table
 ```
 
-Find details for a specific IP address:
+Find details for a specific IP address (searches both primary and secondary IPs):
 ```bash
 $ awstools vpc ip-finder 10.0.1.100 --output table
-```
-
-Find IP addresses including secondary IPs:
-```bash
-$ awstools vpc ip-finder 10.0.1.100 --include-secondary --output table
 ```
 
 ### SSO Management

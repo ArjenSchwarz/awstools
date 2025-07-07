@@ -72,7 +72,6 @@ var ipFinderCmd = &cobra.Command{
 // Global variables for flags
 var (
     searchAllRegions bool
-    includeSecondary bool
 )
 
 // Command handler function
@@ -88,7 +87,7 @@ func findIPAddress(cmd *cobra.Command, args []string) {
     awsConfig := config.DefaultAwsConfig(*settings)
     
     // Call helper function
-    result := helpers.FindIPAddressDetails(awsConfig.Ec2Client(), ipAddress, includeSecondary)
+    result := helpers.FindIPAddressDetails(awsConfig.Ec2Client(), ipAddress)
     
     // Format and output results
     formatIPFinderOutput(result)
@@ -132,7 +131,7 @@ type SecurityGroupInfo struct {
 }
 
 // Main search function
-func FindIPAddressDetails(svc *ec2.Client, ipAddress string, includeSecondary bool) IPFinderResult {
+func FindIPAddressDetails(svc *ec2.Client, ipAddress string) IPFinderResult {
     // Create filter for IP address search
     filters := []types.Filter{
         {
@@ -476,7 +475,7 @@ func TestIPFinderIntegration(t *testing.T) {
     ec2Client := awsConfig.Ec2Client()
     
     // Test known IP address (would need to be set up in test environment)
-    result := FindIPAddressDetails(ec2Client, "10.0.1.100", true)
+    result := FindIPAddressDetails(ec2Client, "10.0.1.100")
     
     // Validate result structure
     assert.NotEmpty(t, result.IPAddress)
@@ -529,7 +528,6 @@ awstools vpc ip-finder 10.0.1.100 --output csv
 awstools vpc ip-finder 10.0.1.100 --output table
 
 # Test with flags
-awstools vpc ip-finder 10.0.1.100 --include-secondary
 awstools vpc ip-finder 10.0.1.100 --region us-west-2
 awstools vpc ip-finder 10.0.1.100 --profile production
 ```

@@ -1121,8 +1121,8 @@ func getENIAttachmentDetailsOptimized(eni types.NetworkInterface, cache *ENILook
 		return instanceID
 	}
 
-	// Priority 3: Handle specific interface types (if not 'interface')
-	if eni.InterfaceType != interfaceType {
+	// Priority 3: Handle specific interface types (if not 'interface' and not empty)
+	if eni.InterfaceType != "" && eni.InterfaceType != interfaceType {
 		switch eni.InterfaceType {
 		case types.NetworkInterfaceTypeTransitGateway:
 			if eni.VpcId != nil {
@@ -1500,8 +1500,10 @@ func IsValidCIDR(cidr string) bool {
 }
 
 // FindIPAddressDetails searches for an IP address across ENIs and returns detailed information
-func FindIPAddressDetails(svc *ec2.Client, ipAddress string, includeSecondary bool) IPFinderResult {
+// Searches both primary and secondary IP addresses on all ENIs
+func FindIPAddressDetails(svc *ec2.Client, ipAddress string) IPFinderResult {
 	// Create filter for IP address search
+	// Note: addresses.private-ip-address filter includes both primary and secondary IPs
 	filters := []types.Filter{
 		{
 			Name:   aws.String("addresses.private-ip-address"),
@@ -1509,7 +1511,7 @@ func FindIPAddressDetails(svc *ec2.Client, ipAddress string, includeSecondary bo
 		},
 	}
 
-	// Search for ENIs with the IP address
+	// Search for ENIs with the IP address (includes both primary and secondary IPs)
 	enis := searchENIsByIP(svc, filters)
 
 	if len(enis) == 0 {

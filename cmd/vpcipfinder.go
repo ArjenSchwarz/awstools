@@ -18,26 +18,25 @@ var ipFinderCmd = &cobra.Command{
 	This command will search for the specified IP address across all Network Interfaces (ENIs) in your AWS account
 	and return comprehensive information about the resource associated with that IP address.
 	
+	The search includes both primary and secondary IP addresses on ENIs.
+	
 	Examples:
 	  awstools vpc ip-finder 10.0.1.100
-	  awstools vpc ip-finder 10.0.1.100 --include-secondary
 	  awstools vpc ip-finder 10.0.1.100 --output json`,
 	Args: cobra.ExactArgs(1),
 	Run:  findIPAddress,
 }
 
 var (
-	includeSecondary bool
 	searchAllRegions bool
 )
 
 func init() {
 	vpcCmd.AddCommand(ipFinderCmd)
-	ipFinderCmd.Flags().BoolVar(&includeSecondary, "include-secondary", false, "Include secondary IP addresses in search")
 	ipFinderCmd.Flags().BoolVar(&searchAllRegions, "search-all-regions", false, "Search across all regions (future enhancement)")
 }
 
-func findIPAddress(cmd *cobra.Command, args []string) {
+func findIPAddress(_ *cobra.Command, args []string) {
 	ipAddress := args[0]
 
 	// Validate IP address format with helpful error message
@@ -49,7 +48,7 @@ func findIPAddress(cmd *cobra.Command, args []string) {
 	awsConfig := config.DefaultAwsConfig(*settings)
 
 	// Call helper function
-	result := helpers.FindIPAddressDetails(awsConfig.Ec2Client(), ipAddress, includeSecondary)
+	result := helpers.FindIPAddressDetails(awsConfig.Ec2Client(), ipAddress)
 
 	// Format and output results
 	formatIPFinderOutput(result)

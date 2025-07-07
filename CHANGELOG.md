@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Fixed failing unit tests in IAM and EC2 helpers packages
+- Fixed IAM `CanBeAssumedFrom` method to use alphabetical sorting for consistent output
+- Fixed EC2 `getResourceNameAndID` function to properly handle unattached ENIs
+- Fixed unused parameter linting issues in ip-finder command and EC2 helper functions
+
+### Changed
+- Simplified VPC ip-finder command by removing `--include-secondary` flag (always searches both primary and secondary IPs)
+- Updated help text and documentation to clarify that ip-finder searches both IP types by default
+- Simplified IAM principal sorting logic to use standard alphabetical ordering
+- Added constants for IAM principal types to improve code maintainability
+
+### Removed
+- Removed `--include-secondary` flag from vpc ip-finder command
+- Removed complex custom sorting logic in IAM CanBeAssumedFrom method
+
 ### Added
 - New `vpc ip-finder` command for locating IP addresses across AWS infrastructure
 - Comprehensive IP address search functionality with support for primary and secondary IPs
