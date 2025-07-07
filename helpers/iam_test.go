@@ -281,7 +281,7 @@ func TestIAMRole_CanBeAssumedFrom(t *testing.T) {
 					},
 				},
 			},
-			expected: []string{"Service: lambda.amazonaws.com", "AWS: arn:aws:iam::123456789012:root"},
+			expected: []string{"AWS: arn:aws:iam::123456789012:root", "Service: lambda.amazonaws.com"},
 		},
 		{
 			name: "role with SAML assumption",

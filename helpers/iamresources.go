@@ -3,6 +3,7 @@ package helpers
 import (
 	"context"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -22,6 +23,12 @@ const (
 	IAMPolicyTypeAttached   = "Attached Policy"
 	IAMPolicyTypeInline     = "Inline Policy"
 	IAMPolicyTypeAssumeRole = "Assume Role Policy"
+)
+
+// IAM Principal Type
+const (
+	IAMPrincipalTypeService = "Service"
+	IAMPrincipalTypeAWS     = "AWS"
 )
 
 // IAM Object Type
@@ -59,8 +66,15 @@ func (role *IAMRole) CanBeAssumedFrom() []string {
 	allowances := []string{}
 	for _, statement := range role.AssumeRolePolicy.Statement {
 		if statement.Action == "sts:AssumeRole" || statement.Action == "sts:AssumeRoleWithSAML" {
-			for key, value := range statement.Principal {
-				allowance := fmt.Sprintf("%s: %s", key, value)
+			// Create a slice of keys for consistent ordering
+			keys := make([]string, 0, len(statement.Principal))
+			for key := range statement.Principal {
+				keys = append(keys, key)
+			}
+			// Sort keys alphabetically for consistent ordering
+			sort.Strings(keys)
+			for _, key := range keys {
+				allowance := fmt.Sprintf("%s: %s", key, statement.Principal[key])
 				allowances = append(allowances, allowance)
 			}
 		}

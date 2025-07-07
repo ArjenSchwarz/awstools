@@ -28,10 +28,10 @@
   - [x] Define `ipFinderCmd` using Cobra framework
   - [x] Set up command structure with proper Use, Short, Long descriptions
   - [x] Configure `cobra.ExactArgs(1)` for IP address argument
-  - [x] Add global flag variables (`includeSecondary`, `searchAllRegions`)
+  - [x] Add global flag variables (`searchAllRegions`)
 - [x] Register command with VPC parent command
 - [x] Add command flags
-  - [x] `--include-secondary` flag for secondary IP search
+  - [x] ~~`--include-secondary` flag for secondary IP search~~ (removed - always searches both primary and secondary)
   - [x] `--search-all-regions` flag for multi-region search (future enhancement)
 
 ## Phase 2: Core Search and Lookup Implementation
@@ -213,7 +213,7 @@
 - [x] Add command to VPC parent command documentation
 - [x] Create example commands for different scenarios
   - [x] Basic IP search
-  - [x] Secondary IP search
+  - [x] ~~Secondary IP search~~ (always searches both primary and secondary)
   - [x] Different output formats
   - [x] Multi-region scenarios
 
