@@ -2,6 +2,7 @@ package helpers
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"sort"
 	"strings"
@@ -526,7 +527,16 @@ func getNameFromTags(tags []types.Tag) string {
 	}
 	for _, tag := range tags {
 		if aws.ToString(tag.Key) == "Name" {
-			return aws.ToString(tag.Value)
+			name := aws.ToString(tag.Value)
+			// Handle empty or whitespace-only names
+			if strings.TrimSpace(name) == "" {
+				return ""
+			}
+			// Truncate very long names for display purposes (keep up to 100 chars)
+			if len(name) > 100 {
+				return name[:97] + "..."
+			}
+			return name
 		}
 	}
 	return ""
@@ -1433,5 +1443,294 @@ func (cache *ENILookupCache) batchFetchTransitGateways(svc *ec2.Client, vpcIDs m
 		if attachment.VpcId != nil && attachment.TransitGatewayAttachmentId != nil {
 			cache.TransitGateways[*attachment.VpcId] = *attachment.TransitGatewayAttachmentId
 		}
+	}
+}
+
+// IPFinderResult contains the result of IP address search
+type IPFinderResult struct {
+	IPAddress      string                  `json:"ip_address"`
+	ENI            *types.NetworkInterface `json:"eni,omitempty"`
+	ResourceType   string                  `json:"resource_type"`
+	ResourceName   string                  `json:"resource_name"`
+	ResourceID     string                  `json:"resource_id"`
+	VPC            VPCInfo                 `json:"vpc"`
+	Subnet         SubnetInfo              `json:"subnet"`
+	SecurityGroups []SecurityGroupInfo     `json:"security_groups"`
+	RouteTable     RouteTableInfo          `json:"route_table"`
+	IsSecondaryIP  bool                    `json:"is_secondary_ip"`
+	Found          bool                    `json:"found"`
+}
+
+// VPCInfo contains VPC information for IP finder
+type VPCInfo struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	CIDR string `json:"cidr"`
+}
+
+// SubnetInfo contains subnet information for IP finder
+type SubnetInfo struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	CIDR string `json:"cidr"`
+}
+
+// SecurityGroupInfo contains security group information for IP finder
+type SecurityGroupInfo struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+// RouteTableInfo contains route table information for IP finder
+type RouteTableInfo struct {
+	ID     string   `json:"id"`
+	Name   string   `json:"name"`
+	Routes []string `json:"routes"`
+}
+
+// IsValidIPAddress validates if the provided string is a valid IP address
+func IsValidIPAddress(ip string) bool {
+	return net.ParseIP(ip) != nil
+}
+
+// IsValidCIDR validates if the provided string is a valid CIDR block
+func IsValidCIDR(cidr string) bool {
+	_, _, err := net.ParseCIDR(cidr)
+	return err == nil
+}
+
+// FindIPAddressDetails searches for an IP address across ENIs and returns detailed information
+func FindIPAddressDetails(svc *ec2.Client, ipAddress string, includeSecondary bool) IPFinderResult {
+	// Create filter for IP address search
+	filters := []types.Filter{
+		{
+			Name:   aws.String("addresses.private-ip-address"),
+			Values: []string{ipAddress},
+		},
+	}
+
+	// Search for ENIs with the IP address
+	enis := searchENIsByIP(svc, filters)
+
+	if len(enis) == 0 {
+		return IPFinderResult{
+			IPAddress: ipAddress,
+			Found:     false,
+		}
+	}
+
+	// Handle multiple ENIs with the same IP (rare but possible)
+	if len(enis) > 1 {
+		// Log warning about multiple matches - following awstools pattern of using panic for warnings
+		// This is a rare scenario but can happen in some edge cases
+		fmt.Printf("Warning: Multiple ENIs found with IP %s. Returning details for first ENI (%s)\n",
+			ipAddress, *enis[0].NetworkInterfaceId)
+	}
+
+	// Process the first matching ENI
+	eni := enis[0]
+
+	// Create ENI cache for efficient resource lookup
+	cache := NewENILookupCache(svc, []types.NetworkInterface{eni})
+
+	// Build detailed result
+	result := IPFinderResult{
+		IPAddress:     ipAddress,
+		ENI:           &eni,
+		Found:         true,
+		IsSecondaryIP: isSecondaryIP(eni, ipAddress),
+	}
+
+	// Populate resource information
+	result.ResourceType = getENIUsageTypeOptimized(eni, cache)
+	result.ResourceName, result.ResourceID = getResourceNameAndID(eni, cache)
+	result.VPC = getVPCInfo(svc, aws.ToString(eni.VpcId))
+	result.Subnet = getSubnetInfo(svc, aws.ToString(eni.SubnetId))
+	result.SecurityGroups = getSecurityGroupInfo(svc, eni.Groups)
+	result.RouteTable = getRouteTableInfo(svc, aws.ToString(eni.SubnetId))
+
+	return result
+}
+
+// handleAWSAPIError provides better error messages for common AWS API errors
+func handleAWSAPIError(err error, apiName string) {
+	if strings.Contains(err.Error(), "UnauthorizedOperation") {
+		panic(fmt.Errorf("insufficient permissions for %s\n\nRequired permissions:\n  - ec2:%s\n\nOriginal error: %v", apiName, apiName, err))
+	}
+	if strings.Contains(err.Error(), "AuthFailure") {
+		panic(fmt.Errorf("AWS authentication failed\n\nPlease check your AWS credentials:\n  - AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables\n  - ~/.aws/credentials file\n  - IAM role (if running on EC2)\n\nOriginal error: %v", err))
+	}
+	if strings.Contains(err.Error(), "RequestLimitExceeded") || strings.Contains(err.Error(), "Throttling") {
+		panic(fmt.Errorf("AWS API rate limit exceeded\n\nThe request was throttled. Please wait a moment and try again.\n\nOriginal error: %v", err))
+	}
+	// For other errors, provide the original error with context
+	panic(fmt.Errorf("failed to call %s: %v", apiName, err))
+}
+
+// searchENIsByIP searches for ENIs with a specific IP address
+func searchENIsByIP(svc *ec2.Client, filters []types.Filter) []types.NetworkInterface {
+	input := &ec2.DescribeNetworkInterfacesInput{
+		Filters: filters,
+	}
+
+	resp, err := svc.DescribeNetworkInterfaces(context.TODO(), input)
+	if err != nil {
+		handleAWSAPIError(err, "DescribeNetworkInterfaces")
+	}
+
+	return resp.NetworkInterfaces
+}
+
+// isSecondaryIP checks if the IP address is a secondary IP on the ENI
+func isSecondaryIP(eni types.NetworkInterface, ipAddress string) bool {
+	primaryIP := aws.ToString(eni.PrivateIpAddress)
+	if primaryIP == ipAddress {
+		return false
+	}
+
+	for _, privateIP := range eni.PrivateIpAddresses {
+		if aws.ToString(privateIP.PrivateIpAddress) == ipAddress && !aws.ToBool(privateIP.Primary) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// getResourceNameAndID extracts resource name and ID from ENI attachment details
+func getResourceNameAndID(eni types.NetworkInterface, cache *ENILookupCache) (string, string) {
+	attachmentDetails := getENIAttachmentDetailsOptimized(eni, cache)
+
+	// Handle EC2 instances
+	if eni.Attachment != nil && eni.Attachment.InstanceId != nil {
+		return attachmentDetails, *eni.Attachment.InstanceId
+	}
+
+	// Handle VPC endpoints
+	if endpoint, exists := cache.EndpointsByENI[*eni.NetworkInterfaceId]; exists {
+		return attachmentDetails, *endpoint.VpcEndpointId
+	}
+
+	// Handle NAT gateways
+	if natgw, exists := cache.NATGatewaysByENI[*eni.NetworkInterfaceId]; exists {
+		return attachmentDetails, *natgw.NatGatewayId
+	}
+
+	// Default to attachment details
+	return attachmentDetails, ""
+}
+
+// getVPCInfo retrieves VPC information
+func getVPCInfo(svc *ec2.Client, vpcID string) VPCInfo {
+	if vpcID == "" {
+		return VPCInfo{}
+	}
+
+	input := &ec2.DescribeVpcsInput{
+		VpcIds: []string{vpcID},
+	}
+
+	resp, err := svc.DescribeVpcs(context.TODO(), input)
+	if err != nil {
+		handleAWSAPIError(err, "DescribeVpcs")
+	}
+
+	if len(resp.Vpcs) == 0 {
+		return VPCInfo{ID: vpcID}
+	}
+
+	vpc := resp.Vpcs[0]
+	return VPCInfo{
+		ID:   vpcID,
+		Name: getNameFromTags(vpc.Tags),
+		CIDR: aws.ToString(vpc.CidrBlock),
+	}
+}
+
+// getSubnetInfo retrieves subnet information
+func getSubnetInfo(svc *ec2.Client, subnetID string) SubnetInfo {
+	if subnetID == "" {
+		return SubnetInfo{}
+	}
+
+	input := &ec2.DescribeSubnetsInput{
+		SubnetIds: []string{subnetID},
+	}
+
+	resp, err := svc.DescribeSubnets(context.TODO(), input)
+	if err != nil {
+		handleAWSAPIError(err, "DescribeSubnets")
+	}
+
+	if len(resp.Subnets) == 0 {
+		return SubnetInfo{ID: subnetID}
+	}
+
+	subnet := resp.Subnets[0]
+	return SubnetInfo{
+		ID:   subnetID,
+		Name: getNameFromTags(subnet.Tags),
+		CIDR: aws.ToString(subnet.CidrBlock),
+	}
+}
+
+// getSecurityGroupInfo retrieves security group information
+func getSecurityGroupInfo(svc *ec2.Client, groups []types.GroupIdentifier) []SecurityGroupInfo {
+	if len(groups) == 0 {
+		return []SecurityGroupInfo{}
+	}
+
+	// Extract group IDs
+	groupIDs := make([]string, len(groups))
+	for i, group := range groups {
+		groupIDs[i] = aws.ToString(group.GroupId)
+	}
+
+	input := &ec2.DescribeSecurityGroupsInput{
+		GroupIds: groupIDs,
+	}
+
+	resp, err := svc.DescribeSecurityGroups(context.TODO(), input)
+	if err != nil {
+		handleAWSAPIError(err, "DescribeSecurityGroups")
+	}
+
+	var result []SecurityGroupInfo
+	for _, sg := range resp.SecurityGroups {
+		result = append(result, SecurityGroupInfo{
+			ID:   aws.ToString(sg.GroupId),
+			Name: aws.ToString(sg.GroupName),
+		})
+	}
+
+	return result
+}
+
+// getRouteTableInfo retrieves route table information for a subnet
+func getRouteTableInfo(svc *ec2.Client, subnetID string) RouteTableInfo {
+	if subnetID == "" {
+		return RouteTableInfo{}
+	}
+
+	// Get all route tables
+	routeTables := retrieveRouteTables(svc)
+
+	// Find the route table associated with this subnet
+	routeTable := GetSubnetRouteTable(subnetID, routeTables)
+	if routeTable == nil {
+		return RouteTableInfo{
+			ID:     "No route table",
+			Name:   "No route table",
+			Routes: []string{},
+		}
+	}
+
+	// Get formatted route table information
+	rtDisplay, routeList := FormatRouteTableInfo(routeTable)
+
+	return RouteTableInfo{
+		ID:     aws.ToString(routeTable.RouteTableId),
+		Name:   rtDisplay,
+		Routes: routeList,
 	}
 }
