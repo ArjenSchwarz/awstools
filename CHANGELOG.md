@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- New `vpc ip-finder` command for locating IP addresses across AWS infrastructure
+- Comprehensive IP address search functionality with support for primary and secondary IPs
+- Detailed resource identification including EC2 instances, VPC endpoints, NAT gateways, and load balancers
+- Enhanced output showing VPC, subnet, security group, and route table information
+- Support for all existing output formats (JSON, CSV, table, HTML)
+- Comprehensive error handling with helpful troubleshooting suggestions
+- Integration with existing ENI lookup cache for optimal performance
+
+### Technical Details
+- Added IP address validation functions supporting both IPv4 and IPv6
+- Implemented ENI search filters for efficient AWS API queries
+- Created comprehensive data structures for IP finder results
+- Added extensive unit tests, integration tests, and performance benchmarks
+- Following established awstools patterns for error handling and output formatting
+- Leveraging existing ENI analysis and caching mechanisms for performance optimization
+
 ## [2025-07-03] - Refactored VPC overview code following PR review feedback
 
 ### Changed

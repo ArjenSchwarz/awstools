@@ -20,8 +20,12 @@
       "Bash(git --no-pager:*)",
       "Bash(gh pr view:*)",
       "Bash(gh api:*)",
-      "WebFetch(domain:github.com)"
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:docs.aws.amazon.com)",
+      "WebFetch(domain:pkg.go.dev)"
     ],
     "deny": []
-  }
+  },
+  "defaultMode": "allowEdits",
+  "includeCoAuthoredBy": false
 }

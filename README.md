@@ -14,6 +14,8 @@ Currently built in features organized by AWS service:
 * Get an overview of VPC routes and route tables
 * Analyze VPC peering connections
 * Get ENI (Elastic Network Interface) overview with optional subnet splitting
+* Get comprehensive VPC IP usage analysis with detailed subnet breakdown
+* Find and analyze specific IP addresses across ENIs and resources
 
 ### CloudFormation
 * Get a list of all the resources in a CloudFormation stack, including those from nested stacks
@@ -145,6 +147,21 @@ $ awstools vpc enis --output table
 Split ENI results by subnet:
 ```bash
 $ awstools vpc enis --split --output table
+```
+
+Get comprehensive VPC IP usage analysis:
+```bash
+$ awstools vpc overview --output table
+```
+
+Find details for a specific IP address:
+```bash
+$ awstools vpc ip-finder 10.0.1.100 --output table
+```
+
+Find IP addresses including secondary IPs:
+```bash
+$ awstools vpc ip-finder 10.0.1.100 --include-secondary --output table
 ```
 
 ### SSO Management
