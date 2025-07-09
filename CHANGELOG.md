@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- New `sso profile-generator` command for generating AWS CLI profiles from IAM Identity Center roles
+- Comprehensive profile generation with support for all assumable roles across accounts
+- Profile naming patterns with customizable template support
+- Token-based authentication with automatic caching and refresh
+- Batch profile generation with conflict detection and resolution
+- Support for both legacy and modern SSO profile formats
+- Extensive test coverage for profile generation functionality
+- Command-line interface with preview, approval, and output file options
+
+### Changed
+- Updated go.mod dependencies to latest versions including AWS SDK v2 updates
+- Enhanced AWS config file handling with support for AWS_CONFIG_FILE environment variable
+- Improved error handling with structured error types and context
+- Added comprehensive documentation for profile generator feature
+
+### Technical Details
+- Added `helpers/profile_generator.go` with full profile generation workflow
+- Added `helpers/profile_generator_types.go` with structured data types
+- Added `helpers/profile_generator_test.go` with comprehensive test suite (1033 lines)
+- Added `helpers/sso_token_cache.go` for SSO token management
+- Enhanced `helpers/aws_config_file.go` with profile appending functionality
+- Updated `helpers/role_discovery.go` with improved role discovery logic
+- Added SSO service integration for role and account discovery
+
+## [Previous Unreleased]
+
 ### Fixed
 - Fixed failing unit tests in IAM and EC2 helpers packages
 - Fixed IAM `CanBeAssumedFrom` method to use alphabetical sorting for consistent output

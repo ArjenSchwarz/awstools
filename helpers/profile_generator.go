@@ -7,8 +7,8 @@ import (
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/service/organizations"
-	"github.com/aws/aws-sdk-go-v2/service/ssoadmin"
+	"github.com/aws/aws-sdk-go-v2/service/sso"
+	"github.com/aws/aws-sdk-go-v2/service/sts"
 )
 
 // ProfileGenerator handles the complete profile generation workflow
@@ -18,8 +18,8 @@ type ProfileGenerator struct {
 	autoApprove     bool
 	outputFile      string
 	awsConfig       aws.Config
-	ssoClient       *ssoadmin.Client
-	orgsClient      *organizations.Client
+	ssoClient       *sso.Client
+	stsClient       *sts.Client
 	roleDiscovery   *RoleDiscovery
 	logger          Logger
 }
@@ -41,11 +41,11 @@ func NewProfileGenerator(templateProfile, namingPattern string, autoApprove bool
 	}
 
 	// Create AWS service clients
-	ssoClient := ssoadmin.NewFromConfig(awsConfig)
-	orgsClient := organizations.NewFromConfig(awsConfig)
+	ssoClient := sso.NewFromConfig(awsConfig)
+	stsClient := sts.NewFromConfig(awsConfig)
 
 	// Create role discovery
-	roleDiscovery, err := NewRoleDiscovery(ssoClient, orgsClient)
+	roleDiscovery, err := NewRoleDiscovery(ssoClient, stsClient)
 	if err != nil {
 		return nil, err
 	}
@@ -57,7 +57,7 @@ func NewProfileGenerator(templateProfile, namingPattern string, autoApprove bool
 		outputFile:      outputFile,
 		awsConfig:       awsConfig,
 		ssoClient:       ssoClient,
-		orgsClient:      orgsClient,
+		stsClient:       stsClient,
 		roleDiscovery:   roleDiscovery,
 		logger:          &defaultLogger{},
 	}
@@ -108,11 +108,14 @@ func (pg *ProfileGenerator) ValidateTemplateProfile() (*TemplateProfile, error) 
 }
 
 // DiscoverRoles discovers all accessible roles using the template profile
-func (pg *ProfileGenerator) DiscoverRoles() ([]DiscoveredRole, error) {
-	pg.logger.Printf("Discovering accessible roles...")
+func (pg *ProfileGenerator) DiscoverRoles(templateProfile *TemplateProfile) ([]DiscoveredRole, error) {
+	// Validate token access before discovery
+	if err := pg.roleDiscovery.ValidateTokenAccess(templateProfile); err != nil {
+		return nil, err
+	}
 
 	// Discover roles with retry
-	roles, err := pg.roleDiscovery.DiscoverRolesWithRetry(3)
+	roles, err := pg.roleDiscovery.DiscoverRolesWithRetry(templateProfile, 3)
 	if err != nil {
 		return nil, err
 	}
@@ -121,7 +124,6 @@ func (pg *ProfileGenerator) DiscoverRoles() ([]DiscoveredRole, error) {
 		return nil, NewAPIError("no accessible roles found", nil)
 	}
 
-	pg.logger.Printf("Found %d accessible roles", len(roles))
 	return roles, nil
 }
 
@@ -186,36 +188,35 @@ func (pg *ProfileGenerator) GenerateProfiles(templateProfile *TemplateProfile, d
 		generatedProfiles = append(generatedProfiles, generatedProfile)
 	}
 
-	pg.logger.Printf("Generated %d profiles", len(generatedProfiles))
 	return generatedProfiles, nil
 }
 
 // PreviewProfiles displays profiles for user review
 func (pg *ProfileGenerator) PreviewProfiles(profiles []GeneratedProfile) error {
 	if len(profiles) == 0 {
-		pg.logger.Printf("No profiles to preview")
+		pg.logger.Printf("No profiles to preview\n")
 		return nil
 	}
 
-	pg.logger.Printf("\nGenerated Profiles Preview:")
-	pg.logger.Printf("===========================")
+	pg.logger.Printf("Generated Profiles Preview:\n")
+	pg.logger.Printf("===========================\n")
 
-	for i, profile := range profiles {
-		pg.logger.Printf("\n%d. Profile: %s", i+1, profile.Name)
-		pg.logger.Printf("   Account: %s (%s)", profile.AccountName, profile.AccountID)
-		pg.logger.Printf("   Role: %s", profile.RoleName)
-		pg.logger.Printf("   Region: %s", profile.Region)
-		pg.logger.Printf("   SSO Start URL: %s", profile.SSOStartURL)
-		pg.logger.Printf("   SSO Region: %s", profile.SSORegion)
+	for _, profile := range profiles {
+		pg.logger.Printf("[profile %s]\n", profile.Name)
+		pg.logger.Printf("region = %s\n", profile.Region)
+		pg.logger.Printf("sso_start_url = %s\n", profile.SSOStartURL)
+		pg.logger.Printf("sso_region = %s\n", profile.SSORegion)
 
 		if profile.IsLegacy {
-			pg.logger.Printf("   Format: Legacy (sso_account_id + sso_role_name)")
+			pg.logger.Printf("sso_account_id = %s\n", profile.SSOAccountID)
+			pg.logger.Printf("sso_role_name = %s\n", profile.SSORoleName)
 		} else {
-			pg.logger.Printf("   Format: New (sso_session: %s)", profile.SSOSession)
+			pg.logger.Printf("sso_session = %s\n", profile.SSOSession)
 		}
+
+		pg.logger.Printf("\n") // Empty line between profiles
 	}
 
-	pg.logger.Printf("\nTotal profiles to be generated: %d", len(profiles))
 	return nil
 }
 
@@ -257,8 +258,6 @@ func (pg *ProfileGenerator) AppendToConfig(profiles []GeneratedProfile) error {
 		return err
 	}
 
-	pg.logger.Printf("Successfully appended %d profiles to %s", len(profiles), outputPath)
-
 	if len(conflicts) > 0 {
 		pg.logger.Printf("Warning: %d existing profiles were overwritten: %v", len(conflicts), conflicts)
 	}
@@ -274,46 +273,38 @@ func (pg *ProfileGenerator) GenerateProfilesWorkflow() (*ProfileGenerationResult
 		Errors:              []ProfileGeneratorError{},
 	}
 
-	// Step 1: Validate template profile
-	pg.logger.Printf("Step 1: Validating template profile '%s'...", pg.templateProfile)
+	// Validate template profile
 	templateProfile, err := pg.ValidateTemplateProfile()
 	if err != nil {
 		result.AddError(err.(ProfileGeneratorError))
 		return result, err
 	}
 	result.TemplateProfile = *templateProfile
-	pg.logger.Printf("✓ Template profile validated successfully")
 
-	// Step 2: Discover roles
-	pg.logger.Printf("Step 2: Discovering accessible roles...")
-	discoveredRoles, err := pg.DiscoverRoles()
+	// Discover roles
+	discoveredRoles, err := pg.DiscoverRoles(templateProfile)
 	if err != nil {
 		result.AddError(err.(ProfileGeneratorError))
 		return result, err
 	}
 	result.DiscoveredRoles = discoveredRoles
-	pg.logger.Printf("✓ Discovered %d accessible roles", len(discoveredRoles))
 
-	// Step 3: Generate profiles
-	pg.logger.Printf("Step 3: Generating profiles with pattern '%s'...", pg.namingPattern)
+	// Generate profiles
 	generatedProfiles, err := pg.GenerateProfiles(templateProfile, discoveredRoles)
 	if err != nil {
 		result.AddError(err.(ProfileGeneratorError))
 		return result, err
 	}
 	result.GeneratedProfiles = generatedProfiles
-	pg.logger.Printf("✓ Generated %d profiles", len(generatedProfiles))
 
-	// Step 4: Preview profiles
-	pg.logger.Printf("Step 4: Previewing generated profiles...")
+	// Preview profiles
 	if err := pg.PreviewProfiles(generatedProfiles); err != nil {
 		result.AddError(err.(ProfileGeneratorError))
 		return result, err
 	}
 
-	// Step 5: Append to config (if approved)
+	// Append to config (if approved)
 	if pg.autoApprove {
-		pg.logger.Printf("Step 5: Appending profiles to config (auto-approved)...")
 		if err := pg.AppendToConfig(generatedProfiles); err != nil {
 			result.AddError(err.(ProfileGeneratorError))
 			return result, err
@@ -323,10 +314,6 @@ func (pg *ProfileGenerator) GenerateProfilesWorkflow() (*ProfileGenerationResult
 		for _, profile := range generatedProfiles {
 			result.SuccessfulProfiles = append(result.SuccessfulProfiles, profile.Name)
 		}
-		pg.logger.Printf("✓ Successfully appended %d profiles to config", len(generatedProfiles))
-	} else {
-		pg.logger.Printf("Step 5: Profiles ready for manual approval")
-		pg.logger.Printf("Use --yes flag to auto-approve or manually review and confirm")
 	}
 
 	return result, nil

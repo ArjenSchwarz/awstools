@@ -133,7 +133,8 @@ type DiscoveredRole struct {
 	AccountID         string `json:"account_id" yaml:"account_id"`
 	AccountName       string `json:"account_name" yaml:"account_name"`
 	PermissionSetName string `json:"permission_set_name" yaml:"permission_set_name"`
-	PermissionSetArn  string `json:"permission_set_arn" yaml:"permission_set_arn"`
+	PermissionSetArn  string `json:"permission_set_arn,omitempty" yaml:"permission_set_arn,omitempty"`
+	RoleName          string `json:"role_name" yaml:"role_name"`
 }
 
 // Validate checks if the discovered role is valid
@@ -147,8 +148,8 @@ func (dr *DiscoveredRole) Validate() error {
 			WithContext("account_id", dr.AccountID)
 	}
 
-	if dr.PermissionSetArn == "" {
-		return NewValidationError("permission set ARN is required", nil).
+	if dr.RoleName == "" {
+		return NewValidationError("role name is required", nil).
 			WithContext("account_id", dr.AccountID).
 			WithContext("permission_set_name", dr.PermissionSetName)
 	}
