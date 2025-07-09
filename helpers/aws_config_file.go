@@ -31,11 +31,17 @@ type Profile struct {
 // LoadAWSConfigFile loads an AWS config file and parses its profiles
 func LoadAWSConfigFile(filePath string) (*AWSConfigFile, error) {
 	if filePath == "" {
-		homeDir, err := os.UserHomeDir()
-		if err != nil {
-			return nil, NewFileSystemError("failed to get user home directory", err)
+		// Check AWS_CONFIG_FILE environment variable first
+		if configFile := os.Getenv("AWS_CONFIG_FILE"); configFile != "" {
+			filePath = configFile
+		} else {
+			// Fall back to default location
+			homeDir, err := os.UserHomeDir()
+			if err != nil {
+				return nil, NewFileSystemError("failed to get user home directory", err)
+			}
+			filePath = filepath.Join(homeDir, ".aws", "config")
 		}
-		filePath = filepath.Join(homeDir, ".aws", "config")
 	}
 
 	configFile := &AWSConfigFile{
@@ -211,6 +217,60 @@ func (cf *AWSConfigFile) WriteToFile() error {
 	return nil
 }
 
+// AppendToFile appends new profiles to the end of the config file
+func (cf *AWSConfigFile) AppendToFile(profiles []GeneratedProfile) error {
+	// Create backup if file exists
+	if _, err := os.Stat(cf.FilePath); err == nil {
+		backupPath := cf.FilePath + ".backup"
+		if err := copyFile(cf.FilePath, backupPath); err != nil {
+			return NewFileSystemError("failed to create backup", err).
+				WithContext("file_path", cf.FilePath).
+				WithContext("backup_path", backupPath)
+		}
+	}
+
+	// Ensure directory exists
+	if err := os.MkdirAll(filepath.Dir(cf.FilePath), 0755); err != nil {
+		return NewFileSystemError("failed to create directory", err).
+			WithContext("directory", filepath.Dir(cf.FilePath))
+	}
+
+	// Open file for appending
+	file, err := os.OpenFile(cf.FilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
+	if err != nil {
+		return NewFileSystemError("failed to open config file for appending", err).
+			WithContext("file_path", cf.FilePath)
+	}
+	defer file.Close()
+
+	// Set proper permissions
+	if err := file.Chmod(0600); err != nil {
+		return NewFileSystemError("failed to set file permissions", err).
+			WithContext("file_path", cf.FilePath)
+	}
+
+	// Append new profiles
+	for _, genProfile := range profiles {
+		profile := Profile{
+			Name:            genProfile.Name,
+			Region:          genProfile.Region,
+			SSOStartURL:     genProfile.SSOStartURL,
+			SSORegion:       genProfile.SSORegion,
+			SSOAccountID:    genProfile.SSOAccountID,
+			SSORoleName:     genProfile.SSORoleName,
+			SSOSession:      genProfile.SSOSession,
+			OtherProperties: make(map[string]string),
+		}
+
+		if _, err := file.WriteString(profile.ToConfigString()); err != nil {
+			return NewFileSystemError("failed to write profile", err).
+				WithContext("profile_name", profile.Name)
+		}
+	}
+
+	return nil
+}
+
 // GenerateProfileText generates formatted profile text for multiple profiles
 func (cf *AWSConfigFile) GenerateProfileText(profiles []GeneratedProfile) string {
 	var result strings.Builder
@@ -242,7 +302,7 @@ func (cf *AWSConfigFile) AppendProfiles(profiles []GeneratedProfile) error {
 		}
 	}
 
-	return cf.WriteToFile()
+	return cf.AppendToFile(profiles)
 }
 
 // ToConfigString converts a Profile to AWS config file format

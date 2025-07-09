@@ -6,20 +6,20 @@ import (
 	"sync"
 	"time"
 
-	"github.com/aws/aws-sdk-go-v2/service/organizations"
-	"github.com/aws/aws-sdk-go-v2/service/ssoadmin"
-	"github.com/aws/aws-sdk-go-v2/service/ssoadmin/types"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/sso"
+	"github.com/aws/aws-sdk-go-v2/service/sso/types"
+	"github.com/aws/aws-sdk-go-v2/service/sts"
 )
 
-// RoleDiscovery handles discovery of accessible roles in AWS SSO
+// RoleDiscovery handles discovery of accessible roles using OIDC tokens
 type RoleDiscovery struct {
-	ssoClient       *ssoadmin.Client
-	orgsClient      *organizations.Client
-	instanceArn     string
-	identityStoreID string
-	logger          Logger
-	accountCache    map[string]string
-	cacheMutex      sync.RWMutex
+	ssoClient    *sso.Client
+	stsClient    *sts.Client
+	tokenCache   *SSOTokenCache
+	logger       Logger
+	accountCache map[string]string
+	cacheMutex   sync.RWMutex
 }
 
 // Logger interface for logging operations
@@ -34,22 +34,26 @@ func (dl *defaultLogger) Printf(format string, args ...interface{}) {
 	fmt.Printf(format, args...)
 }
 
-// NewRoleDiscovery creates a new role discovery instance
-func NewRoleDiscovery(ssoClient *ssoadmin.Client, orgsClient *organizations.Client) (*RoleDiscovery, error) {
+// NewRoleDiscovery creates a new role discovery instance using OIDC tokens
+func NewRoleDiscovery(ssoClient *sso.Client, stsClient *sts.Client) (*RoleDiscovery, error) {
 	if ssoClient == nil {
 		return nil, NewValidationError("SSO client cannot be nil", nil)
+	}
+	if stsClient == nil {
+		return nil, NewValidationError("STS client cannot be nil", nil)
+	}
+
+	tokenCache, err := NewSSOTokenCache()
+	if err != nil {
+		return nil, err
 	}
 
 	rd := &RoleDiscovery{
 		ssoClient:    ssoClient,
-		orgsClient:   orgsClient,
+		stsClient:    stsClient,
+		tokenCache:   tokenCache,
 		logger:       &defaultLogger{},
 		accountCache: make(map[string]string),
-	}
-
-	// Get SSO instance information
-	if err := rd.initializeSSO(); err != nil {
-		return nil, err
 	}
 
 	return rd, nil
@@ -58,59 +62,42 @@ func NewRoleDiscovery(ssoClient *ssoadmin.Client, orgsClient *organizations.Clie
 // SetLogger sets a custom logger
 func (rd *RoleDiscovery) SetLogger(logger Logger) {
 	rd.logger = logger
+	rd.tokenCache.SetLogger(logger)
 }
 
-// initializeSSO initializes the SSO instance information
-func (rd *RoleDiscovery) initializeSSO() error {
+// DiscoverAccessibleRoles discovers all accessible roles using OIDC token approach
+func (rd *RoleDiscovery) DiscoverAccessibleRoles(templateProfile *TemplateProfile) ([]DiscoveredRole, error) {
 	ctx := context.TODO()
 
-	instances, err := rd.ssoClient.ListInstances(ctx, &ssoadmin.ListInstancesInput{})
-	if err != nil {
-		return NewAPIError("failed to list SSO instances", err)
-	}
-
-	if len(instances.Instances) == 0 {
-		return NewAPIError("no SSO instances found", nil)
-	}
-
-	if len(instances.Instances) > 1 {
-		return NewAPIError("multiple SSO instances found, cannot determine which to use", nil)
-	}
-
-	instance := instances.Instances[0]
-	rd.instanceArn = *instance.InstanceArn
-	rd.identityStoreID = *instance.IdentityStoreId
-
-	return nil
-}
-
-// DiscoverAccessibleRoles discovers all accessible roles in the SSO instance
-func (rd *RoleDiscovery) DiscoverAccessibleRoles() ([]DiscoveredRole, error) {
-	ctx := context.TODO()
-
-	// Get all permission sets
-	permissionSets, err := rd.getPermissionSets(ctx)
+	// Load cached token for the template profile
+	cachedToken, err := rd.tokenCache.LoadTokenForProfile(templateProfile.SSOStartURL, templateProfile.SSORegion)
 	if err != nil {
 		return nil, err
 	}
 
-	if len(permissionSets) == 0 {
+	// Get accounts accessible with this token
+	accounts, err := rd.getAccountsFromToken(ctx, cachedToken)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(accounts) == 0 {
 		return []DiscoveredRole{}, nil
 	}
 
-	// Discover roles for each permission set
+	// Discover roles for each account
 	var allRoles []DiscoveredRole
 	var rolesMutex sync.Mutex
 	var wg sync.WaitGroup
-	errChan := make(chan error, len(permissionSets))
+	errChan := make(chan error, len(accounts))
 
-	// Process permission sets concurrently
-	for _, permissionSet := range permissionSets {
+	// Process accounts concurrently
+	for _, account := range accounts {
 		wg.Add(1)
-		go func(ps types.PermissionSet) {
+		go func(acc types.AccountInfo) {
 			defer wg.Done()
 
-			roles, err := rd.discoverRolesForPermissionSet(ctx, ps)
+			roles, err := rd.getRolesForAccount(ctx, cachedToken, acc)
 			if err != nil {
 				errChan <- err
 				return
@@ -119,7 +106,7 @@ func (rd *RoleDiscovery) DiscoverAccessibleRoles() ([]DiscoveredRole, error) {
 			rolesMutex.Lock()
 			allRoles = append(allRoles, roles...)
 			rolesMutex.Unlock()
-		}(permissionSet)
+		}(account)
 	}
 
 	wg.Wait()
@@ -132,41 +119,31 @@ func (rd *RoleDiscovery) DiscoverAccessibleRoles() ([]DiscoveredRole, error) {
 		}
 	}
 
-	rd.logger.Printf("Discovered %d accessible roles across %d permission sets", len(allRoles), len(permissionSets))
+	rd.logger.Printf("Discovered %d accessible roles across %d accounts", len(allRoles), len(accounts))
 	return allRoles, nil
 }
 
-// getPermissionSets retrieves all permission sets from the SSO instance
-func (rd *RoleDiscovery) getPermissionSets(ctx context.Context) ([]types.PermissionSet, error) {
-	var permissionSets []types.PermissionSet
+// getAccountsFromToken retrieves accounts accessible with the given token
+func (rd *RoleDiscovery) getAccountsFromToken(ctx context.Context, token *CachedToken) ([]types.AccountInfo, error) {
+	var accounts []types.AccountInfo
 	maxResults := int32(100)
 	var nextToken *string
 
 	for {
-		input := &ssoadmin.ListPermissionSetsInput{
-			InstanceArn: &rd.instanceArn,
+		input := &sso.ListAccountsInput{
+			AccessToken: &token.AccessToken,
 			MaxResults:  &maxResults,
 			NextToken:   nextToken,
 		}
 
-		result, err := rd.ssoClient.ListPermissionSets(ctx, input)
+		result, err := rd.ssoClient.ListAccounts(ctx, input)
 		if err != nil {
-			return nil, NewAPIError("failed to list permission sets", err)
+			return nil, NewAPIError("failed to list accounts", err).
+				WithContext("start_url", token.StartURL).
+				WithContext("suggestion", "Run 'aws sso login' to refresh authentication")
 		}
 
-		// Get details for each permission set
-		for _, permissionSetArn := range result.PermissionSets {
-			psDetails, err := rd.ssoClient.DescribePermissionSet(ctx, &ssoadmin.DescribePermissionSetInput{
-				InstanceArn:      &rd.instanceArn,
-				PermissionSetArn: &permissionSetArn,
-			})
-			if err != nil {
-				return nil, NewAPIError("failed to describe permission set", err).
-					WithContext("permission_set_arn", permissionSetArn)
-			}
-
-			permissionSets = append(permissionSets, *psDetails.PermissionSet)
-		}
+		accounts = append(accounts, result.AccountList...)
 
 		nextToken = result.NextToken
 		if nextToken == nil {
@@ -174,50 +151,49 @@ func (rd *RoleDiscovery) getPermissionSets(ctx context.Context) ([]types.Permiss
 		}
 	}
 
-	return permissionSets, nil
+	return accounts, nil
 }
 
-// discoverRolesForPermissionSet discovers roles for a specific permission set
-func (rd *RoleDiscovery) discoverRolesForPermissionSet(ctx context.Context, permissionSet types.PermissionSet) ([]DiscoveredRole, error) {
+// getRolesForAccount retrieves roles for a specific account
+func (rd *RoleDiscovery) getRolesForAccount(ctx context.Context, token *CachedToken, account types.AccountInfo) ([]DiscoveredRole, error) {
 	var roles []DiscoveredRole
 	maxResults := int32(100)
 	var nextToken *string
 
 	for {
-		input := &ssoadmin.ListAccountsForProvisionedPermissionSetInput{
-			InstanceArn:      &rd.instanceArn,
-			PermissionSetArn: permissionSet.PermissionSetArn,
-			MaxResults:       &maxResults,
-			NextToken:        nextToken,
+		input := &sso.ListAccountRolesInput{
+			AccessToken: &token.AccessToken,
+			AccountId:   account.AccountId,
+			MaxResults:  &maxResults,
+			NextToken:   nextToken,
 		}
 
-		result, err := rd.ssoClient.ListAccountsForProvisionedPermissionSet(ctx, input)
+		result, err := rd.ssoClient.ListAccountRoles(ctx, input)
 		if err != nil {
-			return nil, NewAPIError("failed to list accounts for permission set", err).
-				WithContext("permission_set_arn", *permissionSet.PermissionSetArn).
-				WithContext("permission_set_name", *permissionSet.Name)
+			return nil, NewAPIError("failed to list account roles", err).
+				WithContext("account_id", *account.AccountId).
+				WithContext("account_name", *account.AccountName).
+				WithContext("suggestion", "Run 'aws sso login' to refresh authentication")
 		}
 
-		// Create discovered role for each account
-		for _, accountID := range result.AccountIds {
-			accountName, err := rd.GetAccountInfo(accountID)
-			if err != nil {
-				// Log warning but continue - account name is not critical
-				rd.logger.Printf("Warning: failed to get account name for %s: %v", accountID, err)
-				accountName = accountID // Use account ID as fallback
+		// Create discovered roles from the response
+		for _, roleInfo := range result.RoleList {
+			accountName := *account.AccountName
+			if accountName == "" {
+				accountName = *account.AccountId // Fallback to account ID
 			}
 
 			role := DiscoveredRole{
-				AccountID:         accountID,
+				AccountID:         *account.AccountId,
 				AccountName:       accountName,
-				PermissionSetName: *permissionSet.Name,
-				PermissionSetArn:  *permissionSet.PermissionSetArn,
+				PermissionSetName: *roleInfo.RoleName,
+				RoleName:          *roleInfo.RoleName,
 			}
 
 			if err := role.Validate(); err != nil {
 				return nil, NewValidationError("invalid discovered role", err).
-					WithContext("account_id", accountID).
-					WithContext("permission_set_name", *permissionSet.Name)
+					WithContext("account_id", *account.AccountId).
+					WithContext("role_name", *roleInfo.RoleName)
 			}
 
 			roles = append(roles, role)
@@ -242,76 +218,27 @@ func (rd *RoleDiscovery) GetAccountInfo(accountID string) (string, error) {
 	}
 	rd.cacheMutex.RUnlock()
 
-	// Get account info from Organizations API if available
-	if rd.orgsClient != nil {
-		accountName, err := rd.getAccountNameFromOrgs(accountID)
-		if err == nil {
-			// Cache the result
-			rd.cacheMutex.Lock()
-			rd.accountCache[accountID] = accountName
-			rd.cacheMutex.Unlock()
-			return accountName, nil
-		}
-		// Log warning but continue - we'll use account ID as fallback
-		rd.logger.Printf("Warning: failed to get account name from Organizations API for %s: %v", accountID, err)
-	}
-
-	// Try to get account info from SSO (less reliable but worth trying)
-	accountName, err := rd.getAccountNameFromSSO(accountID)
-	if err == nil {
-		// Cache the result
-		rd.cacheMutex.Lock()
-		rd.accountCache[accountID] = accountName
-		rd.cacheMutex.Unlock()
-		return accountName, nil
-	}
-
-	// Return account ID as fallback
+	// For OIDC token approach, we get account names from the SSO API response
+	// This method is kept for compatibility but may not be as useful
 	rd.cacheMutex.Lock()
-	rd.accountCache[accountID] = accountID
+	rd.accountCache[accountID] = accountID // Use account ID as fallback
 	rd.cacheMutex.Unlock()
 
 	return accountID, nil
 }
 
-// getAccountNameFromOrgs gets account name from Organizations API
-func (rd *RoleDiscovery) getAccountNameFromOrgs(accountID string) (string, error) {
-	ctx := context.TODO()
-
-	input := &organizations.DescribeAccountInput{
-		AccountId: &accountID,
-	}
-
-	result, err := rd.orgsClient.DescribeAccount(ctx, input)
-	if err != nil {
-		return "", NewAPIError("failed to describe account", err).
-			WithContext("account_id", accountID)
-	}
-
-	if result.Account == nil || result.Account.Name == nil {
-		return "", NewAPIError("account name not found", nil).
-			WithContext("account_id", accountID)
-	}
-
-	return *result.Account.Name, nil
-}
-
-// getAccountNameFromSSO attempts to get account name from SSO (less reliable)
-func (rd *RoleDiscovery) getAccountNameFromSSO(accountID string) (string, error) {
-	// This is a fallback method - SSO doesn't directly provide account names
-	// We could potentially implement account name resolution through other means
-	// For now, we'll return an error to indicate this method is not implemented
-	return "", NewAPIError("account name resolution from SSO not implemented", nil).
-		WithContext("account_id", accountID)
+// ValidateTokenAccess validates that we can access SSO with the given profile
+func (rd *RoleDiscovery) ValidateTokenAccess(templateProfile *TemplateProfile) error {
+	return rd.tokenCache.ValidateProfileToken(templateProfile)
 }
 
 // DiscoverRolesWithRetry discovers roles with exponential backoff retry
-func (rd *RoleDiscovery) DiscoverRolesWithRetry(maxRetries int) ([]DiscoveredRole, error) {
+func (rd *RoleDiscovery) DiscoverRolesWithRetry(templateProfile *TemplateProfile, maxRetries int) ([]DiscoveredRole, error) {
 	var lastErr error
 	baseDelay := 1 * time.Second
 
 	for attempt := 0; attempt < maxRetries; attempt++ {
-		roles, err := rd.DiscoverAccessibleRoles()
+		roles, err := rd.DiscoverAccessibleRoles(templateProfile)
 		if err == nil {
 			return roles, nil
 		}
@@ -367,23 +294,6 @@ func containsAny(s string, substrings []string) bool {
 	return false
 }
 
-// GetInstanceArn returns the SSO instance ARN
-func (rd *RoleDiscovery) GetInstanceArn() string {
-	return rd.instanceArn
-}
-
-// GetIdentityStoreID returns the identity store ID
-func (rd *RoleDiscovery) GetIdentityStoreID() string {
-	return rd.identityStoreID
-}
-
-// ClearAccountCache clears the account name cache
-func (rd *RoleDiscovery) ClearAccountCache() {
-	rd.cacheMutex.Lock()
-	defer rd.cacheMutex.Unlock()
-	rd.accountCache = make(map[string]string)
-}
-
 // GetCachedAccountNames returns a copy of the cached account names
 func (rd *RoleDiscovery) GetCachedAccountNames() map[string]string {
 	rd.cacheMutex.RLock()
@@ -394,4 +304,52 @@ func (rd *RoleDiscovery) GetCachedAccountNames() map[string]string {
 		cache[k] = v
 	}
 	return cache
+}
+
+// ClearAccountCache clears the account name cache
+func (rd *RoleDiscovery) ClearAccountCache() {
+	rd.cacheMutex.Lock()
+	defer rd.cacheMutex.Unlock()
+	rd.accountCache = make(map[string]string)
+}
+
+// GetTokenCacheInfo returns information about the SSO token cache
+func (rd *RoleDiscovery) GetTokenCacheInfo() (map[string]interface{}, error) {
+	return rd.tokenCache.GetCacheInfo()
+}
+
+// CleanExpiredTokens removes expired tokens from the cache
+func (rd *RoleDiscovery) CleanExpiredTokens() (int, error) {
+	return rd.tokenCache.CleanExpiredTokens()
+}
+
+// GetAuthGuideMessage returns a helpful message for authentication issues
+func (rd *RoleDiscovery) GetAuthGuideMessage(startURL, region string) string {
+	return rd.tokenCache.GetAuthGuideMessage(startURL, region)
+}
+
+// TestConnection tests the connection to SSO with the given profile
+func (rd *RoleDiscovery) TestConnection(templateProfile *TemplateProfile) error {
+	ctx := context.TODO()
+
+	// Load cached token
+	cachedToken, err := rd.tokenCache.LoadTokenForProfile(templateProfile.SSOStartURL, templateProfile.SSORegion)
+	if err != nil {
+		return err
+	}
+
+	// Try to list accounts as a connection test
+	input := &sso.ListAccountsInput{
+		AccessToken: &cachedToken.AccessToken,
+		MaxResults:  aws.Int32(1), // Only need one account to test
+	}
+
+	_, err = rd.ssoClient.ListAccounts(ctx, input)
+	if err != nil {
+		return NewAPIError("failed to connect to SSO", err).
+			WithContext("start_url", templateProfile.SSOStartURL).
+			WithContext("suggestion", "Run 'aws sso login' to refresh authentication")
+	}
+
+	return nil
 }

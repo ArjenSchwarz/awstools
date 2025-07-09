@@ -14,8 +14,8 @@ This design builds upon the existing SSO functionality in the codebase and integ
 graph TD
     A[User Input: Template Profile + Naming Pattern] --> B[Validate Template Profile]
     B --> C[Extract SSO Configuration]
-    C --> D[Authenticate with IAM Identity Center]
-    D --> E[Discover Accounts & Permission Sets]
+    C --> D[Get SSO Token from Session]
+    D --> E[Discover Accounts & Roles via OIDC]
     E --> F[Generate Profile Configurations]
     F --> G[Preview Generated Profiles]
     G --> H{User Confirmation}
@@ -64,7 +64,8 @@ type ProfileGenerator struct {
     autoApprove     bool
     outputFile      string
     awsConfig       aws.Config
-    ssoClient       *ssoadmin.Client
+    ssoClient       *sso.Client
+    stsClient       *sts.Client
     logger          *log.Logger
 }
 
@@ -113,23 +114,37 @@ func (cf *AWSConfigFile) GenerateProfileText(profiles []GeneratedProfile) string
 
 ### 4. Role Discovery Engine (`helpers/role_discovery.go`)
 
+The Role Discovery Engine uses the OIDC token approach to discover accessible roles without requiring Admin API access. It works by:
+
+1. **Token Discovery**: Uses the existing SSO session's cached tokens from `~/.aws/sso/cache/`
+2. **Account Enumeration**: Calls the SSO Portal API to list all accounts accessible to the user
+3. **Role Discovery**: For each account, uses STS GetCallerIdentity to discover assumable roles
+4. **Metadata Retrieval**: Fetches account names and role information for profile generation
+
 ```go
 type RoleDiscovery struct {
-    ssoClient   *ssoadmin.Client
-    ssoAdminArn string
-    logger      *log.Logger
+    ssoClient     *sso.Client
+    stsClient     *sts.Client
+    ssoStartURL   string
+    ssoRegion     string
+    ssoSession    string
+    logger        *log.Logger
 }
 
 type DiscoveredRole struct {
     AccountID          string
     AccountName        string
     PermissionSetName  string
-    PermissionSetArn   string
+    RoleName          string  // SSO role name in account
 }
 
-func NewRoleDiscovery(ssoClient *ssoadmin.Client, ssoAdminArn string) *RoleDiscovery
+func NewRoleDiscovery(ssoClient *sso.Client, stsClient *sts.Client, ssoStartURL, ssoRegion, ssoSession string) *RoleDiscovery
 func (rd *RoleDiscovery) DiscoverAccessibleRoles() ([]DiscoveredRole, error)
 func (rd *RoleDiscovery) GetAccountInfo(accountID string) (string, error)
+func (rd *RoleDiscovery) GetAccountsFromToken() ([]string, error)
+func (rd *RoleDiscovery) GetRolesForAccount(accountID string) ([]string, error)
+func (rd *RoleDiscovery) LoadCachedToken() (string, error)
+func (rd *RoleDiscovery) RefreshTokenIfNeeded() error
 ```
 
 ## Data Models
@@ -186,9 +201,10 @@ type ProfileGenerationResult struct {
 
 2. **Authentication Errors**
    - SSO token expired
-   - Invalid credentials
+   - Invalid OIDC token
+   - Token refresh failures
    - Insufficient permissions
-   - **Strategy**: Detect auth issues, provide re-authentication guidance
+   - **Strategy**: Detect auth issues, provide re-authentication guidance with aws sso login
 
 3. **API Errors**
    - Network connectivity issues
@@ -244,9 +260,10 @@ func (e ProfileGeneratorError) WithContext(key string, value interface{}) Profil
    - Special character handling
 
 3. **Role Discovery**
-   - Mock SSO Admin API responses
-   - Permission set enumeration
+   - Mock SSO OIDC API responses
+   - Account role enumeration via STS
    - Account information retrieval
+   - Token refresh handling
    - Error condition handling
 
 4. **Profile Generation**
@@ -258,9 +275,10 @@ func (e ProfileGeneratorError) WithContext(key string, value interface{}) Profil
 ### Integration Tests
 
 1. **End-to-End Profile Generation**
-   - Complete workflow with real AWS SSO
+   - Complete workflow with real AWS SSO OIDC tokens
    - File operations and permissions
    - Interactive confirmation flows
+   - Token refresh scenarios
    - Error recovery scenarios
 
 2. **AWS Config File Operations**
@@ -276,9 +294,9 @@ func (e ProfileGeneratorError) WithContext(key string, value interface{}) Profil
 type TestFixtures struct {
     ValidSSOProfile     string
     InvalidProfile      string
-    MockSSOInstances    []SSOInstance
-    MockPermissionSets  []SSOPermissionSet
-    MockAccountList     []SSOAccount
+    MockSSOAccounts     []SSOAccount
+    MockSSOTokens       []SSOToken
+    MockAccountRoles    map[string][]string
     ExpectedProfiles    []GeneratedProfile
 }
 ```
@@ -287,12 +305,13 @@ type TestFixtures struct {
 
 ### 1. SSO Admin API vs. OIDC Token Approach
 
-**Decision**: Use SSO Admin API (existing pattern in codebase)
+**Decision**: Use OIDC Token Approach (more accessible)
 **Rationale**: 
-- Leverages existing `helpers/sso.go` infrastructure
-- Provides comprehensive role discovery
-- Maintains consistency with current SSO commands
-- Admin API access is common in enterprise environments
+- Works for users without Admin API access
+- Uses existing SSO session tokens from AWS CLI
+- Discovers roles through account enumeration with STS assume role
+- More universally accessible in enterprise environments
+- Follows principle of least privilege
 
 ### 2. Profile Format Support
 
@@ -334,7 +353,7 @@ type TestFixtures struct {
 2. **File Permissions**: Ensure AWS config files maintain proper permissions (600)
 3. **Input Validation**: Sanitize all user inputs, especially naming patterns
 4. **Backup Strategy**: Create backups before modifying configuration files
-5. **Token Handling**: Respect SSO token expiration and refresh requirements
+5. **Token Handling**: Respect OIDC token expiration and refresh requirements, guide users to run `aws sso login` when tokens expire
 
 ## Performance Considerations
 

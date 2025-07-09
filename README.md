@@ -29,6 +29,7 @@ Currently built in features organized by AWS service:
 * Overview of SSO permission sets grouped by permission set
 * Find dangling (unassigned) permission sets
 * List all SSO permission sets
+* Generate AWS CLI profiles for all assumable roles using IAM Identity Center
 
 ### App Mesh
 * Find dangling nodes in your mesh
@@ -168,6 +169,11 @@ $ awstools sso by-account --output table
 Find unassigned SSO permission sets:
 ```bash
 $ awstools sso dangling --output table
+```
+
+Generate AWS CLI profiles for all assumable roles:
+```bash
+$ awstools sso profile-generator --template my-sso-profile --output table
 ```
 
 ### Transit Gateway Analysis
