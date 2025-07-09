@@ -9,7 +9,8 @@ help:
 	@echo "Available targets:"
 	@echo "  all         - Build the project (same as build)"
 	@echo "  build       - Run tests, clean, and compile"
-	@echo "  test        - Run linting and tests"
+	@echo "  test        - Run tests"
+	@echo "  lint        - Run linters"
 	@echo "  clean       - Clean build artifacts"
 	@echo "  compile     - Compile the binary"
 	@echo "  shapes      - Convert draw.io shapes"
@@ -19,12 +20,16 @@ help:
 build: test clean compile
 
 compile:
-	go build
+	CGO_ENABLED=0 go build -buildvcs=false
 
 # Testing and linting
 test:
-	golangci-lint run
-	go test ./...
+	@echo "Running tests..."
+	CGO_ENABLED=0 go test ./...
+
+lint:
+	@echo "Running linters..."
+	golangci-lint run --timeout 5m
 
 # Utility targets
 clean:
