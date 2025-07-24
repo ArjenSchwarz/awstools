@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/iam"
 	"github.com/aws/aws-sdk-go-v2/service/sso"
 	"github.com/aws/aws-sdk-go-v2/service/sso/types"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
@@ -16,9 +17,11 @@ import (
 type RoleDiscovery struct {
 	ssoClient    *sso.Client
 	stsClient    *sts.Client
+	iamClient    *iam.Client
 	tokenCache   *SSOTokenCache
 	logger       Logger
 	accountCache map[string]string
+	aliasCache   map[string]string
 	cacheMutex   sync.RWMutex
 }
 
@@ -35,12 +38,15 @@ func (dl *defaultLogger) Printf(format string, args ...interface{}) {
 }
 
 // NewRoleDiscovery creates a new role discovery instance using OIDC tokens
-func NewRoleDiscovery(ssoClient *sso.Client, stsClient *sts.Client) (*RoleDiscovery, error) {
+func NewRoleDiscovery(ssoClient *sso.Client, stsClient *sts.Client, iamClient *iam.Client) (*RoleDiscovery, error) {
 	if ssoClient == nil {
 		return nil, NewValidationError("SSO client cannot be nil", nil)
 	}
 	if stsClient == nil {
 		return nil, NewValidationError("STS client cannot be nil", nil)
+	}
+	if iamClient == nil {
+		return nil, NewValidationError("IAM client cannot be nil", nil)
 	}
 
 	tokenCache, err := NewSSOTokenCache()
@@ -51,9 +57,11 @@ func NewRoleDiscovery(ssoClient *sso.Client, stsClient *sts.Client) (*RoleDiscov
 	rd := &RoleDiscovery{
 		ssoClient:    ssoClient,
 		stsClient:    stsClient,
+		iamClient:    iamClient,
 		tokenCache:   tokenCache,
 		logger:       &defaultLogger{},
 		accountCache: make(map[string]string),
+		aliasCache:   make(map[string]string),
 	}
 
 	return rd, nil
@@ -183,9 +191,17 @@ func (rd *RoleDiscovery) getRolesForAccount(ctx context.Context, token *CachedTo
 				accountName = *account.AccountId // Fallback to account ID
 			}
 
+			// Get account alias with fallback to account ID
+			accountAlias, err := rd.GetAccountAlias(*account.AccountId)
+			if err != nil {
+				rd.logger.Printf("Warning: failed to get account alias for %s: %v", *account.AccountId, err)
+				accountAlias = *account.AccountId // Fallback to account ID
+			}
+
 			role := DiscoveredRole{
 				AccountID:         *account.AccountId,
 				AccountName:       accountName,
+				AccountAlias:      accountAlias,
 				PermissionSetName: *roleInfo.RoleName,
 				RoleName:          *roleInfo.RoleName,
 			}
@@ -225,6 +241,49 @@ func (rd *RoleDiscovery) GetAccountInfo(accountID string) (string, error) {
 	rd.cacheMutex.Unlock()
 
 	return accountID, nil
+}
+
+// GetAccountAlias retrieves the account alias for a given account ID
+func (rd *RoleDiscovery) GetAccountAlias(accountID string) (string, error) {
+	// Check cache first
+	rd.cacheMutex.RLock()
+	if alias, exists := rd.aliasCache[accountID]; exists {
+		rd.cacheMutex.RUnlock()
+		return alias, nil
+	}
+	rd.cacheMutex.RUnlock()
+
+	ctx := context.TODO()
+
+	// Get account aliases from IAM
+	input := &iam.ListAccountAliasesInput{}
+	result, err := rd.iamClient.ListAccountAliases(ctx, input)
+	if err != nil {
+		// Cache the failure and return account ID as fallback
+		rd.cacheMutex.Lock()
+		rd.aliasCache[accountID] = accountID
+		rd.cacheMutex.Unlock()
+
+		return accountID, NewAPIError("failed to retrieve account alias", err).
+			WithContext("account_id", accountID).
+			WithContext("suggestion", "Ensure IAM permissions for ListAccountAliases")
+	}
+
+	// AWS accounts can have at most one alias
+	var alias string
+	if len(result.AccountAliases) > 0 {
+		alias = result.AccountAliases[0]
+	} else {
+		// No alias configured, use account ID
+		alias = accountID
+	}
+
+	// Cache the result
+	rd.cacheMutex.Lock()
+	rd.aliasCache[accountID] = alias
+	rd.cacheMutex.Unlock()
+
+	return alias, nil
 }
 
 // ValidateTokenAccess validates that we can access SSO with the given profile
@@ -311,6 +370,25 @@ func (rd *RoleDiscovery) ClearAccountCache() {
 	rd.cacheMutex.Lock()
 	defer rd.cacheMutex.Unlock()
 	rd.accountCache = make(map[string]string)
+}
+
+// ClearAliasCache clears the account alias cache
+func (rd *RoleDiscovery) ClearAliasCache() {
+	rd.cacheMutex.Lock()
+	defer rd.cacheMutex.Unlock()
+	rd.aliasCache = make(map[string]string)
+}
+
+// GetCachedAccountAliases returns a copy of the cached account aliases
+func (rd *RoleDiscovery) GetCachedAccountAliases() map[string]string {
+	rd.cacheMutex.RLock()
+	defer rd.cacheMutex.RUnlock()
+
+	cache := make(map[string]string)
+	for k, v := range rd.aliasCache {
+		cache[k] = v
+	}
+	return cache
 }
 
 // GetTokenCacheInfo returns information about the SSO token cache

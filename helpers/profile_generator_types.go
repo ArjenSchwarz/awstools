@@ -132,6 +132,7 @@ func (gp *GeneratedProfile) ToConfigString() string {
 type DiscoveredRole struct {
 	AccountID         string `json:"account_id" yaml:"account_id"`
 	AccountName       string `json:"account_name" yaml:"account_name"`
+	AccountAlias      string `json:"account_alias" yaml:"account_alias"`
 	PermissionSetName string `json:"permission_set_name" yaml:"permission_set_name"`
 	PermissionSetArn  string `json:"permission_set_arn,omitempty" yaml:"permission_set_arn,omitempty"`
 	RoleName          string `json:"role_name" yaml:"role_name"`

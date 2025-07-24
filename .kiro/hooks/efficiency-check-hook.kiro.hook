@@ -1,0 +1,19 @@
+{
+  "enabled": true,
+  "name": "Code Efficiency Checker",
+  "description": "Monitors task completion and analyzes code for efficiency improvements, documenting suggestions in IMPROVEMENTS.md",
+  "version": "1",
+  "when": {
+    "type": "fileEdited",
+    "patterns": [
+      ".claude/commands/tasks.md",
+      "plans/*/tasks.md",
+      "task.md",
+      ".kiro/specs/*/tasks.md"
+    ]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "A task has been completed or updated. Please review the recent code changes in the Go codebase (cmd/, helpers/, config/ directories) for efficiency improvements. Look for:\n\n1. Redundant AWS API calls that could be batched or cached\n2. Inefficient data structures or algorithms\n3. Missing error handling optimizations\n4. Opportunities for concurrent processing\n5. Memory usage improvements\n6. Code duplication that could be refactored\n\nIf you find any efficiency improvements, document them in IMPROVEMENTS.md with:\n- Description of the inefficiency\n- Suggested improvement\n- Expected performance benefit\n- File/function location\n\nFocus on Go-specific optimizations and AWS SDK best practices. Consider the project's architecture patterns and existing code quality standards."
+  }
+}

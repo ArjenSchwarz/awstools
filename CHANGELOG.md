@@ -8,6 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Profile generator enhancement specification with conflict detection and resolution capabilities
+- Account alias support in profile naming patterns with `{account_alias}` placeholder
+- Comprehensive efficiency improvements documentation for AWS API optimization
+- Kiro automation hooks for code efficiency checking and manual commit workflows
+- Enhanced project steering documentation for technology stack, structure, and product overview
+
+- Profile generator with account alias retrieval and fallback to account ID
+- Role discovery with IAM client integration for account alias support
+- Naming pattern validation to include account alias placeholder
+- Test coverage for account alias functionality and naming patterns
+
+### Enhanced
 - New `sso profile-generator` command for generating AWS CLI profiles from IAM Identity Center roles
 - Comprehensive profile generation with support for all assumable roles across accounts
 - Profile naming patterns with customizable template support
