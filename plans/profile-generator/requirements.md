@@ -19,7 +19,7 @@ The profile-generator feature enables AWS CLI users to automatically generate AW
 **User Story:** As an AWS CLI user, I want to specify a naming pattern for generated profiles, so that I can maintain consistent profile naming conventions across my configuration.
 
 #### Acceptance Criteria
-1. WHEN a user provides a naming pattern THEN the system SHALL accept patterns with placeholders for account ID, account name, and role name
+1. WHEN a user provides a naming pattern THEN the system SHALL accept patterns with placeholders for account ID, account name, account alias, and role name
 2. IF the naming pattern contains invalid characters THEN the system SHALL reject the pattern with validation errors
 3. WHEN generating profile names THEN the system SHALL substitute placeholders with actual values from discovered roles
 4. IF duplicate profile names would be generated THEN the system SHALL append a unique identifier to prevent conflicts
@@ -60,3 +60,22 @@ The profile-generator feature enables AWS CLI users to automatically generate AW
 2. IF network connectivity issues occur THEN the system SHALL inform the user about connection problems
 3. WHEN IAM Identity Center tokens expire THEN the system SHALL prompt the user to re-authenticate
 4. IF insufficient permissions are detected THEN the system SHALL specify which permissions are missing
+
+### Requirement 7
+**User Story:** As an AWS CLI user, I want to use account aliases in profile naming patterns, so that I can create more meaningful and readable profile names.
+
+#### Acceptance Criteria
+1. WHEN a user specifies `{account_alias}` in a naming pattern THEN the system SHALL retrieve the account alias from AWS
+2. IF an account has no alias configured THEN the system SHALL fall back to using the account ID
+3. WHEN generating profile names THEN the system SHALL substitute `{account_alias}` with the actual account alias or account ID
+4. IF account alias retrieval fails THEN the system SHALL use the account ID as a fallback and log a warning
+
+### Requirement 8
+**User Story:** As an AWS CLI user, I want to selectively import only a portion of the generated profiles, so that I can control which profiles are added to my configuration.
+
+#### Acceptance Criteria
+1. WHEN profiles are generated THEN the system SHALL present an interactive selection interface using the go-outputs library
+2. IF the go-outputs library lacks required interactive capabilities THEN the system SHALL identify and document the missing functionality
+3. WHEN a user selects profiles interactively THEN the system SHALL only import the selected profiles to the configuration
+4. IF no profiles are selected THEN the system SHALL exit without making any changes to the configuration
+5. WHEN using the `--yes` flag THEN the system SHALL import all profiles without interactive selection

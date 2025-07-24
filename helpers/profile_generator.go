@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/iam"
 	"github.com/aws/aws-sdk-go-v2/service/sso"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 )
@@ -20,6 +21,7 @@ type ProfileGenerator struct {
 	awsConfig       aws.Config
 	ssoClient       *sso.Client
 	stsClient       *sts.Client
+	iamClient       *iam.Client
 	roleDiscovery   *RoleDiscovery
 	logger          Logger
 }
@@ -43,9 +45,10 @@ func NewProfileGenerator(templateProfile, namingPattern string, autoApprove bool
 	// Create AWS service clients
 	ssoClient := sso.NewFromConfig(awsConfig)
 	stsClient := sts.NewFromConfig(awsConfig)
+	iamClient := iam.NewFromConfig(awsConfig)
 
 	// Create role discovery
-	roleDiscovery, err := NewRoleDiscovery(ssoClient, stsClient)
+	roleDiscovery, err := NewRoleDiscovery(ssoClient, stsClient, iamClient)
 	if err != nil {
 		return nil, err
 	}
@@ -58,6 +61,7 @@ func NewProfileGenerator(templateProfile, namingPattern string, autoApprove bool
 		awsConfig:       awsConfig,
 		ssoClient:       ssoClient,
 		stsClient:       stsClient,
+		iamClient:       iamClient,
 		roleDiscovery:   roleDiscovery,
 		logger:          &defaultLogger{},
 	}
@@ -152,6 +156,7 @@ func (pg *ProfileGenerator) GenerateProfiles(templateProfile *TemplateProfile, d
 		desiredName, err := namingPattern.GenerateProfileName(
 			role.AccountID,
 			role.AccountName,
+			role.AccountAlias,
 			role.PermissionSetName,
 			templateProfile.Region,
 		)

@@ -85,6 +85,7 @@ func (pg *ProfileGenerator) ValidateTemplateProfile() error
 func (pg *ProfileGenerator) DiscoverRoles() ([]GeneratedProfile, error)
 func (pg *ProfileGenerator) GenerateProfiles(roles []DiscoveredRole) ([]GeneratedProfile, error)
 func (pg *ProfileGenerator) PreviewProfiles(profiles []GeneratedProfile) error
+func (pg *ProfileGenerator) SelectProfilesInteractively(profiles []GeneratedProfile) ([]GeneratedProfile, error)
 func (pg *ProfileGenerator) AppendToConfig(profiles []GeneratedProfile) error
 ```
 
@@ -134,6 +135,7 @@ type RoleDiscovery struct {
 type DiscoveredRole struct {
     AccountID          string
     AccountName        string
+    AccountAlias       string  // Account alias (falls back to AccountID if not set)
     PermissionSetName  string
     RoleName          string  // SSO role name in account
 }
@@ -141,6 +143,7 @@ type DiscoveredRole struct {
 func NewRoleDiscovery(ssoClient *sso.Client, stsClient *sts.Client, ssoStartURL, ssoRegion, ssoSession string) *RoleDiscovery
 func (rd *RoleDiscovery) DiscoverAccessibleRoles() ([]DiscoveredRole, error)
 func (rd *RoleDiscovery) GetAccountInfo(accountID string) (string, error)
+func (rd *RoleDiscovery) GetAccountAlias(accountID string) (string, error)
 func (rd *RoleDiscovery) GetAccountsFromToken() ([]string, error)
 func (rd *RoleDiscovery) GetRolesForAccount(accountID string) ([]string, error)
 func (rd *RoleDiscovery) LoadCachedToken() (string, error)
@@ -168,13 +171,15 @@ type TemplateProfile struct {
 Supported placeholder variables in naming patterns:
 - `{account_id}` - AWS account ID (e.g., "123456789012")
 - `{account_name}` - Account alias or name (e.g., "production")
+- `{account_alias}` - AWS account alias (falls back to account ID if not set)
 - `{role_name}` - Permission set/role name (e.g., "PowerUserAccess")
 - `{region}` - AWS region (e.g., "us-east-1")
 
 Pattern examples:
 - `{account_name}-{role_name}` → "production-PowerUserAccess"
+- `{account_alias}-{role_name}` → "prod-PowerUserAccess"
 - `{account_id}-{role_name}` → "123456789012-PowerUserAccess"
-- `sso-{account_name}-{role_name}` → "sso-production-PowerUserAccess"
+- `sso-{account_alias}-{role_name}` → "sso-prod-PowerUserAccess"
 
 ### Profile Generation Output
 
@@ -346,6 +351,51 @@ type TestFixtures struct {
 - Automatic backup prevents data loss
 - User can review changes before applying
 - Supports alternative output file option
+
+## Go-Outputs Library Requirements
+
+### Interactive Profile Selection
+
+The profile-generator requires enhanced interactive capabilities from the go-outputs library to support selective profile import:
+
+#### Required Features:
+1. **Multi-Selection Interface**: Ability to present a list of profiles with checkboxes or similar selection mechanism
+2. **Keyboard Navigation**: Support for arrow keys, space/enter for selection, and escape for cancellation
+3. **Bulk Selection**: Options for "Select All" and "Select None" operations
+4. **Search/Filter**: Ability to filter profiles by name or account for large lists
+5. **Preview Integration**: Display profile details when selected/highlighted
+6. **Confirmation Flow**: Clear confirmation of selected profiles before proceeding
+
+#### Current Library Assessment:
+**Status**: The current go-outputs library focuses on data presentation (table, JSON, CSV formats) but lacks interactive input capabilities.
+
+#### Required Library Extensions:
+```go
+// Required additions to go-outputs library
+type InteractiveSelector interface {
+    // Present a multi-selection interface for items
+    SelectMultiple(items []SelectableItem, title string) ([]SelectableItem, error)
+    
+    // Present a single selection interface
+    SelectSingle(items []SelectableItem, title string) (*SelectableItem, error)
+    
+    // Confirm an action with yes/no prompt
+    Confirm(message string) (bool, error)
+}
+
+type SelectableItem struct {
+    ID          string
+    DisplayName string
+    Description string
+    Selected    bool
+    Data        interface{}
+}
+```
+
+#### Implementation Priority:
+- **High Priority**: Multi-selection interface for profile selection
+- **Medium Priority**: Search/filter capabilities for large profile lists
+- **Low Priority**: Advanced keyboard shortcuts and bulk operations
 
 ## Security Considerations
 

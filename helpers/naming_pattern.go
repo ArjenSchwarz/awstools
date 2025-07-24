@@ -14,10 +14,11 @@ type NamingPattern struct {
 
 // Supported placeholder variables
 const (
-	AccountIDPlaceholder   = "{account_id}"
-	AccountNamePlaceholder = "{account_name}"
-	RoleNamePlaceholder    = "{role_name}"
-	RegionPlaceholder      = "{region}"
+	AccountIDPlaceholder    = "{account_id}"
+	AccountNamePlaceholder  = "{account_name}"
+	AccountAliasPlaceholder = "{account_alias}"
+	RoleNamePlaceholder     = "{role_name}"
+	RegionPlaceholder       = "{region}"
 )
 
 // GetSupportedPlaceholders returns all supported placeholder variables
@@ -25,6 +26,7 @@ func GetSupportedPlaceholders() []string {
 	return []string{
 		AccountIDPlaceholder,
 		AccountNamePlaceholder,
+		AccountAliasPlaceholder,
 		RoleNamePlaceholder,
 		RegionPlaceholder,
 	}
@@ -90,15 +92,16 @@ func (np *NamingPattern) Validate() error {
 }
 
 // GenerateProfileName generates a profile name using the pattern and provided values
-func (np *NamingPattern) GenerateProfileName(accountID, accountName, roleName, region string) (string, error) {
+func (np *NamingPattern) GenerateProfileName(accountID, accountName, accountAlias, roleName, region string) (string, error) {
 	result := np.Pattern
 
 	// Replace placeholders with actual values
 	replacements := map[string]string{
-		AccountIDPlaceholder:   accountID,
-		AccountNamePlaceholder: accountName,
-		RoleNamePlaceholder:    roleName,
-		RegionPlaceholder:      region,
+		AccountIDPlaceholder:    accountID,
+		AccountNamePlaceholder:  accountName,
+		AccountAliasPlaceholder: accountAlias,
+		RoleNamePlaceholder:     roleName,
+		RegionPlaceholder:       region,
 	}
 
 	for placeholder, value := range replacements {
@@ -207,19 +210,20 @@ func TestPattern(pattern string) (*NamingPattern, []string, error) {
 
 	// Test with sample data
 	samples := []struct {
-		accountID   string
-		accountName string
-		roleName    string
-		region      string
+		accountID    string
+		accountName  string
+		accountAlias string
+		roleName     string
+		region       string
 	}{
-		{"123456789012", "production", "PowerUserAccess", "us-east-1"},
-		{"210987654321", "development", "ReadOnlyAccess", "us-west-2"},
-		{"555666777888", "staging", "Administrator", "eu-west-1"},
+		{"123456789012", "production", "prod", "PowerUserAccess", "us-east-1"},
+		{"210987654321", "development", "dev", "ReadOnlyAccess", "us-west-2"},
+		{"555666777888", "staging", "stage", "Administrator", "eu-west-1"},
 	}
 
 	var results []string
 	for _, sample := range samples {
-		result, err := np.GenerateProfileName(sample.accountID, sample.accountName, sample.roleName, sample.region)
+		result, err := np.GenerateProfileName(sample.accountID, sample.accountName, sample.accountAlias, sample.roleName, sample.region)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -234,9 +238,11 @@ func ValidatePatternExamples() map[string]error {
 	examples := map[string]string{
 		"account_name_and_role":   "{account_name}-{role_name}",
 		"account_id_and_role":     "{account_id}-{role_name}",
+		"account_alias_and_role":  "{account_alias}-{role_name}",
 		"sso_prefix":              "sso-{account_name}-{role_name}",
+		"sso_alias_prefix":        "sso-{account_alias}-{role_name}",
 		"with_region":             "{account_name}-{region}-{role_name}",
-		"all_variables":           "{account_id}-{account_name}-{role_name}-{region}",
+		"all_variables":           "{account_id}-{account_name}-{account_alias}-{role_name}-{region}",
 		"invalid_chars":           "{account_name} {role_name}",
 		"no_placeholders":         "static-name",
 		"unsupported_placeholder": "{account_name}-{invalid_placeholder}",

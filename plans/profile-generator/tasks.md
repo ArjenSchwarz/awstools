@@ -302,6 +302,99 @@ This approach is more accessible because it doesn't require SSO admin permission
 - Existing configuration management in `config/awsconfig.go`
 - SSO token cache directory (`~/.aws/sso/cache/`) for token discovery ✅ **CORRECTLY IMPLEMENTED**
 
+## Phase 7: Enhanced Features Implementation
+*These tasks implement the new enhanced features requested*
+
+### Task 7.1: Account Alias Support ✅ COMPLETED
+**Depends on: Existing role discovery implementation**
+- [x] Update `helpers/role_discovery.go` to support account alias retrieval
+  - [x] Add `GetAccountAlias()` method to retrieve account aliases via IAM API
+  - [x] Update `DiscoverAccessibleRoles()` to populate `AccountAlias` field
+  - [x] Implement fallback to account ID when alias is not available
+  - [x] Add error handling for alias retrieval failures
+- [x] Update `helpers/naming_pattern.go` to support `{account_alias}` placeholder
+  - [x] Add `account_alias` to supported placeholder variables
+  - [x] Update pattern validation to accept `{account_alias}`
+  - [x] Update variable substitution logic to handle account alias
+- [x] Update `helpers/profile_generator_types.go` to include account alias
+  - [x] Add `AccountAlias` field to `DiscoveredRole` struct
+  - [x] Update validation methods to handle account alias
+- [x] Update tests to cover account alias functionality
+  - [x] Add unit tests for account alias retrieval
+  - [x] Add unit tests for account alias in naming patterns
+  - [x] Add integration tests for account alias fallback scenarios
+
+### Task 7.2: Interactive Profile Selection
+**Depends on: go-outputs library enhancement OR alternative implementation**
+- [ ] **Option A**: Enhance go-outputs library (if library modification is feasible)
+  - [ ] Add `InteractiveSelector` interface to go-outputs library
+  - [ ] Implement multi-selection interface with keyboard navigation
+  - [ ] Add bulk selection operations (Select All, Select None)
+  - [ ] Add search/filter capabilities for large lists
+  - [ ] Add preview integration for selected profiles
+- [ ] **Option B**: Alternative implementation (if go-outputs cannot be modified)
+  - [ ] Create standalone interactive selection module
+  - [ ] Implement terminal-based multi-selection interface
+  - [ ] Use third-party library (e.g., survey, promptui) for interactive input
+  - [ ] Integrate with existing go-outputs for consistent formatting
+- [ ] Update `helpers/profile_generator.go` to support interactive selection
+  - [ ] Add `SelectProfilesInteractively()` method
+  - [ ] Integrate with interactive selector interface
+  - [ ] Handle user cancellation and empty selections
+  - [ ] Maintain existing `--yes` flag behavior for non-interactive mode
+- [ ] Update command interface to support interactive selection
+  - [ ] Modify workflow to include interactive selection step
+  - [ ] Add progress indicators during selection process
+  - [ ] Update help text and documentation
+
+### Task 7.3: Go-Outputs Library Assessment and Enhancement
+**Parallel execution enabled - can run concurrently with Task 7.2**
+- [ ] Assess current go-outputs library capabilities
+  - [ ] Review existing interfaces and functionality
+  - [ ] Identify gaps for interactive input requirements
+  - [ ] Evaluate feasibility of library extension
+- [ ] Document required library enhancements
+  - [ ] Create detailed specification for interactive features
+  - [ ] Document interface requirements and implementation approach
+  - [ ] Create migration plan for existing code
+- [ ] **IF library enhancement is not feasible**:
+  - [ ] Document alternative implementation approaches
+  - [ ] Evaluate third-party library options
+  - [ ] Create compatibility layer for consistent output formatting
+
+### Task 7.4: Integration and Testing
+**Depends on: Tasks 7.1, 7.2, 7.3**
+- [ ] Integration testing for enhanced features
+  - [ ] Test account alias retrieval in real AWS environments
+  - [ ] Test interactive profile selection with various scenarios
+  - [ ] Test fallback behaviors for account alias failures
+  - [ ] Test compatibility with existing workflow
+- [ ] Performance testing
+  - [ ] Test account alias retrieval performance impact
+  - [ ] Test interactive selection with large profile lists
+  - [ ] Optimize caching for account alias information
+- [ ] User experience testing
+  - [ ] Test interactive selection usability
+  - [ ] Validate error messages and help text
+  - [ ] Test keyboard navigation and shortcuts
+  - [ ] Validate accessibility considerations
+
+### Task 7.5: Documentation and Quality Assurance
+**Depends on: Task 7.4**
+- [ ] Update documentation for new features
+  - [ ] Update command help text for account alias placeholder
+  - [ ] Update usage examples for interactive selection
+  - [ ] Document go-outputs library requirements
+- [ ] Code quality assurance
+  - [ ] Run `go fmt` on all modified files
+  - [ ] Run `go test ./...` to ensure all tests pass
+  - [ ] Run `make test` for full linting and testing
+  - [ ] Address any performance or security concerns
+- [ ] Update requirements and design documents
+  - [ ] Validate implementation against updated requirements
+  - [ ] Update design document with actual implementation details
+  - [ ] Create migration guide for existing users
+
 ## ✅ IMPLEMENTATION STATUS
 
 ### Current State Analysis

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/iam"
 	"github.com/aws/aws-sdk-go-v2/service/sso"
 	"github.com/aws/aws-sdk-go-v2/service/sso/types"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
@@ -46,6 +47,16 @@ func (m *MockSSOClient) ListAccountRoles(ctx context.Context, params *sso.ListAc
 func (m *MockSSOClient) GetRoleCredentials(ctx context.Context, params *sso.GetRoleCredentialsInput, optFns ...func(*sso.Options)) (*sso.GetRoleCredentialsOutput, error) {
 	args := m.Called(ctx, params, optFns)
 	return args.Get(0).(*sso.GetRoleCredentialsOutput), args.Error(1)
+}
+
+// MockIAMClient is a mock IAM client for testing
+type MockIAMClient struct {
+	mock.Mock
+}
+
+func (m *MockIAMClient) ListAccountAliases(ctx context.Context, params *iam.ListAccountAliasesInput, optFns ...func(*iam.Options)) (*iam.ListAccountAliasesOutput, error) {
+	args := m.Called(ctx, params, optFns)
+	return args.Get(0).(*iam.ListAccountAliasesOutput), args.Error(1)
 }
 
 func (m *MockSSOClient) Logout(ctx context.Context, params *sso.LogoutInput, optFns ...func(*sso.Options)) (*sso.LogoutOutput, error) {
@@ -127,12 +138,14 @@ func SetupTestFixtures() *TestFixtures {
 			{
 				AccountID:         "123456789012",
 				AccountName:       "test-account",
+				AccountAlias:      "test-alias",
 				PermissionSetName: "PowerUserAccess",
 				RoleName:          "PowerUserAccess",
 			},
 			{
 				AccountID:         "210987654321",
 				AccountName:       "production-account",
+				AccountAlias:      "prod-alias",
 				PermissionSetName: "ReadOnlyAccess",
 				RoleName:          "ReadOnlyAccess",
 			},
@@ -414,6 +427,13 @@ func TestValidateConfiguration(t *testing.T) {
 			outputFile:      "",
 			expectedError:   true,
 			errorType:       ErrorTypeValidation,
+		},
+		{
+			name:            "Valid account alias pattern",
+			templateProfile: "test-profile",
+			namingPattern:   "{account_alias}-{role_name}",
+			outputFile:      "",
+			expectedError:   false,
 		},
 	}
 
@@ -1030,4 +1050,113 @@ func TestProfileGeneratorErrorTypes(t *testing.T) {
 			assert.Contains(t, err.Error(), tc.expectedError)
 		})
 	}
+}
+
+// TestAccountAliasNamingPattern tests the account alias functionality in naming patterns
+func TestAccountAliasNamingPattern(t *testing.T) {
+	fixtures := SetupTestFixtures()
+
+	tests := []struct {
+		name           string
+		namingPattern  string
+		expectedName   string
+		discoveredRole DiscoveredRole
+	}{
+		{
+			name:          "Account alias in naming pattern",
+			namingPattern: "{account_alias}-{role_name}",
+			expectedName:  "test-alias-PowerUserAccess",
+			discoveredRole: DiscoveredRole{
+				AccountID:         "123456789012",
+				AccountName:       "test-account",
+				AccountAlias:      "test-alias",
+				PermissionSetName: "PowerUserAccess",
+				RoleName:          "PowerUserAccess",
+			},
+		},
+		{
+			name:          "Account alias with account ID fallback",
+			namingPattern: "{account_alias}-{role_name}",
+			expectedName:  "123456789012-PowerUserAccess",
+			discoveredRole: DiscoveredRole{
+				AccountID:         "123456789012",
+				AccountName:       "test-account",
+				AccountAlias:      "123456789012", // Fallback to account ID
+				PermissionSetName: "PowerUserAccess",
+				RoleName:          "PowerUserAccess",
+			},
+		},
+		{
+			name:          "Mixed naming pattern with account alias",
+			namingPattern: "sso-{account_alias}-{role_name}",
+			expectedName:  "sso-prod-alias-ReadOnlyAccess",
+			discoveredRole: DiscoveredRole{
+				AccountID:         "210987654321",
+				AccountName:       "production-account",
+				AccountAlias:      "prod-alias",
+				PermissionSetName: "ReadOnlyAccess",
+				RoleName:          "ReadOnlyAccess",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create temp config file
+			configFile := CreateTempConfigFile(t, fixtures.ConfigContent)
+
+			// Set environment variable to point to test config
+			oldValue := os.Getenv("AWS_CONFIG_FILE")
+			defer func() {
+				if oldValue != "" {
+					os.Setenv("AWS_CONFIG_FILE", oldValue)
+				} else {
+					os.Unsetenv("AWS_CONFIG_FILE")
+				}
+			}()
+			os.Setenv("AWS_CONFIG_FILE", configFile)
+
+			// Create profile generator
+			pg, err := NewProfileGenerator("test-profile", tt.namingPattern, false, "", aws.Config{})
+			assert.NoError(t, err)
+
+			// Create template profile
+			templateProfile := &TemplateProfile{
+				Name:        "test-profile",
+				Region:      "us-east-1",
+				SSOStartURL: "https://example.awsapps.com/start",
+				SSORegion:   "us-east-1",
+				SSOSession:  "test-session",
+				IsSSO:       true,
+			}
+
+			// Generate profiles
+			profiles, err := pg.GenerateProfiles(templateProfile, []DiscoveredRole{tt.discoveredRole})
+			assert.NoError(t, err)
+			assert.Len(t, profiles, 1)
+
+			// Verify the generated profile name
+			assert.Equal(t, tt.expectedName, profiles[0].Name)
+			assert.Equal(t, tt.discoveredRole.AccountID, profiles[0].AccountID)
+			assert.Equal(t, tt.discoveredRole.RoleName, profiles[0].RoleName)
+		})
+	}
+}
+
+// TestAccountAliasValidation tests the account alias validation
+func TestAccountAliasValidation(t *testing.T) {
+	// Test that account alias is included in supported placeholders
+	placeholders := GetSupportedPlaceholders()
+	assert.Contains(t, placeholders, "{account_alias}")
+
+	// Test pattern validation with account alias
+	pattern, err := NewNamingPattern("{account_alias}-{role_name}")
+	assert.NoError(t, err)
+	assert.NotNil(t, pattern)
+
+	// Test pattern examples include account alias
+	examples := ValidatePatternExamples()
+	assert.NoError(t, examples["account_alias_and_role"])
+	assert.NoError(t, examples["sso_alias_prefix"])
+	assert.NoError(t, examples["all_variables"])
 }
