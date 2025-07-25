@@ -216,3 +216,181 @@ func (pgr *ProfileGenerationResult) Summary() string {
 	summary.WriteString(fmt.Sprintf("Errors: %d\n", len(pgr.Errors)))
 	return summary.String()
 }
+
+// ConflictResolutionStrategy defines how to handle existing profile conflicts
+type ConflictResolutionStrategy int
+
+const (
+	ConflictPrompt  ConflictResolutionStrategy = iota // Default: prompt user for each conflict
+	ConflictReplace                                   // Replace existing profiles
+	ConflictSkip                                      // Skip roles with existing profiles
+)
+
+// String returns the string representation of the conflict resolution strategy
+func (crs ConflictResolutionStrategy) String() string {
+	switch crs {
+	case ConflictPrompt:
+		return "prompt"
+	case ConflictReplace:
+		return "replace"
+	case ConflictSkip:
+		return "skip"
+	default:
+		return "unknown"
+	}
+}
+
+// Validate checks if the conflict resolution strategy is valid
+func (crs ConflictResolutionStrategy) Validate() error {
+	switch crs {
+	case ConflictPrompt, ConflictReplace, ConflictSkip:
+		return nil
+	default:
+		return NewValidationError("invalid conflict resolution strategy", nil).
+			WithContext("strategy", crs.String())
+	}
+}
+
+// ConflictType represents the type of profile conflict detected
+type ConflictType int
+
+const (
+	ConflictSameRole ConflictType = iota // Same SSO account ID and role name
+	ConflictSameName                     // Same profile name but different role
+)
+
+// String returns the string representation of the conflict type
+func (ct ConflictType) String() string {
+	switch ct {
+	case ConflictSameRole:
+		return "same_role"
+	case ConflictSameName:
+		return "same_name"
+	default:
+		return "unknown"
+	}
+}
+
+// ProfileConflict represents a detected conflict between discovered role and existing profile
+type ProfileConflict struct {
+	DiscoveredRole   DiscoveredRole `json:"discovered_role" yaml:"discovered_role"`
+	ExistingProfiles []Profile      `json:"existing_profiles" yaml:"existing_profiles"`
+	ProposedName     string         `json:"proposed_name" yaml:"proposed_name"`
+	ConflictType     ConflictType   `json:"conflict_type" yaml:"conflict_type"`
+}
+
+// Validate checks if the profile conflict is valid
+func (pc *ProfileConflict) Validate() error {
+	if err := pc.DiscoveredRole.Validate(); err != nil {
+		return err
+	}
+
+	if len(pc.ExistingProfiles) == 0 {
+		return NewValidationError("profile conflict must have at least one existing profile", nil).
+			WithContext("proposed_name", pc.ProposedName)
+	}
+
+	if pc.ProposedName == "" {
+		return NewValidationError("proposed profile name is required", nil)
+	}
+
+	for _, profile := range pc.ExistingProfiles {
+		if err := profile.Validate(); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// ActionType represents the action taken for a specific conflict
+type ActionType int
+
+const (
+	ActionReplace ActionType = iota // Replace existing profile
+	ActionSkip                      // Skip generating profile for this role
+	ActionCreate                    // Create new profile (no conflict)
+)
+
+// String returns the string representation of the action type
+func (at ActionType) String() string {
+	switch at {
+	case ActionReplace:
+		return "replace"
+	case ActionSkip:
+		return "skip"
+	case ActionCreate:
+		return "create"
+	default:
+		return "unknown"
+	}
+}
+
+// ConflictAction represents the action taken for a specific conflict
+type ConflictAction struct {
+	Conflict ProfileConflict `json:"conflict" yaml:"conflict"`
+	Action   ActionType      `json:"action" yaml:"action"`
+	NewName  string          `json:"new_name" yaml:"new_name"`
+	OldName  string          `json:"old_name" yaml:"old_name"`
+}
+
+// Validate checks if the conflict action is valid
+func (ca *ConflictAction) Validate() error {
+	if err := ca.Conflict.Validate(); err != nil {
+		return err
+	}
+
+	switch ca.Action {
+	case ActionReplace:
+		if ca.NewName == "" {
+			return NewValidationError("new profile name is required for replace action", nil).
+				WithContext("old_name", ca.OldName)
+		}
+		if ca.OldName == "" {
+			return NewValidationError("old profile name is required for replace action", nil).
+				WithContext("new_name", ca.NewName)
+		}
+	case ActionSkip:
+		if ca.OldName == "" {
+			return NewValidationError("old profile name is required for skip action", nil)
+		}
+	case ActionCreate:
+		if ca.NewName == "" {
+			return NewValidationError("new profile name is required for create action", nil)
+		}
+	default:
+		return NewValidationError("invalid action type", nil).
+			WithContext("action", ca.Action.String())
+	}
+
+	return nil
+}
+
+// ProfileReplacement represents a profile that was replaced during conflict resolution
+type ProfileReplacement struct {
+	OldProfile Profile          `json:"old_profile" yaml:"old_profile"`
+	NewProfile GeneratedProfile `json:"new_profile" yaml:"new_profile"`
+	OldName    string           `json:"old_name" yaml:"old_name"`
+	NewName    string           `json:"new_name" yaml:"new_name"`
+}
+
+// Validate checks if the profile replacement is valid
+func (pr *ProfileReplacement) Validate() error {
+	if err := pr.OldProfile.Validate(); err != nil {
+		return err
+	}
+
+	if err := pr.NewProfile.Validate(); err != nil {
+		return err
+	}
+
+	if pr.OldName == "" {
+		return NewValidationError("old profile name is required", nil)
+	}
+
+	if pr.NewName == "" {
+		return NewValidationError("new profile name is required", nil)
+	}
+
+	return nil
+}
