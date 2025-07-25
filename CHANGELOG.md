@@ -8,6 +8,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Enhanced profile generator data models with conflict resolution support
+- SSO session configuration support in AWS config file handling
+- Comprehensive test coverage for profile generator types and AWS config file operations
+- Conflict resolution strategy enums and data structures for profile generation
+- Profile conflict detection types and action tracking structures
+- Kiro steering documentation for development guidelines and project structure
+
+### Enhanced
+- AWS config file parser with SSO session support for both legacy and modern formats
+- Profile generator types with validation methods and conflict handling capabilities
+- Data models for profile replacement tracking and conflict action recording
+- Test suite with 963 lines of comprehensive coverage for new functionality
+
+### Technical Details
+- Extended `helpers/profile_generator_types.go` with conflict resolution data structures
+- Added `ConflictResolutionStrategy`, `ProfileConflict`, `ConflictAction`, and `ProfileReplacement` types
+- Enhanced `helpers/aws_config_file.go` with SSO session resolution and profile matching
+- Added `SSOSession`, `ResolvedSSOConfig` structs for normalized SSO configuration handling
+- Created comprehensive unit tests in `helpers/aws_config_file_test.go` and `helpers/profile_generator_types_test.go`
+- Added `.kiro/steering/agents.md` with development guidelines for Go code quality
+
 - Profile generator enhancement specification with conflict detection and resolution capabilities
 - Account alias support in profile naming patterns with `{account_alias}` placeholder
 - Comprehensive efficiency improvements documentation for AWS API optimization

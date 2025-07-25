@@ -13,19 +13,77 @@ import (
 type AWSConfigFile struct {
 	FilePath string
 	Profiles map[string]Profile
+	Sessions map[string]SSOSession // SSO session configurations
+}
+
+// SSOSession represents an SSO session configuration
+type SSOSession struct {
+	Name        string `json:"name" yaml:"name"`
+	SSOStartURL string `json:"sso_start_url" yaml:"sso_start_url"`
+	SSORegion   string `json:"sso_region" yaml:"sso_region"`
+}
+
+// Validate checks if the SSO session is valid
+func (s *SSOSession) Validate() error {
+	if s.Name == "" {
+		return NewValidationError("SSO session name is required", nil)
+	}
+	if s.SSOStartURL == "" {
+		return NewValidationError("SSO start URL is required", nil).
+			WithContext("session_name", s.Name)
+	}
+	if s.SSORegion == "" {
+		return NewValidationError("SSO region is required", nil).
+			WithContext("session_name", s.Name)
+	}
+	return nil
+}
+
+// ResolvedSSOConfig represents the resolved SSO configuration for profile matching
+type ResolvedSSOConfig struct {
+	StartURL  string `json:"start_url" yaml:"start_url"`
+	Region    string `json:"region" yaml:"region"`
+	AccountID string `json:"account_id" yaml:"account_id"`
+	RoleName  string `json:"role_name" yaml:"role_name"`
+}
+
+// Validate checks if the resolved SSO config is valid
+func (r *ResolvedSSOConfig) Validate() error {
+	if r.StartURL == "" {
+		return NewValidationError("SSO start URL is required", nil)
+	}
+	if r.Region == "" {
+		return NewValidationError("SSO region is required", nil)
+	}
+	if r.AccountID == "" {
+		return NewValidationError("SSO account ID is required", nil)
+	}
+	if r.RoleName == "" {
+		return NewValidationError("SSO role name is required", nil)
+	}
+	return nil
 }
 
 // Profile represents a profile in AWS config file
 type Profile struct {
-	Name            string
-	Region          string
-	SSOStartURL     string
-	SSORegion       string
-	SSOAccountID    string
-	SSORoleName     string
-	SSOSession      string
-	Output          string
-	OtherProperties map[string]string
+	Name              string             `json:"name" yaml:"name"`
+	Region            string             `json:"region" yaml:"region"`
+	SSOStartURL       string             `json:"sso_start_url" yaml:"sso_start_url"`
+	SSORegion         string             `json:"sso_region" yaml:"sso_region"`
+	SSOAccountID      string             `json:"sso_account_id" yaml:"sso_account_id"`
+	SSORoleName       string             `json:"sso_role_name" yaml:"sso_role_name"`
+	SSOSession        string             `json:"sso_session" yaml:"sso_session"`
+	Output            string             `json:"output" yaml:"output"`
+	OtherProperties   map[string]string  `json:"other_properties" yaml:"other_properties"`
+	ResolvedSSOConfig *ResolvedSSOConfig `json:"resolved_sso_config,omitempty" yaml:"resolved_sso_config,omitempty"`
+}
+
+// Validate checks if the profile is valid
+func (p *Profile) Validate() error {
+	if p.Name == "" {
+		return NewValidationError("profile name is required", nil)
+	}
+	return nil
 }
 
 // LoadAWSConfigFile loads an AWS config file and parses its profiles
@@ -47,6 +105,7 @@ func LoadAWSConfigFile(filePath string) (*AWSConfigFile, error) {
 	configFile := &AWSConfigFile{
 		FilePath: filePath,
 		Profiles: make(map[string]Profile),
+		Sessions: make(map[string]SSOSession),
 	}
 
 	// Check if file exists
@@ -78,8 +137,10 @@ func LoadAWSConfigFile(filePath string) (*AWSConfigFile, error) {
 func (cf *AWSConfigFile) parseConfigFile(file *os.File) error {
 	scanner := bufio.NewScanner(file)
 	var currentProfile *Profile
+	var currentSession *SSOSession
 	profileNameRegex := regexp.MustCompile(`^\[profile\s+(.+)\]$`)
 	defaultProfileRegex := regexp.MustCompile(`^\[default\]$`)
+	ssoSessionRegex := regexp.MustCompile(`^\[sso-session\s+(.+)\]$`)
 
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
@@ -110,6 +171,38 @@ func (cf *AWSConfigFile) parseConfigFile(file *os.File) error {
 			currentProfile = &Profile{
 				Name:            "default",
 				OtherProperties: make(map[string]string),
+			}
+		} else if matches := ssoSessionRegex.FindStringSubmatch(line); matches != nil {
+			// Save previous profile if exists
+			if currentProfile != nil {
+				cf.Profiles[currentProfile.Name] = *currentProfile
+				currentProfile = nil
+			}
+			// Save previous session if exists
+			if currentSession != nil {
+				cf.Sessions[currentSession.Name] = *currentSession
+			}
+
+			// Start new SSO session
+			currentSession = &SSOSession{
+				Name: matches[1],
+			}
+		} else if currentSession != nil {
+			// Parse SSO session property line
+			if strings.Contains(line, "=") {
+				parts := strings.SplitN(line, "=", 2)
+				if len(parts) == 2 {
+					key := strings.TrimSpace(parts[0])
+					value := strings.TrimSpace(parts[1])
+
+					// Set known SSO session properties
+					switch key {
+					case "sso_start_url":
+						currentSession.SSOStartURL = value
+					case "sso_region":
+						currentSession.SSORegion = value
+					}
+				}
 			}
 		} else if currentProfile != nil {
 			// Parse property line
@@ -147,6 +240,11 @@ func (cf *AWSConfigFile) parseConfigFile(file *os.File) error {
 	// Save the last profile
 	if currentProfile != nil {
 		cf.Profiles[currentProfile.Name] = *currentProfile
+	}
+
+	// Save the last session
+	if currentSession != nil {
+		cf.Sessions[currentSession.Name] = *currentSession
 	}
 
 	if err := scanner.Err(); err != nil {
@@ -442,4 +540,89 @@ func (cf *AWSConfigFile) DetectProfileConflicts(newProfiles []GeneratedProfile) 
 	}
 
 	return conflicts
+}
+
+// LoadSSOSessions loads SSO session configurations from the config file
+func (cf *AWSConfigFile) LoadSSOSessions() error {
+	// SSO sessions are already loaded during parseConfigFile
+	return nil
+}
+
+// ResolveSSOSession resolves an SSO session reference to actual configuration
+func (cf *AWSConfigFile) ResolveSSOSession(sessionName string) (*SSOSession, error) {
+	if sessionName == "" {
+		return nil, NewValidationError("SSO session name cannot be empty", nil)
+	}
+
+	session, exists := cf.Sessions[sessionName]
+	if !exists {
+		return nil, NewValidationError("SSO session not found", nil).
+			WithContext("session_name", sessionName)
+	}
+
+	return &session, nil
+}
+
+// ResolveProfileSSOConfig normalizes both legacy and session-based SSO formats
+func (cf *AWSConfigFile) ResolveProfileSSOConfig(profile Profile) (*ResolvedSSOConfig, error) {
+	// Handle legacy SSO format
+	if profile.SSOStartURL != "" && profile.SSOAccountID != "" && profile.SSORoleName != "" {
+		return &ResolvedSSOConfig{
+			StartURL:  profile.SSOStartURL,
+			Region:    profile.SSORegion,
+			AccountID: profile.SSOAccountID,
+			RoleName:  profile.SSORoleName,
+		}, nil
+	}
+
+	// Handle SSO session format
+	if profile.SSOSession != "" {
+		session, err := cf.ResolveSSOSession(profile.SSOSession)
+		if err != nil {
+			return nil, err
+		}
+
+		return &ResolvedSSOConfig{
+			StartURL:  session.SSOStartURL,
+			Region:    session.SSORegion,
+			AccountID: profile.SSOAccountID,
+			RoleName:  profile.SSORoleName,
+		}, nil
+	}
+
+	return nil, NewValidationError("profile does not have valid SSO configuration", nil).
+		WithContext("profile_name", profile.Name)
+}
+
+// MatchesRole compares profiles against discovered roles using normalized SSO config
+func (cf *AWSConfigFile) MatchesRole(profile Profile, accountID, roleName, startURL string) (bool, error) {
+	// Resolve SSO configuration for the profile
+	resolvedConfig, err := cf.ResolveProfileSSOConfig(profile)
+	if err != nil {
+		return false, err
+	}
+
+	// Match based on resolved SSO configuration
+	return resolvedConfig.StartURL == startURL &&
+		resolvedConfig.AccountID == accountID &&
+		resolvedConfig.RoleName == roleName, nil
+}
+
+// FindProfilesForRole finds existing profiles for specific roles
+func (cf *AWSConfigFile) FindProfilesForRole(accountID, roleName, startURL string) ([]Profile, error) {
+	var matchingProfiles []Profile
+
+	for _, profile := range cf.Profiles {
+		matches, err := cf.MatchesRole(profile, accountID, roleName, startURL)
+		if err != nil {
+			// Log warning but continue processing other profiles
+			continue
+		}
+
+		if matches {
+			matchingProfiles = append(matchingProfiles, profile)
+		}
+	}
+
+	return matchingProfiles, nil
 }
