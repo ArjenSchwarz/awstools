@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Profile conflict detection engine with comprehensive conflict analysis capabilities
+- Enhanced profile generator with conflict resolution strategies (replace, skip, prompt)
+- Comprehensive profile conflict detector with role-to-profile matching capabilities
+- Enhanced AWS config file operations with profile replacement and backup functionality
+- SSO token cache improvements with better error handling and validation
+- Optimized naming pattern validation using slices.Contains for better performance
 - Optimized profile lookup indices for O(1) conflict detection performance
 - Enhanced AWS config file operations with profile search and matching utilities
 - Comprehensive test coverage for profile conflict detection with 400+ test lines

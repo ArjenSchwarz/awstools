@@ -73,7 +73,7 @@ func profileGenerator(cmd *cobra.Command, args []string) {
 	awsConfig := config.DefaultAwsConfig(*settings)
 
 	// Create profile generator
-	generator, err := helpers.NewProfileGenerator(templateProfile, namingPattern, autoApprove, outputFile, awsConfig.Config)
+	generator, err := helpers.NewProfileGenerator(templateProfile, namingPattern, autoApprove, outputFile, helpers.ConflictPrompt, awsConfig.Config)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error creating profile generator: %v\n", err)
 		os.Exit(1)

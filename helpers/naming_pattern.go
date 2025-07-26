@@ -6,6 +6,13 @@ import (
 	"strings"
 )
 
+// Pre-compiled regular expressions for better performance
+var (
+	invalidCharsRegex        = regexp.MustCompile(`[<>:"/\\|?*\s]`)
+	placeholderRegex         = regexp.MustCompile(`\{[^}]+\}`)
+	multipleUnderscoresRegex = regexp.MustCompile(`_+`)
+)
+
 // NamingPattern represents a naming pattern for profile generation
 type NamingPattern struct {
 	Pattern   string
@@ -53,15 +60,13 @@ func (np *NamingPattern) Validate() error {
 	}
 
 	// Check for invalid characters that would cause AWS config file issues
-	invalidChars := regexp.MustCompile(`[<>:"/\\|?*\s]`)
-	if invalidChars.MatchString(np.Pattern) {
+	if invalidCharsRegex.MatchString(np.Pattern) {
 		return NewValidationError("naming pattern contains invalid characters", nil).
 			WithContext("pattern", np.Pattern).
 			WithContext("invalid_chars", "<>:\"/\\|?* and spaces")
 	}
 
 	// Extract placeholders from pattern
-	placeholderRegex := regexp.MustCompile(`\{[^}]+\}`)
 	placeholders := placeholderRegex.FindAllString(np.Pattern, -1)
 
 	// Validate each placeholder
@@ -131,12 +136,10 @@ func (np *NamingPattern) GenerateProfileName(accountID, accountName, accountAlia
 // SanitizeProfileName sanitizes a profile name by removing invalid characters
 func SanitizeProfileName(name string) string {
 	// Replace invalid characters with underscores
-	invalidChars := regexp.MustCompile(`[<>:"/\\|?*\s]`)
-	sanitized := invalidChars.ReplaceAllString(name, "_")
+	sanitized := invalidCharsRegex.ReplaceAllString(name, "_")
 
 	// Remove multiple consecutive underscores
-	multipleUnderscores := regexp.MustCompile(`_+`)
-	sanitized = multipleUnderscores.ReplaceAllString(sanitized, "_")
+	sanitized = multipleUnderscoresRegex.ReplaceAllString(sanitized, "_")
 
 	// Remove leading/trailing underscores
 	sanitized = strings.Trim(sanitized, "_")

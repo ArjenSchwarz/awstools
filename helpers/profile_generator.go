@@ -1,6 +1,7 @@
 package helpers
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -14,20 +15,21 @@ import (
 
 // ProfileGenerator handles the complete profile generation workflow
 type ProfileGenerator struct {
-	templateProfile string
-	namingPattern   string
-	autoApprove     bool
-	outputFile      string
-	awsConfig       aws.Config
-	ssoClient       *sso.Client
-	stsClient       *sts.Client
-	iamClient       *iam.Client
-	roleDiscovery   *RoleDiscovery
-	logger          Logger
+	templateProfile  string
+	namingPattern    string
+	autoApprove      bool
+	outputFile       string
+	conflictStrategy ConflictResolutionStrategy
+	awsConfig        aws.Config
+	ssoClient        *sso.Client
+	stsClient        *sts.Client
+	iamClient        *iam.Client
+	roleDiscovery    *RoleDiscovery
+	logger           Logger
 }
 
 // NewProfileGenerator creates a new profile generator
-func NewProfileGenerator(templateProfile, namingPattern string, autoApprove bool, outputFile string, awsConfig aws.Config) (*ProfileGenerator, error) {
+func NewProfileGenerator(templateProfile, namingPattern string, autoApprove bool, outputFile string, conflictStrategy ConflictResolutionStrategy, awsConfig aws.Config) (*ProfileGenerator, error) {
 	if templateProfile == "" {
 		return nil, NewValidationError("template profile name is required", nil)
 	}
@@ -54,16 +56,17 @@ func NewProfileGenerator(templateProfile, namingPattern string, autoApprove bool
 	}
 
 	pg := &ProfileGenerator{
-		templateProfile: templateProfile,
-		namingPattern:   namingPattern,
-		autoApprove:     autoApprove,
-		outputFile:      outputFile,
-		awsConfig:       awsConfig,
-		ssoClient:       ssoClient,
-		stsClient:       stsClient,
-		iamClient:       iamClient,
-		roleDiscovery:   roleDiscovery,
-		logger:          &defaultLogger{},
+		templateProfile:  templateProfile,
+		namingPattern:    namingPattern,
+		autoApprove:      autoApprove,
+		outputFile:       outputFile,
+		conflictStrategy: conflictStrategy,
+		awsConfig:        awsConfig,
+		ssoClient:        ssoClient,
+		stsClient:        stsClient,
+		iamClient:        iamClient,
+		roleDiscovery:    roleDiscovery,
+		logger:           &defaultLogger{},
 	}
 
 	return pg, nil
@@ -401,4 +404,246 @@ func (pg *ProfileGenerator) IsAutoApprove() bool {
 // GetOutputFile returns the output file path
 func (pg *ProfileGenerator) GetOutputFile() string {
 	return pg.outputFile
+}
+
+// PromptForConflictResolution prompts the user for conflict resolution action
+func (pg *ProfileGenerator) PromptForConflictResolution(conflict ProfileConflict) (ConflictAction, error) {
+	// Display conflict information
+	pg.logger.Printf("\n=== Profile Conflict Detected ===\n")
+	pg.logger.Printf("Role: %s in account %s (%s)\n",
+		conflict.DiscoveredRole.PermissionSetName,
+		conflict.DiscoveredRole.AccountName,
+		conflict.DiscoveredRole.AccountID)
+	pg.logger.Printf("Proposed profile name: %s\n", conflict.ProposedName)
+
+	if len(conflict.ExistingProfiles) > 0 {
+		pg.logger.Printf("Existing profiles for this role:\n")
+		for i, profile := range conflict.ExistingProfiles {
+			pg.logger.Printf("  %d. %s\n", i+1, profile.Name)
+		}
+	}
+
+	// Display conflict type
+	switch conflict.ConflictType {
+	case ConflictSameRole:
+		pg.logger.Printf("Conflict type: Same role already has existing profile(s)\n")
+	case ConflictSameName:
+		pg.logger.Printf("Conflict type: Proposed profile name already exists\n")
+	}
+
+	// Prompt for action
+	pg.logger.Printf("\nChoose an action:\n")
+	pg.logger.Printf("  r) Replace existing profile(s) with new name\n")
+	pg.logger.Printf("  s) Skip this role (keep existing profile)\n")
+	pg.logger.Printf("  c) Cancel operation (exit without changes)\n")
+	pg.logger.Printf("Enter choice (r/s/c): ")
+
+	// Read user input
+	reader := bufio.NewReader(os.Stdin)
+	input, err := reader.ReadString('\n')
+	if err != nil {
+		return ConflictAction{}, NewValidationError("failed to read user input", err)
+	}
+
+	// Parse input
+	choice := strings.ToLower(strings.TrimSpace(input))
+
+	action := ConflictAction{
+		Conflict: conflict,
+	}
+
+	switch choice {
+	case "r", "replace":
+		action.Action = ActionReplace
+		action.NewName = conflict.ProposedName
+		if len(conflict.ExistingProfiles) > 0 {
+			action.OldName = conflict.ExistingProfiles[0].Name
+		}
+		pg.logger.Printf("Selected: Replace existing profile(s)\n")
+	case "s", "skip":
+		action.Action = ActionSkip
+		pg.logger.Printf("Selected: Skip this role\n")
+	case "c", "cancel":
+		return ConflictAction{}, NewValidationError("operation cancelled by user", nil)
+	default:
+		return ConflictAction{}, NewValidationError("invalid choice", nil).
+			WithContext("input", choice).
+			WithContext("valid_choices", "r, s, c")
+	}
+
+	return action, nil
+}
+
+// DetectProfileConflicts detects conflicts between discovered roles and existing profiles
+func (pg *ProfileGenerator) DetectProfileConflicts(discoveredRoles []DiscoveredRole) ([]ProfileConflict, error) {
+	// Load existing AWS config
+	configFile, err := LoadAWSConfigFile("")
+	if err != nil {
+		return nil, NewFileSystemError("failed to load AWS config file", err)
+	}
+
+	// Create naming pattern
+	namingPattern, err := NewNamingPattern(pg.namingPattern)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create conflict detector
+	conflictDetector := NewProfileConflictDetector(configFile, namingPattern)
+
+	// Detect conflicts
+	conflicts, err := conflictDetector.DetectConflicts(discoveredRoles)
+	if err != nil {
+		return nil, err
+	}
+
+	return conflicts, nil
+}
+
+// ResolveConflicts resolves conflicts based on the configured strategy
+func (pg *ProfileGenerator) ResolveConflicts(conflicts []ProfileConflict) ([]GeneratedProfile, []DiscoveredRole, error) {
+	var generatedProfiles []GeneratedProfile
+	var skippedRoles []DiscoveredRole
+	var actions []ConflictAction
+
+	// Load template profile for profile generation
+	templateProfile, err := pg.ValidateTemplateProfile()
+	if err != nil {
+		return nil, nil, err
+	}
+
+	for _, conflict := range conflicts {
+		var action ConflictAction
+		var err error
+
+		// Determine action based on strategy
+		switch pg.conflictStrategy {
+		case ConflictReplace:
+			action = ConflictAction{
+				Conflict: conflict,
+				Action:   ActionReplace,
+				NewName:  conflict.ProposedName,
+			}
+			if len(conflict.ExistingProfiles) > 0 {
+				action.OldName = conflict.ExistingProfiles[0].Name
+			}
+		case ConflictSkip:
+			action = ConflictAction{
+				Conflict: conflict,
+				Action:   ActionSkip,
+			}
+		case ConflictPrompt:
+			action, err = pg.PromptForConflictResolution(conflict)
+			if err != nil {
+				return nil, nil, err
+			}
+		}
+
+		actions = append(actions, action)
+
+		// Process action
+		switch action.Action {
+		case ActionReplace:
+			// Create generated profile
+			generatedProfile := GeneratedProfile{
+				Name:         action.NewName,
+				AccountID:    conflict.DiscoveredRole.AccountID,
+				AccountName:  conflict.DiscoveredRole.AccountName,
+				RoleName:     conflict.DiscoveredRole.PermissionSetName,
+				Region:       templateProfile.Region,
+				SSOStartURL:  templateProfile.SSOStartURL,
+				SSORegion:    templateProfile.SSORegion,
+				SSOSession:   templateProfile.SSOSession,
+				SSOAccountID: conflict.DiscoveredRole.AccountID,
+				SSORoleName:  conflict.DiscoveredRole.PermissionSetName,
+				IsLegacy:     templateProfile.IsLegacyFormat(),
+			}
+
+			if err := generatedProfile.Validate(); err != nil {
+				return nil, nil, NewValidationError("invalid generated profile", err).
+					WithContext("profile_name", action.NewName)
+			}
+
+			generatedProfiles = append(generatedProfiles, generatedProfile)
+
+		case ActionSkip:
+			skippedRoles = append(skippedRoles, conflict.DiscoveredRole)
+		}
+	}
+
+	return generatedProfiles, skippedRoles, nil
+}
+
+// GenerateConflictReport creates a detailed report of conflict resolution actions
+func (pg *ProfileGenerator) GenerateConflictReport(conflicts []ProfileConflict, actions []ConflictAction) string {
+	var report strings.Builder
+
+	report.WriteString("Conflict Resolution Report\n")
+	report.WriteString("==========================\n")
+	report.WriteString(fmt.Sprintf("Total conflicts detected: %d\n", len(conflicts)))
+	report.WriteString(fmt.Sprintf("Resolution strategy: %s\n\n", pg.conflictStrategy.String()))
+
+	if len(actions) == 0 {
+		report.WriteString("No actions taken.\n")
+		return report.String()
+	}
+
+	// Group actions by type
+	replaceCount := 0
+	skipCount := 0
+	createCount := 0
+
+	for _, action := range actions {
+		switch action.Action {
+		case ActionReplace:
+			replaceCount++
+		case ActionSkip:
+			skipCount++
+		case ActionCreate:
+			createCount++
+		}
+	}
+
+	report.WriteString("Action Summary:\n")
+	report.WriteString(fmt.Sprintf("  Profiles replaced: %d\n", replaceCount))
+	report.WriteString(fmt.Sprintf("  Roles skipped: %d\n", skipCount))
+	report.WriteString(fmt.Sprintf("  New profiles created: %d\n", createCount))
+	report.WriteString("\n")
+
+	// Detailed actions
+	if replaceCount > 0 {
+		report.WriteString("Replaced Profiles:\n")
+		for _, action := range actions {
+			if action.Action == ActionReplace {
+				report.WriteString(fmt.Sprintf("  %s -> %s (Role: %s)\n",
+					action.OldName, action.NewName,
+					action.Conflict.DiscoveredRole.PermissionSetName))
+			}
+		}
+		report.WriteString("\n")
+	}
+
+	if skipCount > 0 {
+		report.WriteString("Skipped Roles:\n")
+		for _, action := range actions {
+			if action.Action == ActionSkip {
+				report.WriteString(fmt.Sprintf("  %s in %s (existing profiles preserved)\n",
+					action.Conflict.DiscoveredRole.PermissionSetName,
+					action.Conflict.DiscoveredRole.AccountName))
+			}
+		}
+		report.WriteString("\n")
+	}
+
+	return report.String()
+}
+
+// GetConflictStrategy returns the current conflict resolution strategy
+func (pg *ProfileGenerator) GetConflictStrategy() ConflictResolutionStrategy {
+	return pg.conflictStrategy
+}
+
+// SetConflictStrategy sets the conflict resolution strategy
+func (pg *ProfileGenerator) SetConflictStrategy(strategy ConflictResolutionStrategy) {
+	pg.conflictStrategy = strategy
 }

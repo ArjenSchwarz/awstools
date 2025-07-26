@@ -5,8 +5,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -61,7 +59,7 @@ func (stc *SSOTokenCache) SetLogger(logger Logger) {
 
 // LoadTokenForProfile loads cached token for a specific SSO profile
 func (stc *SSOTokenCache) LoadTokenForProfile(startURL, region string) (*CachedToken, error) {
-	tokenFile := stc.getTokenFilePath(startURL, region)
+	tokenFile := stc.getTokenFilePath(startURL)
 
 	if _, err := os.Stat(tokenFile); os.IsNotExist(err) {
 		return nil, NewAuthError("SSO token cache not found", err).
@@ -70,7 +68,7 @@ func (stc *SSOTokenCache) LoadTokenForProfile(startURL, region string) (*CachedT
 			WithContext("suggestion", "Run 'aws sso login' to authenticate")
 	}
 
-	data, err := ioutil.ReadFile(tokenFile)
+	data, err := os.ReadFile(tokenFile)
 	if err != nil {
 		return nil, NewFileSystemError("failed to read SSO token cache", err).
 			WithContext("token_file", tokenFile)
@@ -97,8 +95,8 @@ func (stc *SSOTokenCache) LoadTokenForProfile(startURL, region string) (*CachedT
 	return &token, nil
 }
 
-// getTokenFilePath generates the cache file path for a given start URL and region
-func (stc *SSOTokenCache) getTokenFilePath(startURL, region string) string {
+// getTokenFilePath generates the cache file path for a given start URL
+func (stc *SSOTokenCache) getTokenFilePath(startURL string) string {
 	// AWS CLI uses SHA1 hash of the start URL to generate cache file name
 	hash := sha1.Sum([]byte(startURL))
 	hashStr := hex.EncodeToString(hash[:])
@@ -121,7 +119,7 @@ func (stc *SSOTokenCache) IsTokenValid(token *CachedToken) bool {
 
 // GetAllCachedTokens returns all cached SSO tokens
 func (stc *SSOTokenCache) GetAllCachedTokens() ([]*CachedToken, error) {
-	files, err := ioutil.ReadDir(stc.cacheDir)
+	files, err := os.ReadDir(stc.cacheDir)
 	if err != nil {
 		return nil, NewFileSystemError("failed to read SSO cache directory", err).
 			WithContext("cache_dir", stc.cacheDir)
@@ -134,7 +132,7 @@ func (stc *SSOTokenCache) GetAllCachedTokens() ([]*CachedToken, error) {
 		}
 
 		tokenFile := filepath.Join(stc.cacheDir, file.Name())
-		data, err := ioutil.ReadFile(tokenFile)
+		data, err := os.ReadFile(tokenFile)
 		if err != nil {
 			stc.logger.Printf("Warning: failed to read token file %s: %v", tokenFile, err)
 			continue
@@ -197,7 +195,7 @@ func (stc *SSOTokenCache) CleanExpiredTokens() (int, error) {
 	expiredCount := 0
 	for _, token := range tokens {
 		if !stc.IsTokenValid(token) {
-			tokenFile := stc.getTokenFilePath(token.StartURL, token.Region)
+			tokenFile := stc.getTokenFilePath(token.StartURL)
 			if err := os.Remove(tokenFile); err != nil {
 				stc.logger.Printf("Warning: failed to remove expired token file %s: %v", tokenFile, err)
 			} else {
@@ -236,19 +234,4 @@ func (stc *SSOTokenCache) GetCacheInfo() (map[string]interface{}, error) {
 	info["expired_tokens"] = expiredTokens
 
 	return info, nil
-}
-
-// normalizeStartURL normalizes the start URL for consistent hashing
-func (stc *SSOTokenCache) normalizeStartURL(startURL string) (string, error) {
-	parsedURL, err := url.Parse(startURL)
-	if err != nil {
-		return "", NewValidationError("invalid SSO start URL", err).
-			WithContext("start_url", startURL)
-	}
-
-	// Normalize the URL by removing trailing slash and ensuring lowercase
-	normalized := strings.ToLower(parsedURL.Scheme + "://" + parsedURL.Host + parsedURL.Path)
-	normalized = strings.TrimSuffix(normalized, "/")
-
-	return normalized, nil
 }
