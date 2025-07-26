@@ -331,25 +331,179 @@ for _, role := range discoveredRoles {
 **Expected Benefit**: 50-70% faster profile generation for large role sets
 **Implementation**: Worker pool pattern with mutex-protected conflict resolver
 
+
+
+### 9.3 Inefficient Profile Conflict Detection with Linear Search
+**Location**: `helpers/profile_conflict_detector.go` - `findMatchingProfiles()`
+**Issue**: Linear search through all profiles when profile index is not available
+**Current Code**:
+```go
+// Fallback to linear search if index is not available
+for profileName, profile := range pcd.configFile.Profiles {
+    if !profile.IsSSO() {
+        continue
+    }
+    // Check each profile individually
+}
+```
+**Improvement**: Always build and use profile lookup index for O(1) lookups
+**Expected Benefit**: O(1) vs O(n) profile lookups, 90%+ faster for large config files
+**Implementation**: Ensure profile index is always built and handle errors gracefully
+
+### 9.4 Inefficient SSO Configuration Resolution
+**Location**: `helpers/profile_conflict_detector.go` - `preResolveSSO()`
+**Issue**: SSO configurations resolved for all profiles even if not needed
+**Current Code**:
+```go
+func (pcd *ProfileConflictDetector) preResolveSSO() {
+    for profileName, profile := range pcd.configFile.Profiles {
+        if !profile.IsSSO() {
+            continue
+        }
+        // Resolve all SSO configs upfront
+    }
+}
+```
+**Improvement**: Lazy resolution of SSO configurations only when needed
+**Expected Benefit**: 50-70% reduction in initialization time for large config files
+**Implementation**: Resolve SSO configs on-demand with caching
+
+### 9.5 Suboptimal Slice Capacity Pre-allocation in Conflict Detection
+**Location**: `helpers/profile_conflict_detector.go` - `DetectConflicts()`
+**Issue**: Conservative conflict estimation may cause slice reallocations
+**Current Code**:
+```go
+// Estimate that 20-30% of roles might have conflicts
+estimatedConflicts := max(len(discoveredRoles)/4, 10)
+conflicts := make([]ProfileConflict, 0, estimatedConflicts)
+```
+**Improvement**: Use more accurate conflict estimation based on profile analysis
+**Expected Benefit**: Reduce memory reallocations by 40-60%
+**Implementation**: Analyze existing profiles to better estimate conflict rate
+
+### 9.6 Inefficient String Building in Conflict Summary Generation
+**Location**: `helpers/profile_conflict_detector.go` - `GenerateConflictSummary()`
+**Issue**: String builder capacity estimation could be more accurate
+**Current Code**:
+```go
+// Each conflict typically generates ~200-300 characters
+estimatedSize := len(conflicts)*250 + 100 // Extra for header
+```
+**Improvement**: More precise size estimation based on actual conflict data
+**Expected Benefit**: Reduce memory allocations by 30-40%
+**Implementation**: Calculate size based on actual profile names and conflict types
+
+### 9.7 Redundant Profile Validation in Conflict Resolution
+**Location**: `helpers/profile_generator.go` - `ResolveConflicts()`
+**Issue**: Profile validation called multiple times for same generated profiles
+**Current Code**:
+```go
+if err := generatedProfile.Validate(); err != nil {
+    return nil, NewValidationError("invalid generated profile", err)
+}
+```
+**Improvement**: Validate profiles once during creation, use validation flags
+**Expected Benefit**: 40-50% reduction in validation overhead
+**Implementation**: Add isValidated flag to GeneratedProfile struct
+
+### 9.8 Inefficient Map Operations in Profile Filtering
+**Location**: `helpers/profile_generator.go` - `FilterRolesByConflicts()`
+**Issue**: Creating map keys with string formatting for each role
+**Current Code**:
+```go
+for _, conflict := range conflicts {
+    key := fmt.Sprintf("%s:%s", conflict.DiscoveredRole.AccountID, conflict.DiscoveredRole.PermissionSetName)
+    conflictedRoleMap[key] = true
+}
+```
+**Improvement**: Use struct keys instead of formatted strings
+**Expected Benefit**: 30-40% faster map operations, reduced memory allocations
+**Implementation**: Create RoleKey struct with AccountID and PermissionSetName fields
+
+### 9.9 Suboptimal Loop Implementation in Naming Pattern Validation
+**Location**: `helpers/naming_pattern.go` - `Validate()`
+**Issue**: Manual loop for checking supported placeholders instead of using slices.Contains
+**Current Code**:
+```go
+for _, placeholder := range placeholders {
+    supported := false
+    for _, supportedPlaceholder := range supportedPlaceholders {
+        if placeholder == supportedPlaceholder {
+            supported = true
+            break
+        }
+    }
+}
+```
+**Improvement**: Use slices.Contains for cleaner and potentially faster code
+**Expected Benefit**: Cleaner code, potential performance improvement
+**Implementation**: Replace manual loop with slices.Contains(supportedPlaceholders, placeholder)
+
+### 9.10 Inefficient String Case Conversion in User Input Processing
+**Location**: `helpers/profile_generator.go` - `PromptForConflictResolution()`
+**Issue**: Using strings.ToLower for simple case-insensitive comparison
+**Current Code**:
+```go
+choice := strings.ToLower(strings.TrimSpace(input))
+```
+**Improvement**: Use strings.EqualFold for direct case-insensitive comparison
+**Expected Benefit**: 20-30% faster string comparisons, reduced allocations
+**Implementation**: Compare directly with strings.EqualFold(choice, "r") instead of converting to lowercase
+
+### 9.11 Inefficient Slice Append Operations Without Pre-allocation
+**Location**: Multiple locations in profile generator files
+**Issue**: Slice append operations without pre-allocating capacity
+**Current Code**:
+```go
+// In profile_conflict_detector.go
+matchingProfiles := make([]Profile, 0, len(accountProfiles))
+// But then appending without considering final size
+
+// In profile_generator.go  
+var generatedProfiles []GeneratedProfile
+for _, role := range discoveredRoles {
+    generatedProfiles = append(generatedProfiles, generatedProfile)
+}
+```
+**Improvement**: Pre-allocate slice capacity based on expected final size
+**Expected Benefit**: Reduce memory reallocations by 60-80%
+**Implementation**: Use make([]Type, 0, expectedCapacity) consistently
+
+### 9.12 Redundant String Formatting in Map Key Generation
+**Location**: `helpers/profile_generator.go` - `FilterRolesByConflicts()`
+**Issue**: Using fmt.Sprintf for simple string concatenation
+**Current Code**:
+```go
+key := fmt.Sprintf("%s:%s", conflict.DiscoveredRole.AccountID, conflict.DiscoveredRole.PermissionSetName)
+```
+**Improvement**: Use simple string concatenation or struct keys
+**Expected Benefit**: 40-50% faster key generation, reduced allocations
+**Implementation**: Use `key := role.AccountID + ":" + role.PermissionSetName` or create a RoleKey struct
+
 ## Implementation Priority
 
 1. **High Priority** (Immediate impact):
    - Redundant config file loading (1.1)
-   - Inefficient slice growth (4.2)
+   - Inefficient slice growth (4.2, 9.11)
    - Sequential profile generation (3.2, 9.2)
-   - String builder optimizations (2.3, 9.1)
+   - String builder optimizations (2.3, 9.1, 9.6)
+   - Profile conflict detection optimization (9.3)
 
 2. **Medium Priority** (Significant improvement):
    - Account alias batching (1.2)
    - Profile name conflict resolution (2.1)
    - Cache data copying (4.3)
    - Context cancellation (7.2)
+   - SSO configuration resolution optimization (9.4)
+   - Map operations optimization (9.8, 9.12)
 
 3. **Low Priority** (Code quality):
    - Code duplication refactoring (6.*)
    - Error handling optimizations (5.*)
-   - Go-specific optimizations (7.1, 7.3, 7.4)
+   - Go-specific optimizations (7.1, 7.3, 7.4, 9.9, 9.10)
    - AWS SDK best practices (8.*)
+   - Validation optimization (9.7)
+   - Slice capacity estimation (9.5)
 
 ## Measurement Strategy
 

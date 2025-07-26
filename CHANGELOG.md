@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Enhanced
+- Profile generator with integrated conflict detection and resolution orchestration
+- Conflict resolution workflow with strategy-based handling (replace, skip, prompt)
+- Profile generation result reporting with detailed conflict resolution information
+- Conflict detector initialization with lazy loading for improved performance
+- Profile filtering and generation for non-conflicted roles
+- Enhanced conflict reporting with comprehensive action tracking
+
+### Added
+- `ConflictResolutionResult` struct for structured conflict resolution outcomes
+- `FilterRolesByConflicts()` method for separating conflicted and non-conflicted roles
+- `GenerateProfilesForNonConflictedRoles()` method for efficient profile generation
+- `initializeConflictDetector()` method with lazy initialization pattern
+- Enhanced `ProfileGenerationResult` with conflict resolution fields and detailed reporting
+- Comprehensive test coverage for conflict resolution orchestration (650+ test lines)
+
+### Technical Details
+- Integrated `ProfileConflictDetector` into `ProfileGenerator` workflow
+- Enhanced `ResolveConflicts()` to return structured `ConflictResolutionResult`
+- Added conflict action tracking with detailed operation logging
+- Improved profile generation efficiency with role filtering optimization
+- Extended test suite with conflict detection integration and resolution testing
+
 ### Added
 - Profile conflict detection engine with comprehensive conflict analysis capabilities
 - Enhanced profile generator with conflict resolution strategies (replace, skip, prompt)

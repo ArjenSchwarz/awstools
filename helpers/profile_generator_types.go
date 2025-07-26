@@ -174,6 +174,13 @@ type ProfileGenerationResult struct {
 	ConflictingProfiles []string                `json:"conflicting_profiles" yaml:"conflicting_profiles"`
 	SuccessfulProfiles  []string                `json:"successful_profiles" yaml:"successful_profiles"`
 	Errors              []ProfileGeneratorError `json:"errors" yaml:"errors"`
+
+	// Enhanced conflict resolution information
+	DetectedConflicts []ProfileConflict    `json:"detected_conflicts" yaml:"detected_conflicts"`
+	ResolutionActions []ConflictAction     `json:"resolution_actions" yaml:"resolution_actions"`
+	ReplacedProfiles  []ProfileReplacement `json:"replaced_profiles" yaml:"replaced_profiles"`
+	SkippedRoles      []DiscoveredRole     `json:"skipped_roles" yaml:"skipped_roles"`
+	BackupPath        string               `json:"backup_path" yaml:"backup_path"`
 }
 
 // Validate checks if the profile generation result is valid
@@ -210,15 +217,105 @@ func (pgr *ProfileGenerationResult) AddError(err ProfileGeneratorError) {
 // Summary returns a summary of the profile generation result
 func (pgr *ProfileGenerationResult) Summary() string {
 	var summary strings.Builder
-	// Estimate size: 6 lines of summary (~150-200 chars)
-	summary.Grow(200)
+	// Estimate size: enhanced summary with conflict information (~300-400 chars)
+	summary.Grow(400)
 	summary.WriteString(fmt.Sprintf("Template Profile: %s\n", pgr.TemplateProfile.Name))
 	summary.WriteString(fmt.Sprintf("Discovered Roles: %d\n", len(pgr.DiscoveredRoles)))
 	summary.WriteString(fmt.Sprintf("Generated Profiles: %d\n", len(pgr.GeneratedProfiles)))
 	summary.WriteString(fmt.Sprintf("Successful Profiles: %d\n", len(pgr.SuccessfulProfiles)))
 	summary.WriteString(fmt.Sprintf("Conflicting Profiles: %d\n", len(pgr.ConflictingProfiles)))
+	summary.WriteString(fmt.Sprintf("Detected Conflicts: %d\n", len(pgr.DetectedConflicts)))
+	summary.WriteString(fmt.Sprintf("Resolution Actions: %d\n", len(pgr.ResolutionActions)))
+	summary.WriteString(fmt.Sprintf("Replaced Profiles: %d\n", len(pgr.ReplacedProfiles)))
+	summary.WriteString(fmt.Sprintf("Skipped Roles: %d\n", len(pgr.SkippedRoles)))
 	summary.WriteString(fmt.Sprintf("Errors: %d\n", len(pgr.Errors)))
+	if pgr.BackupPath != "" {
+		summary.WriteString(fmt.Sprintf("Backup Path: %s\n", pgr.BackupPath))
+	}
 	return summary.String()
+}
+
+// GenerateConflictReport creates a detailed operation summary for conflict resolution
+func (pgr *ProfileGenerationResult) GenerateConflictReport() string {
+	var report strings.Builder
+
+	report.WriteString("Profile Generation Conflict Report\n")
+	report.WriteString("===================================\n")
+	report.WriteString(fmt.Sprintf("Template Profile: %s\n", pgr.TemplateProfile.Name))
+	report.WriteString(fmt.Sprintf("Total Discovered Roles: %d\n", len(pgr.DiscoveredRoles)))
+	report.WriteString(fmt.Sprintf("Conflicts Detected: %d\n", len(pgr.DetectedConflicts)))
+	report.WriteString("\n")
+
+	if len(pgr.DetectedConflicts) > 0 {
+		report.WriteString("Conflict Details:\n")
+		for i, conflict := range pgr.DetectedConflicts {
+			report.WriteString(fmt.Sprintf("  %d. Role: %s in %s (%s)\n",
+				i+1,
+				conflict.DiscoveredRole.PermissionSetName,
+				conflict.DiscoveredRole.AccountName,
+				conflict.DiscoveredRole.AccountID))
+			report.WriteString(fmt.Sprintf("     Proposed Name: %s\n", conflict.ProposedName))
+			report.WriteString(fmt.Sprintf("     Conflict Type: %s\n", conflict.ConflictType.String()))
+			report.WriteString(fmt.Sprintf("     Existing Profiles: %d\n", len(conflict.ExistingProfiles)))
+		}
+		report.WriteString("\n")
+	}
+
+	if len(pgr.ResolutionActions) > 0 {
+		report.WriteString("Resolution Actions Taken:\n")
+		replaceCount := 0
+		skipCount := 0
+		createCount := 0
+
+		for _, action := range pgr.ResolutionActions {
+			switch action.Action {
+			case ActionReplace:
+				replaceCount++
+			case ActionSkip:
+				skipCount++
+			case ActionCreate:
+				createCount++
+			}
+		}
+
+		report.WriteString(fmt.Sprintf("  Profiles Replaced: %d\n", replaceCount))
+		report.WriteString(fmt.Sprintf("  Roles Skipped: %d\n", skipCount))
+		report.WriteString(fmt.Sprintf("  New Profiles Created: %d\n", createCount))
+		report.WriteString("\n")
+
+		if replaceCount > 0 {
+			report.WriteString("Replaced Profiles:\n")
+			for _, action := range pgr.ResolutionActions {
+				if action.Action == ActionReplace {
+					report.WriteString(fmt.Sprintf("  %s -> %s\n", action.OldName, action.NewName))
+				}
+			}
+			report.WriteString("\n")
+		}
+
+		if skipCount > 0 {
+			report.WriteString("Skipped Roles:\n")
+			for _, action := range pgr.ResolutionActions {
+				if action.Action == ActionSkip {
+					report.WriteString(fmt.Sprintf("  %s in %s\n",
+						action.Conflict.DiscoveredRole.PermissionSetName,
+						action.Conflict.DiscoveredRole.AccountName))
+				}
+			}
+			report.WriteString("\n")
+		}
+	}
+
+	report.WriteString("Final Results:\n")
+	report.WriteString(fmt.Sprintf("  Generated Profiles: %d\n", len(pgr.GeneratedProfiles)))
+	report.WriteString(fmt.Sprintf("  Successful Profiles: %d\n", len(pgr.SuccessfulProfiles)))
+	report.WriteString(fmt.Sprintf("  Errors: %d\n", len(pgr.Errors)))
+
+	if pgr.BackupPath != "" {
+		report.WriteString(fmt.Sprintf("  Configuration Backup: %s\n", pgr.BackupPath))
+	}
+
+	return report.String()
 }
 
 // ConflictResolutionStrategy defines how to handle existing profile conflicts
