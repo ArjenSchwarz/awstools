@@ -156,6 +156,11 @@ func (cf *AWSConfigFile) parseConfigFile(file *os.File) error {
 			if currentProfile != nil {
 				cf.Profiles[currentProfile.Name] = *currentProfile
 			}
+			// Save previous session if exists
+			if currentSession != nil {
+				cf.Sessions[currentSession.Name] = *currentSession
+				currentSession = nil
+			}
 
 			// Start new profile
 			currentProfile = &Profile{
@@ -166,6 +171,11 @@ func (cf *AWSConfigFile) parseConfigFile(file *os.File) error {
 			// Handle default profile
 			if currentProfile != nil {
 				cf.Profiles[currentProfile.Name] = *currentProfile
+			}
+			// Save previous session if exists
+			if currentSession != nil {
+				cf.Sessions[currentSession.Name] = *currentSession
+				currentSession = nil
 			}
 
 			currentProfile = &Profile{
@@ -452,7 +462,15 @@ func (p *Profile) ToConfigString() string {
 
 // IsSSO returns true if the profile is configured for SSO
 func (p *Profile) IsSSO() bool {
-	return p.SSOStartURL != "" && p.SSORegion != ""
+	// Legacy SSO format
+	if p.SSOStartURL != "" && p.SSORegion != "" {
+		return true
+	}
+	// SSO session format
+	if p.SSOSession != "" && p.SSOAccountID != "" && p.SSORoleName != "" {
+		return true
+	}
+	return false
 }
 
 // IsLegacySSO returns true if the profile uses legacy SSO format
@@ -522,7 +540,7 @@ func (cf *AWSConfigFile) HasProfile(name string) bool {
 
 // GetProfileNames returns all profile names in the config file
 func (cf *AWSConfigFile) GetProfileNames() []string {
-	var names []string
+	names := make([]string, 0, len(cf.Profiles))
 	for name := range cf.Profiles {
 		names = append(names, name)
 	}
@@ -531,7 +549,7 @@ func (cf *AWSConfigFile) GetProfileNames() []string {
 
 // DetectProfileConflicts detects conflicts between existing profiles and new profiles
 func (cf *AWSConfigFile) DetectProfileConflicts(newProfiles []GeneratedProfile) []string {
-	var conflicts []string
+	conflicts := make([]string, 0, len(newProfiles)/4) // Estimate 25% conflict rate
 
 	for _, newProfile := range newProfiles {
 		if cf.HasProfile(newProfile.Name) {
@@ -610,7 +628,7 @@ func (cf *AWSConfigFile) MatchesRole(profile Profile, accountID, roleName, start
 
 // FindProfilesForRole finds existing profiles for specific roles
 func (cf *AWSConfigFile) FindProfilesForRole(accountID, roleName, startURL string) ([]Profile, error) {
-	var matchingProfiles []Profile
+	matchingProfiles := make([]Profile, 0, 2) // Most roles have 0-2 matching profiles
 
 	for _, profile := range cf.Profiles {
 		matches, err := cf.MatchesRole(profile, accountID, roleName, startURL)
@@ -625,4 +643,170 @@ func (cf *AWSConfigFile) FindProfilesForRole(accountID, roleName, startURL strin
 	}
 
 	return matchingProfiles, nil
+}
+
+// FindProfilesByName finds profiles by their names using efficient lookup
+func (cf *AWSConfigFile) FindProfilesByName(profileNames []string) map[string]Profile {
+	result := make(map[string]Profile)
+
+	for _, name := range profileNames {
+		if profile, exists := cf.Profiles[name]; exists {
+			result[name] = profile
+		}
+	}
+
+	return result
+}
+
+// HasProfileName checks if a profile name already exists
+func (cf *AWSConfigFile) HasProfileName(profileName string) bool {
+	_, exists := cf.Profiles[profileName]
+	return exists
+}
+
+// FindDuplicateProfiles finds profiles that have the same SSO configuration
+func (cf *AWSConfigFile) FindDuplicateProfiles() (map[string][]Profile, error) {
+	// Map from SSO config key to list of profiles with that config
+	ssoConfigMap := make(map[string][]Profile)
+	duplicates := make(map[string][]Profile)
+
+	for _, profile := range cf.Profiles {
+		if !profile.IsSSO() {
+			continue
+		}
+
+		// Resolve SSO configuration
+		resolvedConfig, err := cf.ResolveProfileSSOConfig(profile)
+		if err != nil {
+			// Skip profiles that can't be resolved
+			continue
+		}
+
+		// Create a unique key for the SSO configuration
+		configKey := fmt.Sprintf("%s|%s|%s|%s",
+			resolvedConfig.StartURL,
+			resolvedConfig.Region,
+			resolvedConfig.AccountID,
+			resolvedConfig.RoleName)
+
+		ssoConfigMap[configKey] = append(ssoConfigMap[configKey], profile)
+	}
+
+	// Find configurations with multiple profiles
+	for configKey, profiles := range ssoConfigMap {
+		if len(profiles) > 1 {
+			duplicates[configKey] = profiles
+		}
+	}
+
+	return duplicates, nil
+}
+
+// FindProfilesWithSSOConfig finds all profiles that match a specific SSO configuration
+func (cf *AWSConfigFile) FindProfilesWithSSOConfig(startURL, region, accountID, roleName string) ([]Profile, error) {
+	matchingProfiles := make([]Profile, 0, 2) // Most SSO configs have 0-2 matching profiles
+
+	for _, profile := range cf.Profiles {
+		if !profile.IsSSO() {
+			continue
+		}
+
+		resolvedConfig, err := cf.ResolveProfileSSOConfig(profile)
+		if err != nil {
+			// Skip profiles that can't be resolved
+			continue
+		}
+
+		if resolvedConfig.StartURL == startURL &&
+			resolvedConfig.Region == region &&
+			resolvedConfig.AccountID == accountID &&
+			resolvedConfig.RoleName == roleName {
+			matchingProfiles = append(matchingProfiles, profile)
+		}
+	}
+
+	return matchingProfiles, nil
+}
+
+// GetProfileNameConflicts checks for profile name conflicts with proposed names
+func (cf *AWSConfigFile) GetProfileNameConflicts(proposedNames []string) []string {
+	conflicts := make([]string, 0, len(proposedNames)/4) // Estimate 25% conflict rate
+
+	for _, name := range proposedNames {
+		if cf.HasProfileName(name) {
+			conflicts = append(conflicts, name)
+		}
+	}
+
+	return conflicts
+}
+
+// BuildProfileLookupIndex creates efficient lookup indices for profile searching
+func (cf *AWSConfigFile) BuildProfileLookupIndex() (*ProfileLookupIndex, error) {
+	index := &ProfileLookupIndex{
+		ByName:    make(map[string]Profile),
+		BySSO:     make(map[string][]Profile),
+		ByAccount: make(map[string][]Profile),
+		ByRole:    make(map[string][]Profile),
+	}
+
+	for _, profile := range cf.Profiles {
+		// Index by name
+		index.ByName[profile.Name] = profile
+
+		// Index SSO profiles
+		if profile.IsSSO() {
+			resolvedConfig, err := cf.ResolveProfileSSOConfig(profile)
+			if err != nil {
+				// Skip profiles that can't be resolved
+				continue
+			}
+
+			// Index by SSO configuration
+			ssoKey := fmt.Sprintf("%s|%s|%s|%s",
+				resolvedConfig.StartURL,
+				resolvedConfig.Region,
+				resolvedConfig.AccountID,
+				resolvedConfig.RoleName)
+			index.BySSO[ssoKey] = append(index.BySSO[ssoKey], profile)
+
+			// Index by account ID
+			index.ByAccount[resolvedConfig.AccountID] = append(index.ByAccount[resolvedConfig.AccountID], profile)
+
+			// Index by role name
+			index.ByRole[resolvedConfig.RoleName] = append(index.ByRole[resolvedConfig.RoleName], profile)
+		}
+	}
+
+	return index, nil
+}
+
+// ProfileLookupIndex provides efficient lookup indices for profile searching
+type ProfileLookupIndex struct {
+	ByName    map[string]Profile   // Profile name -> Profile
+	BySSO     map[string][]Profile // SSO config key -> Profiles
+	ByAccount map[string][]Profile // Account ID -> Profiles
+	ByRole    map[string][]Profile // Role name -> Profiles
+}
+
+// FindBySSO finds profiles by SSO configuration using the index
+func (index *ProfileLookupIndex) FindBySSO(startURL, region, accountID, roleName string) []Profile {
+	ssoKey := fmt.Sprintf("%s|%s|%s|%s", startURL, region, accountID, roleName)
+	return index.BySSO[ssoKey]
+}
+
+// FindByAccount finds profiles by account ID using the index
+func (index *ProfileLookupIndex) FindByAccount(accountID string) []Profile {
+	return index.ByAccount[accountID]
+}
+
+// FindByRole finds profiles by role name using the index
+func (index *ProfileLookupIndex) FindByRole(roleName string) []Profile {
+	return index.ByRole[roleName]
+}
+
+// HasName checks if a profile name exists using the index
+func (index *ProfileLookupIndex) HasName(profileName string) bool {
+	_, exists := index.ByName[profileName]
+	return exists
 }

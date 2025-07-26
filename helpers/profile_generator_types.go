@@ -113,6 +113,8 @@ func (gp *GeneratedProfile) Validate() error {
 // ToConfigString returns the profile configuration in AWS config file format
 func (gp *GeneratedProfile) ToConfigString() string {
 	var config strings.Builder
+	// Estimate size: profile name + region + SSO config (~150-200 chars)
+	config.Grow(200)
 	config.WriteString(fmt.Sprintf("[profile %s]\n", gp.Name))
 	config.WriteString(fmt.Sprintf("region = %s\n", gp.Region))
 	config.WriteString(fmt.Sprintf("sso_start_url = %s\n", gp.SSOStartURL))
@@ -208,6 +210,8 @@ func (pgr *ProfileGenerationResult) AddError(err ProfileGeneratorError) {
 // Summary returns a summary of the profile generation result
 func (pgr *ProfileGenerationResult) Summary() string {
 	var summary strings.Builder
+	// Estimate size: 6 lines of summary (~150-200 chars)
+	summary.Grow(200)
 	summary.WriteString(fmt.Sprintf("Template Profile: %s\n", pgr.TemplateProfile.Name))
 	summary.WriteString(fmt.Sprintf("Discovered Roles: %d\n", len(pgr.DiscoveredRoles)))
 	summary.WriteString(fmt.Sprintf("Generated Profiles: %d\n", len(pgr.GeneratedProfiles)))
