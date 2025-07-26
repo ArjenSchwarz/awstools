@@ -50,9 +50,9 @@ This implementation plan converts the profile generator enhancement design into 
     - Write unit tests for profile search with various conflict scenarios and edge cases
     - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5_
 
-- [ ] 3: Implement Conflict Resolution Strategies
+- [x] 3: Implement Conflict Resolution Strategies
 
-  - [ ] 3.1 Implement profile replacement functionality
+  - [x] 3.1 Implement profile replacement functionality
     - Add `ReplaceProfile()` method to `AWSConfigFile` for atomic profile replacement
     - Add `RemoveProfile()` method to safely remove existing profiles
     - Implement profile name change handling while preserving custom configuration properties
@@ -60,7 +60,7 @@ This implementation plan converts the profile generator enhancement design into 
     - Write unit tests for profile replacement with various profile formats and custom properties
     - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5_
 
-  - [ ] 3.2 Implement backup and recovery system
+  - [x] 3.2 Implement backup and recovery system
     - Add `CreateBackup()` method to `AWSConfigFile` to create timestamped backups before modifications
     - Add `RestoreFromBackup()` method to recover from failed operations
     - Implement atomic file operations to prevent corruption during concurrent access
@@ -68,7 +68,7 @@ This implementation plan converts the profile generator enhancement design into 
     - Write unit tests for backup creation, restoration, and error recovery scenarios
     - _Requirements: 3.5, 7.4, 7.5_
 
-  - [ ] 3.3 Implement interactive conflict resolution
+  - [x] 3.3 Implement interactive conflict resolution
     - Add `PromptForConflictResolution()` method to `ProfileGenerator` for user interaction
     - Implement clear conflict presentation showing existing vs proposed profile names
     - Add user input validation for conflict resolution choices (replace/skip/cancel)

@@ -15,9 +15,9 @@ configFile, err := LoadAWSConfigFile("")
 // In GenerateProfiles() 
 configFile, err := LoadAWSConfigFile("")
 ```
-**Improvement**: Load config file once and pass it between methods
+**Improvement**: Load config file once and store as ProfileGenerator field
 **Expected Benefit**: 50% reduction in file I/O operations, faster execution for large config files
-**Implementation**: Add configFile parameter to methods or store as ProfileGenerator field
+**Implementation**: Add configFile field to ProfileGenerator struct and load once in constructor
 
 ### 1.2 Inefficient Account Alias Retrieval
 **Location**: `helpers/role_discovery.go` - `GetAccountAlias()`
@@ -159,7 +159,7 @@ for _, role := range discoveredRoles {
 **Expected Benefit**: Reduce memory reallocations by 70-80%
 **Implementation**: `make([]GeneratedProfile, 0, len(discoveredRoles))`
 
-### 4.3 Unnecessary Data Copying
+### 4.3 Inefficient Cache Data Copying
 **Location**: `helpers/role_discovery.go` - Cache operations
 **Issue**: Copying entire cache maps for read operations
 **Current Code**:
@@ -249,9 +249,14 @@ if accountName, exists := rd.accountCache[accountID]; exists {
 ### 7.2 Missing Context Cancellation
 **Location**: `helpers/role_discovery.go` - Long-running operations
 **Issue**: No context cancellation support for long-running AWS API calls
+**Current Code**:
+```go
+ctx := context.TODO()
+// Long-running AWS API calls without cancellation support
+```
 **Improvement**: Add context cancellation support throughout
 **Expected Benefit**: Better resource cleanup and user experience
-**Implementation**: Pass context through all AWS API calls
+**Implementation**: Pass context through all AWS API calls and support cancellation
 
 ### 7.3 Inefficient JSON Marshaling
 **Location**: `helpers/sso_token_cache.go` - Token serialization
@@ -259,6 +264,19 @@ if accountName, exists := rd.accountCache[accountID]; exists {
 **Improvement**: Use more efficient serialization or caching
 **Expected Benefit**: 40-50% faster token operations
 **Implementation**: Custom marshaling or binary serialization for hot paths
+
+### 7.4 Interface{} Usage Instead of any
+**Location**: `helpers/sso_token_cache.go` - `GetCacheInfo()`
+**Issue**: Using `interface{}` instead of modern `any` type alias
+**Current Code**:
+```go
+func (stc *SSOTokenCache) GetCacheInfo() (map[string]interface{}, error) {
+    info := make(map[string]interface{})
+}
+```
+**Improvement**: Replace `interface{}` with `any`
+**Expected Benefit**: More modern Go code, better readability
+**Implementation**: Replace all `interface{}` occurrences with `any`
 
 ## 8. AWS SDK Best Practices
 
@@ -285,157 +303,7 @@ if accountName, exists := rd.accountCache[accountID]; exists {
 
 ## 9. Profile Generator Enhancement Specific Issues
 
-### 9.1 Redundant AWS Config File Loading in Profile Generator
-**Location**: `helpers/profile_generator.go` - `ValidateTemplateProfile()` and `GenerateProfiles()`
-**Issue**: AWS config file is loaded twice during profile generation workflow
-**Current Code**:
-```go
-// In ValidateTemplateProfile()
-configFile, err := LoadAWSConfigFile("")
-
-// In GenerateProfiles() 
-configFile, err := LoadAWSConfigFile("")
-```
-**Improvement**: Load config file once and store as ProfileGenerator field
-**Expected Benefit**: 50% reduction in file I/O operations, faster execution for large config files
-**Implementation**: Add configFile field to ProfileGenerator struct and load once in constructor
-
-### 9.11 Inefficient Profile Conflict Detection in ProfileConflictDetector ✅ COMPLETED
-**Location**: `helpers/profile_conflict_detector.go` - `DetectConflicts()` method
-**Issue**: Sequential processing of roles for conflict detection without pre-built indices
-**Current Code**:
-```go
-for _, role := range discoveredRoles {
-    conflict, err := pcd.AnalyzeRole(role)
-    // Sequential analysis without optimization
-}
-```
-**Improvement**: Build profile lookup indices once and reuse for all conflict detection
-**Expected Benefit**: O(1) profile lookups instead of O(n) for each role, 60-80% faster conflict detection
-**Implementation**: Use `BuildProfileLookupIndex()` from AWSConfigFile and cache the index
-**Status**: ✅ COMPLETED - Added profileIndex field to ProfileConflictDetector, built during initialization, used in findMatchingProfiles for O(1) lookups
-
-### 9.12 Redundant SSO Configuration Resolution in Conflict Detection ✅ COMPLETED
-**Location**: `helpers/profile_conflict_detector.go` - `findMatchingProfiles()` method
-**Issue**: SSO configuration resolved repeatedly for the same profiles during conflict detection
-**Current Code**:
-```go
-for _, profile := range pcd.configFile.Profiles {
-    resolvedConfig, err := pcd.configFile.ResolveProfileSSOConfig(profile)
-    // Repeated resolution for same profiles
-}
-```
-**Improvement**: Pre-resolve and cache SSO configurations for all profiles
-**Expected Benefit**: 70-80% reduction in SSO resolution overhead during conflict detection
-**Implementation**: Build resolved SSO config cache during detector initialization
-**Status**: ✅ COMPLETED - Added resolvedSSOConfigs map to cache resolved SSO configurations, populated during initialization via preResolveSSO()
-
-### 9.13 Inefficient String Building in Conflict Summary Generation ✅ COMPLETED
-**Location**: `helpers/profile_conflict_detector.go` - `GenerateConflictSummary()` method
-**Issue**: String concatenation without pre-allocated buffer capacity
-**Current Code**:
-```go
-var summary strings.Builder
-summary.WriteString(fmt.Sprintf("Profile Conflicts Detected: %d\n", len(conflicts)))
-// Multiple WriteString calls without capacity pre-allocation
-```
-**Improvement**: Pre-allocate buffer capacity based on estimated size
-**Expected Benefit**: Reduce memory allocations by 60-80%
-**Implementation**: `summary.Grow(estimatedSize)` before writing, estimate based on conflict count
-**Status**: ✅ COMPLETED - Added buffer capacity pre-allocation with estimated size based on conflict count (~250 chars per conflict)
-
-### 9.14 Inefficient Profile Deduplication in Conflict Detection ✅ COMPLETED
-**Location**: `helpers/profile_conflict_detector.go` - `combineConflictingProfiles()` method
-**Issue**: Using map for deduplication then converting back to slice
-**Current Code**:
-```go
-profileMap := make(map[string]Profile)
-// Add profiles to map
-for _, profile := range profileMap {
-    combined = append(combined, profile)
-}
-```
-**Improvement**: Use slice with seen map for more efficient deduplication
-**Expected Benefit**: 30-40% faster profile deduplication, reduced memory allocations
-**Implementation**: Track seen profile names in separate map, append directly to result slice
-**Status**: ✅ COMPLETED - Replaced map-based deduplication with direct slice append using seen map for tracking, pre-allocated slice capacity
-
-### 9.2 Inefficient Individual Account Alias API Calls
-**Location**: `helpers/role_discovery.go` - `GetAccountAlias()`
-**Issue**: Individual IAM API calls for each account alias instead of batch processing
-**Current Code**:
-```go
-func (rd *RoleDiscovery) GetAccountAlias(accountID string) (string, error) {
-    // Individual API call per account
-    result, err := rd.iamClient.ListAccountAliases(ctx, input)
-}
-```
-**Improvement**: Pre-fetch all account aliases once and cache them, or batch process multiple accounts
-**Expected Benefit**: Reduce API calls from N to 1 for N accounts, significant latency reduction
-**Implementation**: Add batch account alias retrieval method and improve caching strategy
-
-### 9.15 Inefficient Profile Lookup in Conflict Detection ✅ **DONE** (DUPLICATE of 9.11)
-**Location**: `helpers/profile_conflict_detector.go` - `findMatchingProfiles()` method
-**Issue**: Linear search through all profiles for each role without using available indices
-**Current Code**:
-```go
-for _, profile := range pcd.configFile.Profiles {
-    if !profile.IsSSO() {
-        continue
-    }
-    // Linear search through all profiles
-}
-```
-**Improvement**: Use ProfileLookupIndex for O(1) profile lookups by account ID and role name
-**Expected Benefit**: 80-90% faster profile matching for large config files
-**Implementation**: Build and use profile lookup index in constructor
-**Status**: ✅ **COMPLETED** - This is a duplicate of item 9.11. ProfileConflictDetector now uses ProfileLookupIndex for efficient O(1) lookups
-
-### 9.16 Missing Slice Capacity Pre-allocation in Conflict Detection ✅ **DONE** (RELATED to 9.11)
-**Location**: `helpers/profile_conflict_detector.go` - Multiple methods
-**Issue**: Slices growing without capacity pre-allocation
-**Current Code**:
-```go
-var conflicts []ProfileConflict
-var matchingProfiles []Profile
-// Append operations without pre-allocated capacity
-```
-**Improvement**: Pre-allocate slice capacity based on known or estimated sizes
-**Expected Benefit**: Reduce memory reallocations by 70-80%
-**Implementation**: Use `make([]Type, 0, estimatedCapacity)` for slice initialization
-**Status**: ✅ **COMPLETED** - Implemented as part of 9.11 optimizations. All slices in ProfileConflictDetector now use pre-allocated capacity
-
-### 9.3 Deprecated io/ioutil Usage in SSO Token Cache
-**Location**: `helpers/sso_token_cache.go` - Multiple functions
-**Issue**: Using deprecated `io/ioutil` package instead of modern `os` package functions
-**Current Code**:
-```go
-import "io/ioutil"
-data, err := ioutil.ReadFile(tokenFile)
-files, err := ioutil.ReadDir(stc.cacheDir)
-```
-**Improvement**: Replace with `os.ReadFile` and `os.ReadDir`
-**Expected Benefit**: Use modern Go APIs, better performance with `os.ReadDir`
-**Implementation**: Update imports and function calls to use `os` package
-
-### 9.4 Inefficient Cache Data Copying
-**Location**: `helpers/role_discovery.go` - `GetCachedAccountNames()` and `GetCachedAccountAliases()`
-**Issue**: Copying entire cache maps for read operations
-**Current Code**:
-```go
-func (rd *RoleDiscovery) GetCachedAccountNames() map[string]string {
-    cache := make(map[string]string)
-    for k, v := range rd.accountCache {
-        cache[k] = v  // Unnecessary copying
-    }
-    return cache
-}
-```
-**Improvement**: Return read-only views or use copy-on-write pattern
-**Expected Benefit**: 60-80% reduction in memory usage for cache operations
-**Implementation**: Return map pointers with read-only access patterns or use sync.Map
-
-### 9.5 Inefficient String Building in Profile Generation
+### 9.1 Inefficient String Building in Profile Generation
 **Location**: `helpers/profile_generator.go` - `GetProfileGenerationSummary()`
 **Issue**: String concatenation without pre-allocated buffer capacity
 **Current Code**:
@@ -448,7 +316,7 @@ summary.WriteString("Profile Generation Summary\n")
 **Expected Benefit**: Reduce memory allocations by 60-80%
 **Implementation**: `summary.Grow(estimatedSize)` before writing
 
-### 9.6 Sequential Profile Generation Processing
+### 9.2 Sequential Profile Generation Processing
 **Location**: `helpers/profile_generator.go` - `GenerateProfiles()`
 **Issue**: Profile generation is entirely sequential
 **Current Code**:
@@ -463,145 +331,25 @@ for _, role := range discoveredRoles {
 **Expected Benefit**: 50-70% faster profile generation for large role sets
 **Implementation**: Worker pool pattern with mutex-protected conflict resolver
 
-### 9.7 Inefficient Slice Growth in Profile Generation
-**Location**: `helpers/profile_generator.go` - `GenerateProfiles()`
-**Issue**: Slice growing without capacity pre-allocation
-**Current Code**:
-```go
-var generatedProfiles []GeneratedProfile
-for _, role := range discoveredRoles {
-    generatedProfiles = append(generatedProfiles, generatedProfile)
-}
-```
-**Improvement**: Pre-allocate slice capacity based on known size
-**Expected Benefit**: Reduce memory reallocations by 70-80%
-**Implementation**: `generatedProfiles := make([]GeneratedProfile, 0, len(discoveredRoles))`
-
-### 9.8 Missing Context Cancellation in Role Discovery
-**Location**: `helpers/role_discovery.go` - Long-running operations
-**Issue**: No context cancellation support for long-running AWS API calls
-**Current Code**:
-```go
-ctx := context.TODO()
-// Long-running AWS API calls without cancellation support
-```
-**Improvement**: Add context cancellation support throughout
-**Expected Benefit**: Better resource cleanup and user experience
-**Implementation**: Pass context through all AWS API calls and support cancellation
-
-### 9.9 Unused Method and Parameters
-**Location**: `helpers/sso_token_cache.go`
-**Issue**: Unused method `normalizeStartURL` and unused parameter `region` in `getTokenFilePath`
-**Current Code**:
-```go
-func (stc *SSOTokenCache) normalizeStartURL(startURL string) (string, error) {
-    // Method is defined but never used
-}
-
-func (stc *SSOTokenCache) getTokenFilePath(startURL, region string) string {
-    // region parameter is unused
-}
-```
-**Improvement**: Remove unused code or implement proper usage
-**Expected Benefit**: Cleaner codebase, reduced maintenance burden
-**Implementation**: Remove unused method and parameter, or implement proper usage
-
-### 9.17 Inefficient Individual Account Alias API Calls in Role Discovery ✅ **DONE** (DUPLICATE of 9.2)
-**Location**: `helpers/role_discovery.go` - `GetAccountAlias()` method
-**Issue**: Individual IAM API calls for each account alias instead of batch processing
-**Current Code**:
-```go
-func (rd *RoleDiscovery) GetAccountAlias(accountID string) (string, error) {
-    // Individual API call per account
-    input := &iam.ListAccountAliasesInput{}
-    result, err := rd.iamClient.ListAccountAliases(ctx, input)
-}
-```
-**Improvement**: Pre-fetch all account aliases once and cache them, or batch process multiple accounts
-**Expected Benefit**: Reduce API calls from N to 1 for N accounts, significant latency reduction
-**Implementation**: Add batch account alias retrieval method and improve caching strategy
-**Status**: ✅ **MARKED AS DUPLICATE** - This is identical to item 9.2. Same issue, same location, same improvement needed
-
-### 9.18 Inefficient Cache Data Copying in Role Discovery ✅ **DONE** (DUPLICATE of 9.4)
-**Location**: `helpers/role_discovery.go` - `GetCachedAccountNames()` and `GetCachedAccountAliases()`
-**Issue**: Copying entire cache maps for read operations
-**Current Code**:
-```go
-func (rd *RoleDiscovery) GetCachedAccountNames() map[string]string {
-    cache := make(map[string]string)
-    for k, v := range rd.accountCache {
-        cache[k] = v  // Unnecessary copying
-    }
-    return cache
-}
-```
-**Improvement**: Return read-only views or use copy-on-write pattern
-**Expected Benefit**: 60-80% reduction in memory usage for cache operations
-**Implementation**: Return map pointers with read-only access patterns or use sync.Map
-**Status**: ✅ **MARKED AS DUPLICATE** - This is identical to item 9.4. Same issue, same location, same improvement needed
-
-### 9.19 Missing Context Cancellation in Role Discovery ✅ **DONE** (DUPLICATE of 9.8)
-**Location**: `helpers/role_discovery.go` - Long-running operations
-**Issue**: No context cancellation support for long-running AWS API calls
-**Current Code**:
-```go
-ctx := context.TODO()
-// Long-running AWS API calls without cancellation support
-```
-**Improvement**: Add context cancellation support throughout
-**Expected Benefit**: Better resource cleanup and user experience
-**Implementation**: Pass context through all AWS API calls and support cancellation
-**Status**: ✅ **MARKED AS DUPLICATE** - This is identical to item 9.8. Same issue, same location, same improvement needed
-
-### 9.20 Unused Method and Parameters in SSO Token Cache ✅ **DONE** (DUPLICATE of 9.9)
-**Location**: `helpers/sso_token_cache.go`
-**Issue**: Unused method `normalizeStartURL` and unused parameter `region` in `getTokenFilePath`
-**Current Code**:
-```go
-func (stc *SSOTokenCache) normalizeStartURL(startURL string) (string, error) {
-    // Method is defined but never used
-}
-
-func (stc *SSOTokenCache) getTokenFilePath(startURL, region string) string {
-    // region parameter is unused
-}
-```
-**Improvement**: Remove unused code or implement proper usage
-**Expected Benefit**: Cleaner codebase, reduced maintenance burden
-**Implementation**: Remove unused method and parameter, or implement proper usage
-**Status**: ✅ **MARKED AS DUPLICATE** - This is identical to item 9.9. Same issue, same location, same improvement needed
-
-### 9.10 Interface{} Usage Instead of any
-**Location**: `helpers/sso_token_cache.go` - `GetCacheInfo()`
-**Issue**: Using `interface{}` instead of modern `any` type alias
-**Current Code**:
-```go
-func (stc *SSOTokenCache) GetCacheInfo() (map[string]any, error) {
-    info := make(map[string]any)
-}
-```
-**Improvement**: Replace `interface{}` with `any`
-**Expected Benefit**: More modern Go code, better readability
-**Implementation**: Replace all `interface{}` occurrences with `any`
-
 ## Implementation Priority
 
 1. **High Priority** (Immediate impact):
-   - Redundant config file loading (1.1, 9.1)
-   - Deprecated io/ioutil usage (9.3)
-   - Inefficient slice growth (4.2, 9.7)
-   - Sequential profile generation (3.2, 9.6)
+   - Redundant config file loading (1.1)
+   - Inefficient slice growth (4.2)
+   - Sequential profile generation (3.2, 9.2)
+   - String builder optimizations (2.3, 9.1)
 
 2. **Medium Priority** (Significant improvement):
-   - Account alias batching (1.2, 9.2)
+   - Account alias batching (1.2)
    - Profile name conflict resolution (2.1)
-   - String builder optimizations (4.1, 9.5)
-   - Cache data copying (9.4)
+   - Cache data copying (4.3)
+   - Context cancellation (7.2)
 
 3. **Low Priority** (Code quality):
    - Code duplication refactoring (6.*)
    - Error handling optimizations (5.*)
-   - Go-specific optimizations (7.*, 9.8, 9.9, 9.10)
+   - Go-specific optimizations (7.1, 7.3, 7.4)
+   - AWS SDK best practices (8.*)
 
 ## Measurement Strategy
 

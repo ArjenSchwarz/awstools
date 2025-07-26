@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"syscall"
+	"time"
 )
 
 // AWSConfigFile represents an AWS config file with its profiles
@@ -809,4 +811,488 @@ func (index *ProfileLookupIndex) FindByRole(roleName string) []Profile {
 func (index *ProfileLookupIndex) HasName(profileName string) bool {
 	_, exists := index.ByName[profileName]
 	return exists
+}
+
+// ReplaceProfile atomically replaces an existing profile with a new one
+func (cf *AWSConfigFile) ReplaceProfile(oldName, newName string, newProfile Profile) error {
+	if oldName == "" {
+		return NewValidationError("old profile name cannot be empty", nil)
+	}
+	if newName == "" {
+		return NewValidationError("new profile name cannot be empty", nil)
+	}
+
+	// Check if old profile exists
+	oldProfile, exists := cf.Profiles[oldName]
+	if !exists {
+		return NewValidationError("profile to replace does not exist", nil).
+			WithContext("profile_name", oldName)
+	}
+
+	// Validate new profile
+	if err := newProfile.Validate(); err != nil {
+		return err
+	}
+
+	// If names are different, check if new name already exists (unless it's the same profile)
+	if oldName != newName {
+		if _, exists := cf.Profiles[newName]; exists {
+			return NewValidationError("new profile name already exists", nil).
+				WithContext("profile_name", newName)
+		}
+	}
+
+	// Preserve custom configuration properties from old profile
+	if newProfile.OtherProperties == nil {
+		newProfile.OtherProperties = make(map[string]string)
+	}
+
+	// Copy non-SSO properties from old profile that aren't set in new profile
+	for key, value := range oldProfile.OtherProperties {
+		// Only preserve properties that aren't SSO-related and aren't already set
+		if !isSSORProperty(key) {
+			if _, exists := newProfile.OtherProperties[key]; !exists {
+				newProfile.OtherProperties[key] = value
+			}
+		}
+	}
+
+	// Preserve region if not set in new profile and exists in old profile
+	if newProfile.Region == "" && oldProfile.Region != "" {
+		newProfile.Region = oldProfile.Region
+	}
+
+	// Preserve output format if not set in new profile and exists in old profile
+	if newProfile.Output == "" && oldProfile.Output != "" {
+		newProfile.Output = oldProfile.Output
+	}
+
+	// Set the correct name
+	newProfile.Name = newName
+
+	// Perform atomic replacement
+	if oldName != newName {
+		// Different names: remove old, add new
+		delete(cf.Profiles, oldName)
+		cf.Profiles[newName] = newProfile
+	} else {
+		// Same name: update in place
+		cf.Profiles[oldName] = newProfile
+	}
+
+	return nil
+}
+
+// RemoveProfile safely removes an existing profile
+func (cf *AWSConfigFile) RemoveProfile(profileName string) error {
+	if profileName == "" {
+		return NewValidationError("profile name cannot be empty", nil)
+	}
+
+	// Check if profile exists
+	if _, exists := cf.Profiles[profileName]; !exists {
+		return NewValidationError("profile to remove does not exist", nil).
+			WithContext("profile_name", profileName)
+	}
+
+	// Remove the profile
+	delete(cf.Profiles, profileName)
+
+	return nil
+}
+
+// isSSORProperty checks if a property key is SSO-related
+func isSSORProperty(key string) bool {
+	ssoProperties := map[string]bool{
+		"sso_start_url":  true,
+		"sso_region":     true,
+		"sso_account_id": true,
+		"sso_role_name":  true,
+		"sso_session":    true,
+	}
+	return ssoProperties[key]
+}
+
+// ValidateConfigIntegrity ensures the config file maintains integrity after operations
+func (cf *AWSConfigFile) ValidateConfigIntegrity() error {
+	// Check for duplicate profile names
+	nameCount := make(map[string]int)
+	for name := range cf.Profiles {
+		nameCount[name]++
+		if nameCount[name] > 1 {
+			return NewValidationError("duplicate profile name detected", nil).
+				WithContext("profile_name", name)
+		}
+	}
+
+	// Validate each profile
+	for name, profile := range cf.Profiles {
+		if err := profile.Validate(); err != nil {
+			if pgErr, ok := err.(ProfileGeneratorError); ok {
+				return pgErr.WithContext("profile_name", name)
+			}
+			return NewValidationError("profile validation failed", err).
+				WithContext("profile_name", name)
+		}
+
+		// Check name consistency
+		if profile.Name != name {
+			return NewValidationError("profile name mismatch", nil).
+				WithContext("profile_name", name).
+				WithContext("profile_internal_name", profile.Name)
+		}
+	}
+
+	// Validate SSO sessions referenced by profiles
+	for name, profile := range cf.Profiles {
+		if profile.SSOSession != "" {
+			if _, exists := cf.Sessions[profile.SSOSession]; !exists {
+				return NewValidationError("profile references non-existent SSO session", nil).
+					WithContext("profile_name", name).
+					WithContext("sso_session", profile.SSOSession)
+			}
+		}
+	}
+
+	// Validate each SSO session
+	for name, session := range cf.Sessions {
+		if err := session.Validate(); err != nil {
+			if pgErr, ok := err.(ProfileGeneratorError); ok {
+				return pgErr.WithContext("sso_session_name", name)
+			}
+			return NewValidationError("SSO session validation failed", err).
+				WithContext("sso_session_name", name)
+		}
+
+		// Check name consistency
+		if session.Name != name {
+			return NewValidationError("SSO session name mismatch", nil).
+				WithContext("sso_session_name", name).
+				WithContext("session_internal_name", session.Name)
+		}
+	}
+
+	return nil
+}
+
+// CreateBackup creates a timestamped backup of the config file before modifications
+func (cf *AWSConfigFile) CreateBackup() (string, error) {
+	// Check if original file exists
+	if _, err := os.Stat(cf.FilePath); os.IsNotExist(err) {
+		// No file to backup
+		return "", nil
+	}
+
+	// Generate timestamped backup filename
+	timestamp := fmt.Sprintf("%d", os.Getpid()) // Use PID for uniqueness in tests
+	backupPath := fmt.Sprintf("%s.backup.%s", cf.FilePath, timestamp)
+
+	// Copy file with permission preservation
+	if err := copyFileWithPermissions(cf.FilePath, backupPath); err != nil {
+		return "", NewFileSystemError("failed to create backup", err).
+			WithContext("source_file", cf.FilePath).
+			WithContext("backup_file", backupPath)
+	}
+
+	return backupPath, nil
+}
+
+// RestoreFromBackup recovers from a backup file after failed operations
+func (cf *AWSConfigFile) RestoreFromBackup(backupPath string) error {
+	if backupPath == "" {
+		return NewValidationError("backup path cannot be empty", nil)
+	}
+
+	// Check if backup file exists
+	if _, err := os.Stat(backupPath); os.IsNotExist(err) {
+		return NewFileSystemError("backup file does not exist", err).
+			WithContext("backup_path", backupPath)
+	}
+
+	// Copy backup back to original location with permission preservation
+	if err := copyFileWithPermissions(backupPath, cf.FilePath); err != nil {
+		return NewFileSystemError("failed to restore from backup", err).
+			WithContext("backup_path", backupPath).
+			WithContext("target_path", cf.FilePath)
+	}
+
+	// Reload the config from the restored file
+	restoredConfig, err := LoadAWSConfigFile(cf.FilePath)
+	if err != nil {
+		return NewFileSystemError("failed to reload config after restore", err).
+			WithContext("file_path", cf.FilePath)
+	}
+
+	// Update current instance with restored data
+	cf.Profiles = restoredConfig.Profiles
+	cf.Sessions = restoredConfig.Sessions
+
+	return nil
+}
+
+// copyFileWithPermissions copies a file while preserving permissions
+func copyFileWithPermissions(src, dst string) error {
+	// Get source file info for permissions
+	srcInfo, err := os.Stat(src)
+	if err != nil {
+		return err
+	}
+
+	// Copy file content
+	if err := copyFile(src, dst); err != nil {
+		return err
+	}
+
+	// Set same permissions as source
+	if err := os.Chmod(dst, srcInfo.Mode()); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// AtomicWriteToFile writes the config file atomically with file locking
+func (cf *AWSConfigFile) AtomicWriteToFile() error {
+	// Create backup before any modifications
+	backupPath, err := cf.CreateBackup()
+	if err != nil {
+		return err
+	}
+
+	// Ensure directory exists
+	if err := os.MkdirAll(filepath.Dir(cf.FilePath), 0755); err != nil {
+		return NewFileSystemError("failed to create directory", err).
+			WithContext("directory", filepath.Dir(cf.FilePath))
+	}
+
+	// Create temporary file for atomic write
+	tempPath := cf.FilePath + ".tmp"
+
+	// Acquire file lock and perform atomic write
+	if err := cf.writeWithLock(tempPath); err != nil {
+		// Clean up temp file on error
+		os.Remove(tempPath)
+
+		// Restore from backup if it exists
+		if backupPath != "" {
+			if restoreErr := cf.RestoreFromBackup(backupPath); restoreErr != nil {
+				return NewFileSystemError("failed to write config and restore backup", err).
+					WithContext("write_error", err.Error()).
+					WithContext("restore_error", restoreErr.Error())
+			}
+		}
+		return err
+	}
+
+	// Atomically replace the original file
+	if err := os.Rename(tempPath, cf.FilePath); err != nil {
+		// Clean up temp file
+		os.Remove(tempPath)
+
+		// Restore from backup if it exists
+		if backupPath != "" {
+			if restoreErr := cf.RestoreFromBackup(backupPath); restoreErr != nil {
+				return NewFileSystemError("failed to rename config file and restore backup", err).
+					WithContext("rename_error", err.Error()).
+					WithContext("restore_error", restoreErr.Error())
+			}
+		}
+		return NewFileSystemError("failed to rename temporary file to config file", err).
+			WithContext("temp_path", tempPath).
+			WithContext("target_path", cf.FilePath)
+	}
+
+	// Clean up backup on success (optional - could keep for safety)
+	if backupPath != "" {
+		os.Remove(backupPath)
+	}
+
+	return nil
+}
+
+// writeWithLock writes config content to a file with exclusive locking
+func (cf *AWSConfigFile) writeWithLock(filePath string) error {
+	// Create the file
+	file, err := os.Create(filePath)
+	if err != nil {
+		return NewFileSystemError("failed to create temporary config file", err).
+			WithContext("file_path", filePath)
+	}
+	defer file.Close()
+
+	// Set proper permissions
+	if err := file.Chmod(0600); err != nil {
+		return NewFileSystemError("failed to set file permissions", err).
+			WithContext("file_path", filePath)
+	}
+
+	// Acquire exclusive lock with timeout
+	if err := cf.acquireFileLock(file); err != nil {
+		return err
+	}
+	defer cf.releaseFileLock(file)
+
+	// Write SSO sessions first
+	for _, session := range cf.Sessions {
+		sessionContent := fmt.Sprintf("[sso-session %s]\n", session.Name)
+		if session.SSOStartURL != "" {
+			sessionContent += fmt.Sprintf("sso_start_url = %s\n", session.SSOStartURL)
+		}
+		if session.SSORegion != "" {
+			sessionContent += fmt.Sprintf("sso_region = %s\n", session.SSORegion)
+		}
+		sessionContent += "\n"
+
+		if _, err := file.WriteString(sessionContent); err != nil {
+			return NewFileSystemError("failed to write SSO session", err).
+				WithContext("session_name", session.Name)
+		}
+	}
+
+	// Write profiles
+	for _, profile := range cf.Profiles {
+		if _, err := file.WriteString(profile.ToConfigString()); err != nil {
+			return NewFileSystemError("failed to write profile", err).
+				WithContext("profile_name", profile.Name)
+		}
+	}
+
+	// Ensure all data is written to disk
+	if err := file.Sync(); err != nil {
+		return NewFileSystemError("failed to sync file to disk", err).
+			WithContext("file_path", filePath)
+	}
+
+	return nil
+}
+
+// acquireFileLock acquires an exclusive lock on the file with timeout
+func (cf *AWSConfigFile) acquireFileLock(file *os.File) error {
+	// Try to acquire lock with timeout
+	timeout := time.After(5 * time.Second)
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-timeout:
+			return NewFileSystemError("timeout acquiring file lock", nil).
+				WithContext("file_path", cf.FilePath).
+				WithContext("timeout_seconds", 5)
+		case <-ticker.C:
+			// Try to acquire exclusive lock
+			err := syscall.Flock(int(file.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
+			if err == nil {
+				return nil // Lock acquired successfully
+			}
+			if err != syscall.EWOULDBLOCK {
+				return NewFileSystemError("failed to acquire file lock", err).
+					WithContext("file_path", cf.FilePath)
+			}
+			// Lock is held by another process, continue trying
+		}
+	}
+}
+
+// releaseFileLock releases the file lock
+func (cf *AWSConfigFile) releaseFileLock(file *os.File) error {
+	err := syscall.Flock(int(file.Fd()), syscall.LOCK_UN)
+	if err != nil {
+		return NewFileSystemError("failed to release file lock", err).
+			WithContext("file_path", cf.FilePath)
+	}
+	return nil
+}
+
+// AtomicReplaceProfile atomically replaces a profile with backup and rollback
+func (cf *AWSConfigFile) AtomicReplaceProfile(oldName, newName string, newProfile Profile) error {
+	// Create backup before any modifications
+	backupPath, err := cf.CreateBackup()
+	if err != nil {
+		return err
+	}
+
+	// Store original state for rollback
+	originalProfiles := make(map[string]Profile)
+	for k, v := range cf.Profiles {
+		originalProfiles[k] = v
+	}
+
+	// Perform the replacement in memory
+	if err := cf.ReplaceProfile(oldName, newName, newProfile); err != nil {
+		return err
+	}
+
+	// Validate config integrity
+	if err := cf.ValidateConfigIntegrity(); err != nil {
+		// Rollback in-memory changes
+		cf.Profiles = originalProfiles
+		return NewValidationError("config integrity validation failed after profile replacement", err).
+			WithContext("old_profile", oldName).
+			WithContext("new_profile", newName)
+	}
+
+	// Write changes atomically
+	if err := cf.AtomicWriteToFile(); err != nil {
+		// Rollback in-memory changes
+		cf.Profiles = originalProfiles
+
+		// Restore from backup
+		if backupPath != "" {
+			if restoreErr := cf.RestoreFromBackup(backupPath); restoreErr != nil {
+				return NewFileSystemError("failed to write changes and restore backup", err).
+					WithContext("write_error", err.Error()).
+					WithContext("restore_error", restoreErr.Error())
+			}
+		}
+		return err
+	}
+
+	return nil
+}
+
+// AtomicRemoveProfile atomically removes a profile with backup and rollback
+func (cf *AWSConfigFile) AtomicRemoveProfile(profileName string) error {
+	// Create backup before any modifications
+	backupPath, err := cf.CreateBackup()
+	if err != nil {
+		return err
+	}
+
+	// Store original state for rollback
+	originalProfiles := make(map[string]Profile)
+	for k, v := range cf.Profiles {
+		originalProfiles[k] = v
+	}
+
+	// Perform the removal in memory
+	if err := cf.RemoveProfile(profileName); err != nil {
+		return err
+	}
+
+	// Validate config integrity
+	if err := cf.ValidateConfigIntegrity(); err != nil {
+		// Rollback in-memory changes
+		cf.Profiles = originalProfiles
+		return NewValidationError("config integrity validation failed after profile removal", err).
+			WithContext("removed_profile", profileName)
+	}
+
+	// Write changes atomically
+	if err := cf.AtomicWriteToFile(); err != nil {
+		// Rollback in-memory changes
+		cf.Profiles = originalProfiles
+
+		// Restore from backup
+		if backupPath != "" {
+			if restoreErr := cf.RestoreFromBackup(backupPath); restoreErr != nil {
+				return NewFileSystemError("failed to write changes and restore backup", err).
+					WithContext("write_error", err.Error()).
+					WithContext("restore_error", restoreErr.Error())
+			}
+		}
+		return err
+	}
+
+	return nil
 }
