@@ -76,9 +76,9 @@ This implementation plan converts the profile generator enhancement design into 
     - Write unit tests for interactive prompts using mock input/output streams
     - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5_
 
-- [ ] 4: Enhance Profile Generator Core Logic
+- [x] 4: Enhance Profile Generator Core Logic
 
-  - [ ] 4.1 Integrate conflict detection into profile generation workflow
+  - [x] 4.1 Integrate conflict detection into profile generation workflow
     - Modify `helpers/profile_generator.go` to add conflict resolution strategy parameter
     - Add `conflictStrategy` field to `ProfileGenerator` struct
     - Update `NewProfileGenerator()` constructor to accept conflict resolution strategy
@@ -87,7 +87,7 @@ This implementation plan converts the profile generator enhancement design into 
     - Write unit tests for enhanced constructor and conflict detection integration
     - _Requirements: 1.1, 2.1, 2.2_
 
-  - [ ] 4.2 Implement conflict resolution orchestration
+  - [x] 4.2 Implement conflict resolution orchestration
     - Add `ResolveConflicts()` method to `ProfileGenerator` to orchestrate conflict resolution
     - Implement strategy-based conflict resolution (replace, skip, prompt) logic
     - Add conflict action tracking to record all resolution decisions made
@@ -95,7 +95,7 @@ This implementation plan converts the profile generator enhancement design into 
     - Write unit tests for each conflict resolution strategy with various conflict scenarios
     - _Requirements: 1.1, 3.1, 4.1, 5.1_
 
-  - [ ] 4.3 Enhance profile generation result reporting
+  - [x] 4.3 Enhance profile generation result reporting
     - Modify `ProfileGenerationResult` struct to include conflict resolution information
     - Add fields for detected conflicts, resolution actions, replaced profiles, and skipped roles
     - Implement `GenerateConflictReport()` method to create detailed operation summaries

@@ -292,58 +292,83 @@ func TestNewProfileGenerator(t *testing.T) {
 	_ = SetupTestFixtures()
 
 	tests := []struct {
-		name            string
-		templateProfile string
-		namingPattern   string
-		autoApprove     bool
-		outputFile      string
-		awsConfig       aws.Config
-		expectedError   bool
-		errorType       ErrorType
+		name             string
+		templateProfile  string
+		namingPattern    string
+		autoApprove      bool
+		outputFile       string
+		conflictStrategy ConflictResolutionStrategy
+		awsConfig        aws.Config
+		expectedError    bool
+		errorType        ErrorType
 	}{
 		{
-			name:            "Valid configuration",
-			templateProfile: "test-profile",
-			namingPattern:   "{account_name}-{role_name}",
-			autoApprove:     false,
-			outputFile:      "",
-			awsConfig:       aws.Config{},
-			expectedError:   false,
+			name:             "Valid configuration with prompt strategy",
+			templateProfile:  "test-profile",
+			namingPattern:    "{account_name}-{role_name}",
+			autoApprove:      false,
+			outputFile:       "",
+			conflictStrategy: ConflictPrompt,
+			awsConfig:        aws.Config{},
+			expectedError:    false,
 		},
 		{
-			name:            "Empty template profile",
-			templateProfile: "",
-			namingPattern:   "{account_name}-{role_name}",
-			autoApprove:     false,
-			outputFile:      "",
-			awsConfig:       aws.Config{},
-			expectedError:   true,
-			errorType:       ErrorTypeValidation,
+			name:             "Valid configuration with replace strategy",
+			templateProfile:  "test-profile",
+			namingPattern:    "{account_name}-{role_name}",
+			autoApprove:      false,
+			outputFile:       "",
+			conflictStrategy: ConflictReplace,
+			awsConfig:        aws.Config{},
+			expectedError:    false,
 		},
 		{
-			name:            "Invalid naming pattern",
-			templateProfile: "test-profile",
-			namingPattern:   "{invalid_placeholder}",
-			autoApprove:     false,
-			outputFile:      "",
-			awsConfig:       aws.Config{},
-			expectedError:   true,
-			errorType:       ErrorTypeValidation,
+			name:             "Valid configuration with skip strategy",
+			templateProfile:  "test-profile",
+			namingPattern:    "{account_name}-{role_name}",
+			autoApprove:      false,
+			outputFile:       "",
+			conflictStrategy: ConflictSkip,
+			awsConfig:        aws.Config{},
+			expectedError:    false,
 		},
 		{
-			name:            "Default naming pattern",
-			templateProfile: "test-profile",
-			namingPattern:   "",
-			autoApprove:     false,
-			outputFile:      "",
-			awsConfig:       aws.Config{},
-			expectedError:   false,
+			name:             "Empty template profile",
+			templateProfile:  "",
+			namingPattern:    "{account_name}-{role_name}",
+			autoApprove:      false,
+			outputFile:       "",
+			conflictStrategy: ConflictPrompt,
+			awsConfig:        aws.Config{},
+			expectedError:    true,
+			errorType:        ErrorTypeValidation,
+		},
+		{
+			name:             "Invalid naming pattern",
+			templateProfile:  "test-profile",
+			namingPattern:    "{invalid_placeholder}",
+			autoApprove:      false,
+			outputFile:       "",
+			conflictStrategy: ConflictPrompt,
+			awsConfig:        aws.Config{},
+			expectedError:    true,
+			errorType:        ErrorTypeValidation,
+		},
+		{
+			name:             "Default naming pattern",
+			templateProfile:  "test-profile",
+			namingPattern:    "",
+			autoApprove:      false,
+			outputFile:       "",
+			conflictStrategy: ConflictPrompt,
+			awsConfig:        aws.Config{},
+			expectedError:    false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			pg, err := NewProfileGenerator(tt.templateProfile, tt.namingPattern, tt.autoApprove, tt.outputFile, ConflictPrompt, tt.awsConfig)
+			pg, err := NewProfileGenerator(tt.templateProfile, tt.namingPattern, tt.autoApprove, tt.outputFile, tt.conflictStrategy, tt.awsConfig)
 
 			if tt.expectedError {
 				assert.Error(t, err)
@@ -364,6 +389,10 @@ func TestNewProfileGenerator(t *testing.T) {
 				assert.Equal(t, expectedPattern, pg.namingPattern)
 				assert.Equal(t, tt.autoApprove, pg.autoApprove)
 				assert.Equal(t, tt.outputFile, pg.outputFile)
+				assert.Equal(t, tt.conflictStrategy, pg.conflictStrategy)
+
+				// Verify conflict detector is not initialized yet (lazy initialization)
+				assert.Nil(t, pg.conflictDetector)
 			}
 		})
 	}
@@ -863,6 +892,650 @@ func TestWorkflowIntegration(t *testing.T) {
 	assert.NotEmpty(t, fixtures.ExpectedProfiles)
 }
 
+// TestConflictDetectionIntegration tests the integration of conflict detection into the profile generator
+func TestConflictDetectionIntegration(t *testing.T) {
+	fixtures := SetupTestFixtures()
+
+	// Create config with existing profiles that will conflict
+	configContent := `[profile test-sso-profile]
+region = us-east-1
+sso_start_url = https://example.awsapps.com/start
+sso_region = us-east-1
+sso_account_id = 123456789012
+sso_role_name = PowerUserAccess
+sso_session = test-session
+
+[profile existing-profile]
+region = us-west-2
+sso_start_url = https://example.awsapps.com/start
+sso_region = us-east-1
+sso_account_id = 123456789012
+sso_role_name = PowerUserAccess
+
+[profile test-account-PowerUserAccess]
+region = us-east-1
+sso_start_url = https://example.awsapps.com/start
+sso_region = us-east-1
+sso_account_id = 210987654321
+sso_role_name = ReadOnlyAccess
+`
+
+	configFile := CreateTempConfigFile(t, configContent)
+	os.Setenv("AWS_CONFIG_FILE", configFile)
+	defer os.Unsetenv("AWS_CONFIG_FILE")
+
+	tests := []struct {
+		name              string
+		conflictStrategy  ConflictResolutionStrategy
+		discoveredRoles   []DiscoveredRole
+		expectedConflicts int
+		expectedError     bool
+	}{
+		{
+			name:              "Detect conflicts with prompt strategy",
+			conflictStrategy:  ConflictPrompt,
+			discoveredRoles:   fixtures.MockDiscoveredRoles,
+			expectedConflicts: 2, // Both roles should have conflicts
+			expectedError:     false,
+		},
+		{
+			name:              "Detect conflicts with replace strategy",
+			conflictStrategy:  ConflictReplace,
+			discoveredRoles:   fixtures.MockDiscoveredRoles,
+			expectedConflicts: 2,
+			expectedError:     false,
+		},
+		{
+			name:              "Detect conflicts with skip strategy",
+			conflictStrategy:  ConflictSkip,
+			discoveredRoles:   fixtures.MockDiscoveredRoles,
+			expectedConflicts: 2,
+			expectedError:     false,
+		},
+		{
+			name:              "No conflicts with empty roles",
+			conflictStrategy:  ConflictPrompt,
+			discoveredRoles:   []DiscoveredRole{},
+			expectedConflicts: 0,
+			expectedError:     false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pg, err := NewProfileGenerator("test-sso-profile", "{account_name}-{role_name}", false, "", tt.conflictStrategy, aws.Config{})
+			require.NoError(t, err)
+
+			// Test conflict detection
+			conflicts, err := pg.DetectProfileConflicts(tt.discoveredRoles)
+
+			if tt.expectedError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.Len(t, conflicts, tt.expectedConflicts)
+
+				// Verify conflict detector was initialized
+				assert.NotNil(t, pg.conflictDetector)
+
+				// Verify conflicts have proper structure
+				for _, conflict := range conflicts {
+					assert.NotEmpty(t, conflict.ProposedName)
+					assert.NotEmpty(t, conflict.DiscoveredRole.AccountID)
+					assert.NotEmpty(t, conflict.DiscoveredRole.PermissionSetName)
+					assert.True(t, len(conflict.ExistingProfiles) > 0)
+				}
+			}
+		})
+	}
+}
+
+// TestInitializeConflictDetector tests the lazy initialization of conflict detector
+func TestInitializeConflictDetector(t *testing.T) {
+	fixtures := SetupTestFixtures()
+	configFile := CreateTempConfigFile(t, fixtures.ConfigContent)
+	os.Setenv("AWS_CONFIG_FILE", configFile)
+	defer os.Unsetenv("AWS_CONFIG_FILE")
+
+	tests := []struct {
+		name          string
+		namingPattern string
+		expectedError bool
+		errorType     ErrorType
+	}{
+		{
+			name:          "Valid initialization",
+			namingPattern: "{account_name}-{role_name}",
+			expectedError: false,
+		},
+		{
+			name:          "Invalid naming pattern",
+			namingPattern: "{invalid_placeholder}",
+			expectedError: true,
+			errorType:     ErrorTypeValidation,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pg, err := NewProfileGenerator("test-sso-profile", tt.namingPattern, false, "", ConflictPrompt, aws.Config{})
+			if tt.expectedError && err != nil {
+				// Expected error during construction
+				return
+			}
+			require.NoError(t, err)
+
+			// Initially conflict detector should be nil
+			assert.Nil(t, pg.conflictDetector)
+
+			// Initialize conflict detector
+			err = pg.initializeConflictDetector()
+
+			if tt.expectedError {
+				assert.Error(t, err)
+				if pgErr, ok := err.(ProfileGeneratorError); ok {
+					assert.Equal(t, tt.errorType, pgErr.Type)
+				}
+			} else {
+				assert.NoError(t, err)
+				assert.NotNil(t, pg.conflictDetector)
+
+				// Second call should not reinitialize
+				oldDetector := pg.conflictDetector
+				err = pg.initializeConflictDetector()
+				assert.NoError(t, err)
+				assert.Equal(t, oldDetector, pg.conflictDetector)
+			}
+		})
+	}
+}
+
+// TestConflictDetectionWithMissingConfigFile tests conflict detection when config file is missing
+func TestConflictDetectionWithMissingConfigFile(t *testing.T) {
+	fixtures := SetupTestFixtures()
+
+	// Set non-existent config file
+	os.Setenv("AWS_CONFIG_FILE", "/nonexistent/config")
+	defer os.Unsetenv("AWS_CONFIG_FILE")
+
+	pg, err := NewProfileGenerator("test-sso-profile", "{account_name}-{role_name}", false, "", ConflictPrompt, aws.Config{})
+	require.NoError(t, err)
+
+	// Test conflict detection with missing config file
+	conflicts, err := pg.DetectProfileConflicts(fixtures.MockDiscoveredRoles)
+
+	// Should handle missing config file gracefully by returning no conflicts
+	assert.NoError(t, err)
+	assert.NotNil(t, conflicts)
+	assert.Len(t, conflicts, 0) // No conflicts when no config file exists
+}
+
+// TestGetConflictStrategy tests the conflict strategy getter and setter
+func TestGetConflictStrategy(t *testing.T) {
+	pg, err := NewProfileGenerator("test-profile", "{account_name}-{role_name}", false, "", ConflictPrompt, aws.Config{})
+	require.NoError(t, err)
+
+	// Test initial strategy
+	assert.Equal(t, ConflictPrompt, pg.GetConflictStrategy())
+
+	// Test setting new strategy
+	pg.SetConflictStrategy(ConflictReplace)
+	assert.Equal(t, ConflictReplace, pg.GetConflictStrategy())
+
+	pg.SetConflictStrategy(ConflictSkip)
+	assert.Equal(t, ConflictSkip, pg.GetConflictStrategy())
+}
+
+// TestResolveConflictsOrchestration tests the enhanced conflict resolution orchestration
+func TestResolveConflictsOrchestration(t *testing.T) {
+	fixtures := SetupTestFixtures()
+
+	// Create config with existing profiles that will conflict
+	configContent := `[profile test-sso-profile]
+region = us-east-1
+sso_start_url = https://example.awsapps.com/start
+sso_region = us-east-1
+sso_account_id = 123456789012
+sso_role_name = PowerUserAccess
+sso_session = test-session
+
+[profile existing-profile]
+region = us-west-2
+sso_start_url = https://example.awsapps.com/start
+sso_region = us-east-1
+sso_account_id = 123456789012
+sso_role_name = PowerUserAccess
+`
+
+	configFile := CreateTempConfigFile(t, configContent)
+	os.Setenv("AWS_CONFIG_FILE", configFile)
+	defer os.Unsetenv("AWS_CONFIG_FILE")
+
+	// Create test conflicts
+	testConflicts := []ProfileConflict{
+		{
+			DiscoveredRole: fixtures.MockDiscoveredRoles[0],
+			ExistingProfiles: []Profile{
+				{
+					Name:         "existing-profile",
+					SSOStartURL:  "https://example.awsapps.com/start",
+					SSORegion:    "us-east-1",
+					SSOAccountID: "123456789012",
+					SSORoleName:  "PowerUserAccess",
+				},
+			},
+			ProposedName: "test-account-PowerUserAccess",
+			ConflictType: ConflictSameRole,
+		},
+	}
+
+	tests := []struct {
+		name                      string
+		conflictStrategy          ConflictResolutionStrategy
+		conflicts                 []ProfileConflict
+		expectedGeneratedProfiles int
+		expectedSkippedRoles      int
+		expectedActions           int
+		expectedError             bool
+	}{
+		{
+			name:                      "Replace strategy creates profiles",
+			conflictStrategy:          ConflictReplace,
+			conflicts:                 testConflicts,
+			expectedGeneratedProfiles: 1,
+			expectedSkippedRoles:      0,
+			expectedActions:           1,
+			expectedError:             false,
+		},
+		{
+			name:                      "Skip strategy skips roles",
+			conflictStrategy:          ConflictSkip,
+			conflicts:                 testConflicts,
+			expectedGeneratedProfiles: 0,
+			expectedSkippedRoles:      1,
+			expectedActions:           1,
+			expectedError:             false,
+		},
+		{
+			name:                      "No conflicts returns empty result",
+			conflictStrategy:          ConflictPrompt,
+			conflicts:                 []ProfileConflict{},
+			expectedGeneratedProfiles: 0,
+			expectedSkippedRoles:      0,
+			expectedActions:           0,
+			expectedError:             false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pg, err := NewProfileGenerator("test-sso-profile", "{account_name}-{role_name}", false, "", tt.conflictStrategy, aws.Config{})
+			require.NoError(t, err)
+
+			// Test conflict resolution
+			result, err := pg.ResolveConflicts(tt.conflicts)
+
+			if tt.expectedError {
+				assert.Error(t, err)
+				assert.Nil(t, result)
+			} else {
+				assert.NoError(t, err)
+				assert.NotNil(t, result)
+				assert.Len(t, result.GeneratedProfiles, tt.expectedGeneratedProfiles)
+				assert.Len(t, result.SkippedRoles, tt.expectedSkippedRoles)
+				assert.Len(t, result.Actions, tt.expectedActions)
+
+				// Verify action tracking
+				for _, action := range result.Actions {
+					assert.NotEmpty(t, action.Conflict.DiscoveredRole.AccountID)
+					assert.True(t, action.Action == ActionReplace || action.Action == ActionSkip)
+
+					if action.Action == ActionReplace {
+						assert.NotEmpty(t, action.NewName)
+					}
+				}
+
+				// Verify generated profiles are valid
+				for _, profile := range result.GeneratedProfiles {
+					assert.NoError(t, profile.Validate())
+				}
+			}
+		})
+	}
+}
+
+// TestFilterRolesByConflicts tests the role filtering functionality
+func TestFilterRolesByConflicts(t *testing.T) {
+	fixtures := SetupTestFixtures()
+
+	pg, err := NewProfileGenerator("test-profile", "{account_name}-{role_name}", false, "", ConflictPrompt, aws.Config{})
+	require.NoError(t, err)
+
+	// Create test conflicts for some roles
+	testConflicts := []ProfileConflict{
+		{
+			DiscoveredRole: fixtures.MockDiscoveredRoles[0], // First role has conflict
+			ProposedName:   "test-account-PowerUserAccess",
+			ConflictType:   ConflictSameRole,
+		},
+	}
+
+	// Test role filtering
+	conflictedRoles, nonConflictedRoles := pg.FilterRolesByConflicts(fixtures.MockDiscoveredRoles, testConflicts)
+
+	// Verify filtering results
+	assert.Len(t, conflictedRoles, 1)
+	assert.Len(t, nonConflictedRoles, 1)
+
+	// Verify correct roles are in each group
+	assert.Equal(t, fixtures.MockDiscoveredRoles[0].AccountID, conflictedRoles[0].AccountID)
+	assert.Equal(t, fixtures.MockDiscoveredRoles[0].PermissionSetName, conflictedRoles[0].PermissionSetName)
+
+	assert.Equal(t, fixtures.MockDiscoveredRoles[1].AccountID, nonConflictedRoles[0].AccountID)
+	assert.Equal(t, fixtures.MockDiscoveredRoles[1].PermissionSetName, nonConflictedRoles[0].PermissionSetName)
+
+	// Test with no conflicts
+	conflictedRoles, nonConflictedRoles = pg.FilterRolesByConflicts(fixtures.MockDiscoveredRoles, []ProfileConflict{})
+	assert.Len(t, conflictedRoles, 0)
+	assert.Len(t, nonConflictedRoles, 2)
+
+	// Test with all roles conflicted
+	allConflicts := []ProfileConflict{
+		{
+			DiscoveredRole: fixtures.MockDiscoveredRoles[0],
+			ProposedName:   "test-account-PowerUserAccess",
+			ConflictType:   ConflictSameRole,
+		},
+		{
+			DiscoveredRole: fixtures.MockDiscoveredRoles[1],
+			ProposedName:   "production-account-ReadOnlyAccess",
+			ConflictType:   ConflictSameRole,
+		},
+	}
+
+	conflictedRoles, nonConflictedRoles = pg.FilterRolesByConflicts(fixtures.MockDiscoveredRoles, allConflicts)
+	assert.Len(t, conflictedRoles, 2)
+	assert.Len(t, nonConflictedRoles, 0)
+}
+
+// TestGenerateProfilesForNonConflictedRoles tests profile generation for non-conflicted roles
+func TestGenerateProfilesForNonConflictedRoles(t *testing.T) {
+	fixtures := SetupTestFixtures()
+
+	configFile := CreateTempConfigFile(t, fixtures.ConfigContent)
+	os.Setenv("AWS_CONFIG_FILE", configFile)
+	defer os.Unsetenv("AWS_CONFIG_FILE")
+
+	tests := []struct {
+		name               string
+		nonConflictedRoles []DiscoveredRole
+		expectedProfiles   int
+		expectedError      bool
+	}{
+		{
+			name:               "Generate profiles for non-conflicted roles",
+			nonConflictedRoles: fixtures.MockDiscoveredRoles,
+			expectedProfiles:   2,
+			expectedError:      false,
+		},
+		{
+			name:               "Empty roles returns empty profiles",
+			nonConflictedRoles: []DiscoveredRole{},
+			expectedProfiles:   0,
+			expectedError:      false,
+		},
+		{
+			name: "Invalid role causes error",
+			nonConflictedRoles: []DiscoveredRole{
+				{
+					AccountID:         "invalid-account", // Invalid format
+					AccountName:       "test-account",
+					PermissionSetName: "PowerUserAccess",
+					RoleName:          "PowerUserAccess",
+				},
+			},
+			expectedProfiles: 0,
+			expectedError:    true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pg, err := NewProfileGenerator("test-sso-profile", "{account_name}-{role_name}", false, "", ConflictPrompt, aws.Config{})
+			require.NoError(t, err)
+
+			// Test profile generation for non-conflicted roles
+			profiles, err := pg.GenerateProfilesForNonConflictedRoles(tt.nonConflictedRoles)
+
+			if tt.expectedError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.Len(t, profiles, tt.expectedProfiles)
+
+				// Verify generated profiles are valid
+				for _, profile := range profiles {
+					assert.NoError(t, profile.Validate())
+					assert.NotEmpty(t, profile.Name)
+					assert.NotEmpty(t, profile.AccountID)
+					assert.NotEmpty(t, profile.RoleName)
+				}
+			}
+		})
+	}
+}
+
+// TestGenerateConflictReportEnhanced tests the enhanced conflict report generation
+func TestGenerateConflictReportEnhanced(t *testing.T) {
+	fixtures := SetupTestFixtures()
+
+	pg, err := NewProfileGenerator("test-profile", "{account_name}-{role_name}", false, "", ConflictReplace, aws.Config{})
+	require.NoError(t, err)
+
+	// Create test conflicts and resolution result
+	testConflicts := []ProfileConflict{
+		{
+			DiscoveredRole: fixtures.MockDiscoveredRoles[0],
+			ExistingProfiles: []Profile{
+				{Name: "existing-profile"},
+			},
+			ProposedName: "test-account-PowerUserAccess",
+			ConflictType: ConflictSameRole,
+		},
+	}
+
+	result := &ConflictResolutionResult{
+		GeneratedProfiles: []GeneratedProfile{
+			{
+				Name:        "test-account-PowerUserAccess",
+				AccountName: "test-account",
+				RoleName:    "PowerUserAccess",
+			},
+		},
+		SkippedRoles: []DiscoveredRole{},
+		Actions: []ConflictAction{
+			{
+				Conflict: testConflicts[0],
+				Action:   ActionReplace,
+				NewName:  "test-account-PowerUserAccess",
+				OldName:  "existing-profile",
+			},
+		},
+	}
+
+	// Test report generation
+	report := pg.GenerateConflictReport(testConflicts, result)
+
+	// Verify report content
+	assert.Contains(t, report, "Conflict Resolution Report")
+	assert.Contains(t, report, "Total conflicts detected: 1")
+	assert.Contains(t, report, "Resolution strategy: replace")
+	assert.Contains(t, report, "Profiles replaced: 1")
+	assert.Contains(t, report, "Generated profiles: 1")
+	assert.Contains(t, report, "existing-profile -> test-account-PowerUserAccess")
+
+	// Test with empty result
+	emptyResult := &ConflictResolutionResult{
+		GeneratedProfiles: []GeneratedProfile{},
+		SkippedRoles:      []DiscoveredRole{},
+		Actions:           []ConflictAction{},
+	}
+
+	report = pg.GenerateConflictReport([]ProfileConflict{}, emptyResult)
+	assert.Contains(t, report, "No actions taken")
+}
+
+// TestProfileGenerationResultEnhanced tests the enhanced ProfileGenerationResult
+func TestProfileGenerationResultEnhanced(t *testing.T) {
+	fixtures := SetupTestFixtures()
+
+	// Create enhanced result with conflict resolution information
+	result := &ProfileGenerationResult{
+		TemplateProfile:     TemplateProfile{Name: "test-template"},
+		DiscoveredRoles:     fixtures.MockDiscoveredRoles,
+		GeneratedProfiles:   fixtures.ExpectedProfiles,
+		SuccessfulProfiles:  []string{"profile1", "profile2"},
+		ConflictingProfiles: []string{"conflicting-profile"},
+		DetectedConflicts: []ProfileConflict{
+			{
+				DiscoveredRole: fixtures.MockDiscoveredRoles[0],
+				ExistingProfiles: []Profile{
+					{Name: "existing-profile"},
+				},
+				ProposedName: "test-account-PowerUserAccess",
+				ConflictType: ConflictSameRole,
+			},
+		},
+		ResolutionActions: []ConflictAction{
+			{
+				Action:  ActionReplace,
+				NewName: "test-account-PowerUserAccess",
+				OldName: "existing-profile",
+			},
+		},
+		ReplacedProfiles: []ProfileReplacement{
+			{
+				OldName: "existing-profile",
+				NewName: "test-account-PowerUserAccess",
+			},
+		},
+		SkippedRoles: []DiscoveredRole{
+			fixtures.MockDiscoveredRoles[1],
+		},
+		BackupPath: "/tmp/backup-config",
+		Errors:     []ProfileGeneratorError{},
+	}
+
+	// Test enhanced summary
+	summary := result.Summary()
+	assert.Contains(t, summary, "Template Profile: test-template")
+	assert.Contains(t, summary, "Discovered Roles: 2")
+	assert.Contains(t, summary, "Generated Profiles: 2")
+	assert.Contains(t, summary, "Successful Profiles: 2")
+	assert.Contains(t, summary, "Conflicting Profiles: 1")
+	assert.Contains(t, summary, "Detected Conflicts: 1")
+	assert.Contains(t, summary, "Resolution Actions: 1")
+	assert.Contains(t, summary, "Replaced Profiles: 1")
+	assert.Contains(t, summary, "Skipped Roles: 1")
+	assert.Contains(t, summary, "Backup Path: /tmp/backup-config")
+
+	// Test conflict report generation
+	conflictReport := result.GenerateConflictReport()
+	assert.Contains(t, conflictReport, "Profile Generation Conflict Report")
+	assert.Contains(t, conflictReport, "Template Profile: test-template")
+	assert.Contains(t, conflictReport, "Total Discovered Roles: 2")
+	assert.Contains(t, conflictReport, "Conflicts Detected: 1")
+	assert.Contains(t, conflictReport, "Conflict Details:")
+	assert.Contains(t, conflictReport, "PowerUserAccess in test-account")
+	assert.Contains(t, conflictReport, "Proposed Name: test-account-PowerUserAccess")
+	assert.Contains(t, conflictReport, "Conflict Type: same_role")
+	assert.Contains(t, conflictReport, "Resolution Actions Taken:")
+	assert.Contains(t, conflictReport, "Profiles Replaced: 1")
+	assert.Contains(t, conflictReport, "Replaced Profiles:")
+	assert.Contains(t, conflictReport, "existing-profile -> test-account-PowerUserAccess")
+	assert.Contains(t, conflictReport, "Final Results:")
+	assert.Contains(t, conflictReport, "Generated Profiles: 2")
+	assert.Contains(t, conflictReport, "Configuration Backup: /tmp/backup-config")
+
+	// Test with no conflicts
+	emptyResult := &ProfileGenerationResult{
+		TemplateProfile:   TemplateProfile{Name: "test-template"},
+		DiscoveredRoles:   fixtures.MockDiscoveredRoles,
+		GeneratedProfiles: fixtures.ExpectedProfiles,
+		DetectedConflicts: []ProfileConflict{},
+		ResolutionActions: []ConflictAction{},
+		ReplacedProfiles:  []ProfileReplacement{},
+		SkippedRoles:      []DiscoveredRole{},
+		Errors:            []ProfileGeneratorError{},
+	}
+
+	emptyReport := emptyResult.GenerateConflictReport()
+	assert.Contains(t, emptyReport, "Conflicts Detected: 0")
+	assert.NotContains(t, emptyReport, "Conflict Details:")
+	assert.NotContains(t, emptyReport, "Resolution Actions Taken:")
+}
+
+// TestProfileGenerationResultValidation tests validation of enhanced result
+func TestProfileGenerationResultValidation(t *testing.T) {
+	fixtures := SetupTestFixtures()
+
+	tests := []struct {
+		name          string
+		result        *ProfileGenerationResult
+		expectedError bool
+	}{
+		{
+			name: "Valid enhanced result",
+			result: &ProfileGenerationResult{
+				TemplateProfile: TemplateProfile{
+					Name:        "test-template",
+					Region:      "us-east-1",
+					SSOStartURL: "https://example.awsapps.com/start",
+					SSORegion:   "us-east-1",
+					SSOSession:  "test-session",
+					IsSSO:       true,
+				},
+				DiscoveredRoles:   fixtures.MockDiscoveredRoles,
+				GeneratedProfiles: fixtures.ExpectedProfiles,
+				DetectedConflicts: []ProfileConflict{},
+				ResolutionActions: []ConflictAction{},
+				ReplacedProfiles:  []ProfileReplacement{},
+				SkippedRoles:      []DiscoveredRole{},
+				Errors:            []ProfileGeneratorError{},
+			},
+			expectedError: false,
+		},
+		{
+			name: "Invalid template profile",
+			result: &ProfileGenerationResult{
+				TemplateProfile: TemplateProfile{
+					Name: "", // Invalid: empty name
+				},
+				DiscoveredRoles:   []DiscoveredRole{},
+				GeneratedProfiles: []GeneratedProfile{},
+				DetectedConflicts: []ProfileConflict{},
+				ResolutionActions: []ConflictAction{},
+				ReplacedProfiles:  []ProfileReplacement{},
+				SkippedRoles:      []DiscoveredRole{},
+				Errors:            []ProfileGeneratorError{},
+			},
+			expectedError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.result.Validate()
+
+			if tt.expectedError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
 // TestErrorHandling tests various error scenarios
 func TestErrorHandling(t *testing.T) {
 	_ = SetupTestFixtures()
@@ -1284,14 +1957,16 @@ sso_role_name = ConflictRole
 	}
 
 	// Test conflict resolution
-	generatedProfiles, skippedRoles, err := pg.ResolveConflicts(conflicts)
+	result, err := pg.ResolveConflicts(conflicts)
 	require.NoError(t, err)
 
 	// Should generate one profile (replace strategy)
-	assert.Len(t, generatedProfiles, 1)
-	assert.Len(t, skippedRoles, 0)
-	assert.Equal(t, "test-account-ConflictRole", generatedProfiles[0].Name)
-	assert.Equal(t, "ConflictRole", generatedProfiles[0].RoleName)
+	assert.Len(t, result.GeneratedProfiles, 1)
+	assert.Len(t, result.SkippedRoles, 0)
+	assert.Len(t, result.Actions, 1)
+	assert.Equal(t, "test-account-ConflictRole", result.GeneratedProfiles[0].Name)
+	assert.Equal(t, "ConflictRole", result.GeneratedProfiles[0].RoleName)
+	assert.Equal(t, ActionReplace, result.Actions[0].Action)
 }
 
 func TestProfileGenerator_ResolveConflicts_SkipStrategy(t *testing.T) {
@@ -1343,13 +2018,15 @@ sso_role_name = TemplateRole
 	}
 
 	// Test conflict resolution
-	generatedProfiles, skippedRoles, err := pg.ResolveConflicts(conflicts)
+	result, err := pg.ResolveConflicts(conflicts)
 	require.NoError(t, err)
 
 	// Should skip the role (skip strategy)
-	assert.Len(t, generatedProfiles, 0)
-	assert.Len(t, skippedRoles, 1)
-	assert.Equal(t, "ConflictRole", skippedRoles[0].PermissionSetName)
+	assert.Len(t, result.GeneratedProfiles, 0)
+	assert.Len(t, result.SkippedRoles, 1)
+	assert.Len(t, result.Actions, 1)
+	assert.Equal(t, "ConflictRole", result.SkippedRoles[0].PermissionSetName)
+	assert.Equal(t, ActionSkip, result.Actions[0].Action)
 }
 
 func TestProfileGenerator_GenerateConflictReport(t *testing.T) {
@@ -1383,21 +2060,33 @@ func TestProfileGenerator_GenerateConflictReport(t *testing.T) {
 		},
 	}
 
-	actions := []ConflictAction{
-		{
-			Conflict: conflicts[0],
-			Action:   ActionReplace,
-			NewName:  "prod-account-AdminRole",
-			OldName:  "old-admin-profile",
+	result := &ConflictResolutionResult{
+		GeneratedProfiles: []GeneratedProfile{
+			{
+				Name:        "prod-account-AdminRole",
+				AccountName: "prod-account",
+				RoleName:    "AdminRole",
+			},
 		},
-		{
-			Conflict: conflicts[1],
-			Action:   ActionSkip,
+		SkippedRoles: []DiscoveredRole{
+			conflicts[1].DiscoveredRole,
+		},
+		Actions: []ConflictAction{
+			{
+				Conflict: conflicts[0],
+				Action:   ActionReplace,
+				NewName:  "prod-account-AdminRole",
+				OldName:  "old-admin-profile",
+			},
+			{
+				Conflict: conflicts[1],
+				Action:   ActionSkip,
+			},
 		},
 	}
 
 	// Generate report
-	report := pg.GenerateConflictReport(conflicts, actions)
+	report := pg.GenerateConflictReport(conflicts, result)
 
 	// Verify report content
 	assert.Contains(t, report, "Conflict Resolution Report")
@@ -1513,13 +2202,13 @@ sso_role_name = TemplateRole
 		},
 	}
 
-	generatedProfiles, skippedRoles, err := pg.ResolveConflicts(conflicts)
+	result, err := pg.ResolveConflicts(conflicts)
 	require.NoError(t, err)
-	assert.Len(t, generatedProfiles, 1)
-	assert.Len(t, skippedRoles, 0)
+	assert.Len(t, result.GeneratedProfiles, 1)
+	assert.Len(t, result.SkippedRoles, 0)
 
 	// Verify generated profile is valid
-	profile := generatedProfiles[0]
+	profile := result.GeneratedProfiles[0]
 	assert.Equal(t, "test-account-ValidRole", profile.Name)
 	assert.Equal(t, "123456789012", profile.AccountID)
 	assert.Equal(t, "test-account", profile.AccountName)
