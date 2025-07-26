@@ -149,7 +149,7 @@ func (pg *ProfileGenerator) GenerateProfiles(templateProfile *TemplateProfile, d
 	}
 
 	conflictResolver := NewProfileNameConflictResolver(configFile.GetProfileNames())
-	var generatedProfiles []GeneratedProfile
+	generatedProfiles := make([]GeneratedProfile, 0, len(discoveredRoles))
 
 	for _, role := range discoveredRoles {
 		// Generate profile name
@@ -327,6 +327,9 @@ func (pg *ProfileGenerator) GenerateProfilesWorkflow() (*ProfileGenerationResult
 // GetProfileGenerationSummary returns a summary of the profile generation
 func (pg *ProfileGenerator) GetProfileGenerationSummary(result *ProfileGenerationResult) string {
 	var summary strings.Builder
+	// Estimate size: base summary (~300 chars) + errors + conflicts
+	estimatedSize := 300 + len(result.Errors)*50 + len(result.ConflictingProfiles)*30
+	summary.Grow(estimatedSize)
 
 	summary.WriteString("Profile Generation Summary\n")
 	summary.WriteString("=========================\n")
