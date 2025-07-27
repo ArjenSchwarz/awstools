@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Enhanced
+- SSO profile generator command interface with comprehensive conflict resolution flags and enhanced output formatting
+- Profile generator workflow with improved error handling and detailed progress reporting
+- Technical documentation organization with efficiency improvements moved to agents directory
 - Profile generator with integrated conflict detection and resolution orchestration
 - Conflict resolution workflow with strategy-based handling (replace, skip, prompt)
 - Profile generation result reporting with detailed conflict resolution information
@@ -16,6 +19,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Enhanced conflict reporting with comprehensive action tracking
 
 ### Added
+- Comprehensive test coverage for SSO command functionality with 959 lines of tests covering flag parsing, conflict resolution, and output formatting
+- Enhanced error handling and recovery guidance in profile generator command interface
+- Technical efficiency improvements documentation in agents directory for better project organization
 - `ConflictResolutionResult` struct for structured conflict resolution outcomes
 - `FilterRolesByConflicts()` method for separating conflicted and non-conflicted roles
 - `GenerateProfilesForNonConflictedRoles()` method for efficient profile generation

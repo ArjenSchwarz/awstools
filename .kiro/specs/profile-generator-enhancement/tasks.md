@@ -103,9 +103,9 @@ This implementation plan converts the profile generator enhancement design into 
     - Write unit tests for enhanced result reporting with various conflict resolution outcomes
     - _Requirements: 6.1, 6.2, 6.3, 6.4, 6.5_
 
-- [ ] 5: Update Command Interface
+- [-] 5: Update Command Interface
 
-  - [ ] 5.1 Add new command line flags for conflict resolution
+  - [x] 5.1 Add new command line flags for conflict resolution
     - Modify `cmd/sso.go` to add `--replace-existing` and `--skip-existing` flags
     - Implement mutual exclusion validation between the two new flags
     - Add flag descriptions and help text explaining conflict resolution options
@@ -113,7 +113,7 @@ This implementation plan converts the profile generator enhancement design into 
     - Write unit tests for flag parsing and validation logic
     - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5_
 
-  - [ ] 5.2 Integrate conflict resolution into command execution
+  - [x] 5.2 Integrate conflict resolution into command execution
     - Modify `profileGenerator()` command function to parse conflict resolution flags
     - Add conflict strategy determination logic based on provided flags
     - Update profile generator initialization to pass conflict resolution strategy
@@ -121,7 +121,7 @@ This implementation plan converts the profile generator enhancement design into 
     - Write unit tests for command execution with various flag combinations
     - _Requirements: 1.1, 3.1, 4.1, 5.1_
 
-  - [ ] 5.3 Enhance command output and reporting
+  - [x] 5.3 Enhance command output and reporting
     - Update profile generation output to include conflict resolution summary
     - Add detailed reporting of replaced profiles, skipped roles, and new profiles created
     - Implement progress indicators for conflict detection and resolution phases

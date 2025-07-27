@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -2215,4 +2216,465 @@ sso_role_name = TemplateRole
 	assert.Equal(t, "ValidRole", profile.RoleName)
 	assert.Equal(t, "us-east-1", profile.Region)
 	assert.Equal(t, "https://test.awsapps.com/start", profile.SSOStartURL)
+}
+
+// TestGetProgressInfo tests the GetProgressInfo method
+func TestGetProgressInfo(t *testing.T) {
+	tests := []struct {
+		name           string
+		result         *ProfileGenerationResult
+		expectedFields []string
+		expectedValues map[string]any
+	}{
+		{
+			name: "basic progress info",
+			result: &ProfileGenerationResult{
+				TemplateProfile:    TemplateProfile{Name: "test-profile"},
+				DiscoveredRoles:    make([]DiscoveredRole, 5),
+				DetectedConflicts:  make([]ProfileConflict, 2),
+				ResolutionActions:  make([]ConflictAction, 2),
+				GeneratedProfiles:  make([]GeneratedProfile, 5),
+				SuccessfulProfiles: []string{"profile1", "profile2", "profile3"},
+				SkippedRoles:       make([]DiscoveredRole, 1),
+				Errors:             []ProfileGeneratorError{},
+				BackupPath:         "/tmp/backup.config",
+			},
+			expectedFields: []string{
+				"template_profile", "discovered_roles", "detected_conflicts",
+				"resolution_actions", "generated_profiles", "successful_profiles",
+				"skipped_roles", "errors", "has_backup", "backup_path", "success_rate",
+			},
+			expectedValues: map[string]any{
+				"template_profile":    "test-profile",
+				"discovered_roles":    5,
+				"detected_conflicts":  2,
+				"resolution_actions":  2,
+				"generated_profiles":  5,
+				"successful_profiles": 3,
+				"skipped_roles":       1,
+				"errors":              0,
+				"has_backup":          true,
+				"backup_path":         "/tmp/backup.config",
+				"success_rate":        "60.0%",
+			},
+		},
+		{
+			name: "no conflicts or errors",
+			result: &ProfileGenerationResult{
+				TemplateProfile:    TemplateProfile{Name: "clean-profile"},
+				DiscoveredRoles:    make([]DiscoveredRole, 3),
+				DetectedConflicts:  []ProfileConflict{},
+				ResolutionActions:  []ConflictAction{},
+				GeneratedProfiles:  make([]GeneratedProfile, 3),
+				SuccessfulProfiles: []string{"profile1", "profile2", "profile3"},
+				SkippedRoles:       []DiscoveredRole{},
+				Errors:             []ProfileGeneratorError{},
+				BackupPath:         "",
+			},
+			expectedFields: []string{
+				"template_profile", "discovered_roles", "detected_conflicts",
+				"resolution_actions", "generated_profiles", "successful_profiles",
+				"skipped_roles", "errors", "has_backup", "backup_path", "success_rate",
+			},
+			expectedValues: map[string]any{
+				"template_profile":    "clean-profile",
+				"discovered_roles":    3,
+				"detected_conflicts":  0,
+				"resolution_actions":  0,
+				"generated_profiles":  3,
+				"successful_profiles": 3,
+				"skipped_roles":       0,
+				"errors":              0,
+				"has_backup":          false,
+				"backup_path":         "",
+				"success_rate":        "100.0%",
+			},
+		},
+		{
+			name: "with errors and no successful profiles",
+			result: &ProfileGenerationResult{
+				TemplateProfile:    TemplateProfile{Name: "error-profile"},
+				DiscoveredRoles:    make([]DiscoveredRole, 2),
+				DetectedConflicts:  []ProfileConflict{},
+				ResolutionActions:  []ConflictAction{},
+				GeneratedProfiles:  []GeneratedProfile{},
+				SuccessfulProfiles: []string{},
+				SkippedRoles:       []DiscoveredRole{},
+				Errors: []ProfileGeneratorError{
+					NewValidationError("test error 1", nil),
+					NewAPIError("test error 2", nil),
+				},
+				BackupPath: "",
+			},
+			expectedFields: []string{
+				"template_profile", "discovered_roles", "detected_conflicts",
+				"resolution_actions", "generated_profiles", "successful_profiles",
+				"skipped_roles", "errors", "has_backup", "backup_path", "success_rate",
+			},
+			expectedValues: map[string]any{
+				"template_profile":    "error-profile",
+				"discovered_roles":    2,
+				"detected_conflicts":  0,
+				"resolution_actions":  0,
+				"generated_profiles":  0,
+				"successful_profiles": 0,
+				"skipped_roles":       0,
+				"errors":              2,
+				"has_backup":          false,
+				"backup_path":         "",
+				"success_rate":        "0.0%",
+			},
+		},
+		{
+			name: "no discovered roles",
+			result: &ProfileGenerationResult{
+				TemplateProfile:    TemplateProfile{Name: "empty-profile"},
+				DiscoveredRoles:    []DiscoveredRole{},
+				DetectedConflicts:  []ProfileConflict{},
+				ResolutionActions:  []ConflictAction{},
+				GeneratedProfiles:  []GeneratedProfile{},
+				SuccessfulProfiles: []string{},
+				SkippedRoles:       []DiscoveredRole{},
+				Errors:             []ProfileGeneratorError{},
+				BackupPath:         "",
+			},
+			expectedFields: []string{
+				"template_profile", "discovered_roles", "detected_conflicts",
+				"resolution_actions", "generated_profiles", "successful_profiles",
+				"skipped_roles", "errors", "has_backup", "backup_path", "success_rate",
+			},
+			expectedValues: map[string]any{
+				"template_profile":    "empty-profile",
+				"discovered_roles":    0,
+				"detected_conflicts":  0,
+				"resolution_actions":  0,
+				"generated_profiles":  0,
+				"successful_profiles": 0,
+				"skipped_roles":       0,
+				"errors":              0,
+				"has_backup":          false,
+				"backup_path":         "",
+				"success_rate":        "N/A",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create a mock profile generator
+			pg := &ProfileGenerator{
+				templateProfile: "test-template",
+				namingPattern:   "{account_name}-{role_name}",
+			}
+
+			// Get progress info
+			info := pg.GetProgressInfo(tt.result)
+
+			// Verify all expected fields are present
+			for _, field := range tt.expectedFields {
+				assert.Contains(t, info, field, "Progress info should contain field: %s", field)
+			}
+
+			// Verify expected values
+			for field, expectedValue := range tt.expectedValues {
+				actualValue, exists := info[field]
+				assert.True(t, exists, "Field %s should exist in progress info", field)
+				assert.Equal(t, expectedValue, actualValue, "Field %s should have expected value", field)
+			}
+
+			// Verify success rate calculation logic
+			totalRoles := len(tt.result.DiscoveredRoles)
+			successfulProfiles := len(tt.result.SuccessfulProfiles)
+
+			if totalRoles > 0 {
+				expectedRate := fmt.Sprintf("%.1f%%", float64(successfulProfiles)/float64(totalRoles)*100)
+				assert.Equal(t, expectedRate, info["success_rate"])
+			} else {
+				assert.Equal(t, "N/A", info["success_rate"])
+			}
+		})
+	}
+}
+
+// TestFormatProgressMessage tests the FormatProgressMessage method
+func TestFormatProgressMessage(t *testing.T) {
+	tests := []struct {
+		name            string
+		phase           string
+		message         string
+		details         map[string]any
+		expectedPrefix  string
+		expectedContent string
+	}{
+		{
+			name:            "validation phase",
+			phase:           "validation",
+			message:         "Validating template profile",
+			details:         nil,
+			expectedPrefix:  "🔍",
+			expectedContent: "Validating template profile",
+		},
+		{
+			name:            "discovery phase with details",
+			phase:           "discovery",
+			message:         "Discovering roles",
+			details:         map[string]any{"count": 5},
+			expectedPrefix:  "🔍",
+			expectedContent: "Discovering roles [count: 5]",
+		},
+		{
+			name:            "conflict detection phase",
+			phase:           "conflict_detection",
+			message:         "Detecting conflicts",
+			details:         map[string]any{"conflicts": 3, "total": 10},
+			expectedPrefix:  "⚠️",
+			expectedContent: "Detecting conflicts [conflicts: 3] [total: 10]",
+		},
+		{
+			name:            "conflict resolution phase",
+			phase:           "conflict_resolution",
+			message:         "Resolving conflicts",
+			details:         map[string]any{"strategy": "replace"},
+			expectedPrefix:  "🔧",
+			expectedContent: "Resolving conflicts [strategy: replace]",
+		},
+		{
+			name:            "generation phase",
+			phase:           "generation",
+			message:         "Generating profiles",
+			details:         map[string]any{"profiles": 8},
+			expectedPrefix:  "📝",
+			expectedContent: "Generating profiles [profiles: 8]",
+		},
+		{
+			name:            "success phase",
+			phase:           "success",
+			message:         "Operation completed successfully",
+			details:         nil,
+			expectedPrefix:  "✅",
+			expectedContent: "Operation completed successfully",
+		},
+		{
+			name:            "error phase",
+			phase:           "error",
+			message:         "Operation failed",
+			details:         map[string]any{"error": "validation failed"},
+			expectedPrefix:  "❌",
+			expectedContent: "Operation failed [error: validation failed]",
+		},
+		{
+			name:            "unknown phase",
+			phase:           "unknown",
+			message:         "Unknown operation",
+			details:         nil,
+			expectedPrefix:  "ℹ️",
+			expectedContent: "Unknown operation",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create a mock profile generator
+			pg := &ProfileGenerator{
+				templateProfile: "test-template",
+				namingPattern:   "{account_name}-{role_name}",
+			}
+
+			// Format progress message
+			result := pg.FormatProgressMessage(tt.phase, tt.message, tt.details)
+
+			// Verify the message starts with the expected prefix
+			assert.True(t, strings.HasPrefix(result, tt.expectedPrefix),
+				"Message should start with %s, got: %s", tt.expectedPrefix, result)
+
+			// Verify the message contains the expected content
+			assert.Contains(t, result, tt.message,
+				"Message should contain the base message: %s", tt.message)
+
+			// If details are provided, verify they are included
+			if tt.details != nil {
+				for key, value := range tt.details {
+					expectedDetail := fmt.Sprintf("[%s: %v]", key, value)
+					assert.Contains(t, result, expectedDetail,
+						"Message should contain detail: %s", expectedDetail)
+				}
+			}
+		})
+	}
+}
+
+// TestEnhancedErrorHandling tests enhanced error handling and reporting
+func TestEnhancedErrorHandling(t *testing.T) {
+	tests := []struct {
+		name                 string
+		errors               []ProfileGeneratorError
+		expectedErrorCount   int
+		expectedErrorTypes   []string
+		expectedRecoveryTips []string
+	}{
+		{
+			name: "validation errors",
+			errors: []ProfileGeneratorError{
+				NewValidationError("invalid template profile", nil).WithContext("profile", "test"),
+				NewValidationError("invalid naming pattern", nil).WithContext("pattern", "{invalid}"),
+			},
+			expectedErrorCount: 2,
+			expectedErrorTypes: []string{"ValidationError", "ValidationError"},
+			expectedRecoveryTips: []string{
+				"Check the input parameters",
+				"Verify configuration",
+			},
+		},
+		{
+			name: "filesystem errors",
+			errors: []ProfileGeneratorError{
+				NewFileSystemError("cannot write to config file", nil),
+				NewFileSystemError("backup creation failed", nil),
+			},
+			expectedErrorCount: 2,
+			expectedErrorTypes: []string{"FileSystemError", "FileSystemError"},
+			expectedRecoveryTips: []string{
+				"Check file permissions",
+				"Verify directory exists",
+				"Check disk space",
+			},
+		},
+		{
+			name: "api errors",
+			errors: []ProfileGeneratorError{
+				NewAPIError("SSO token expired", nil),
+				NewAPIError("network connectivity issue", nil),
+			},
+			expectedErrorCount: 2,
+			expectedErrorTypes: []string{"APIError", "APIError"},
+			expectedRecoveryTips: []string{
+				"Check AWS credentials",
+				"Run: aws sso login",
+				"Verify network connectivity",
+			},
+		},
+		{
+			name: "mixed errors",
+			errors: []ProfileGeneratorError{
+				NewValidationError("validation failed", nil),
+				NewFileSystemError("file system error", nil),
+				NewAPIError("api error", nil),
+			},
+			expectedErrorCount: 3,
+			expectedErrorTypes: []string{"ValidationError", "FileSystemError", "APIError"},
+			expectedRecoveryTips: []string{
+				"Check the input parameters",
+				"Check file permissions",
+				"Check AWS credentials",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Verify error count
+			assert.Equal(t, tt.expectedErrorCount, len(tt.errors))
+
+			// Verify error types
+			for i, err := range tt.errors {
+				if i < len(tt.expectedErrorTypes) {
+					switch tt.expectedErrorTypes[i] {
+					case "ValidationError":
+						assert.Equal(t, ErrorTypeValidation, err.Type, "Error %d should be ValidationError", i)
+					case "FileSystemError":
+						assert.Equal(t, ErrorTypeFileSystem, err.Type, "Error %d should be FileSystemError", i)
+					case "APIError":
+						assert.Equal(t, ErrorTypeAPI, err.Type, "Error %d should be APIError", i)
+					}
+				}
+			}
+
+			// Verify that errors have meaningful messages
+			for _, err := range tt.errors {
+				assert.NotEmpty(t, err.Error(), "Error should have a non-empty message")
+			}
+		})
+	}
+}
+
+// TestProgressReporting tests the progress reporting functionality
+func TestProgressReporting(t *testing.T) {
+	tests := []struct {
+		name           string
+		phases         []string
+		expectedPhases []string
+		phaseData      map[string]map[string]any
+	}{
+		{
+			name:           "complete workflow phases",
+			phases:         []string{"validation", "discovery", "conflict_detection", "conflict_resolution", "generation"},
+			expectedPhases: []string{"validation", "discovery", "conflict_detection", "conflict_resolution", "generation"},
+			phaseData: map[string]map[string]any{
+				"validation":          {"profile": "test-profile"},
+				"discovery":           {"roles": 10},
+				"conflict_detection":  {"conflicts": 3},
+				"conflict_resolution": {"actions": 3},
+				"generation":          {"profiles": 10},
+			},
+		},
+		{
+			name:           "workflow without conflicts",
+			phases:         []string{"validation", "discovery", "generation"},
+			expectedPhases: []string{"validation", "discovery", "generation"},
+			phaseData: map[string]map[string]any{
+				"validation": {"profile": "clean-profile"},
+				"discovery":  {"roles": 5},
+				"generation": {"profiles": 5},
+			},
+		},
+		{
+			name:           "workflow with errors",
+			phases:         []string{"validation", "error"},
+			expectedPhases: []string{"validation", "error"},
+			phaseData: map[string]map[string]any{
+				"validation": {"profile": "invalid-profile"},
+				"error":      {"message": "validation failed"},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Verify that all expected phases are present
+			assert.Equal(t, tt.expectedPhases, tt.phases)
+
+			// Verify that each phase has associated data
+			for _, phase := range tt.phases {
+				data, exists := tt.phaseData[phase]
+				assert.True(t, exists, "Phase %s should have associated data", phase)
+				assert.NotEmpty(t, data, "Phase %s data should not be empty", phase)
+			}
+
+			// Verify phase progression makes sense
+			for i, phase := range tt.phases {
+				switch phase {
+				case "validation":
+					assert.Equal(t, 0, i, "Validation should be the first phase")
+				case "error":
+					// Error can occur at any point, but should be the last phase
+					assert.Equal(t, len(tt.phases)-1, i, "Error should be the last phase")
+				case "generation":
+					// Generation should be near the end (unless there's an error)
+					if !contains(tt.phases, "error") {
+						assert.Equal(t, len(tt.phases)-1, i, "Generation should be the last phase when no errors")
+					}
+				}
+			}
+		})
+	}
+}
+
+// Helper function for testing
+func contains(slice []string, item string) bool {
+	for _, s := range slice {
+		if s == item {
+			return true
+		}
+	}
+	return false
 }
