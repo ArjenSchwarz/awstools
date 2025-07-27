@@ -120,7 +120,7 @@ func LoadAWSConfigFile(filePath string) (*AWSConfigFile, error) {
 		return nil, err
 	}
 
-	// Read and parse the file
+	// Read and parse the file with recovery
 	file, err := os.Open(filePath)
 	if err != nil {
 		return nil, NewFileSystemError("failed to open config file", err).
@@ -128,8 +128,22 @@ func LoadAWSConfigFile(filePath string) (*AWSConfigFile, error) {
 	}
 	defer file.Close()
 
-	if err := configFile.parseConfigFile(file); err != nil {
-		return nil, err
+	// Try parsing with recovery first
+	if err := configFile.parseConfigFileWithRecovery(file); err != nil {
+		// If it's a validation error with partial recovery, log warning but continue
+		if pgErr, ok := err.(ProfileGeneratorError); ok && pgErr.Type == ErrorTypeValidation {
+			// Check if we have any successfully parsed profiles
+			if len(configFile.Profiles) > 0 || len(configFile.Sessions) > 0 {
+				// Partial recovery successful - continue with warning
+				// In a real implementation, you might want to log this warning
+			} else {
+				// No profiles parsed, this is a critical error
+				return nil, err
+			}
+		} else {
+			// Other types of errors are critical
+			return nil, err
+		}
 	}
 
 	return configFile, nil
@@ -267,6 +281,288 @@ func (cf *AWSConfigFile) parseConfigFile(file *os.File) error {
 	return nil
 }
 
+// parseConfigFileWithRecovery parses the AWS config file with malformed section recovery
+func (cf *AWSConfigFile) parseConfigFileWithRecovery(file *os.File) error {
+	scanner := bufio.NewScanner(file)
+	var currentProfile *Profile
+	var currentSession *SSOSession
+	var parseErrors []error
+	lineNumber := 0
+
+	profileNameRegex := regexp.MustCompile(`^\[profile\s+(.+)\]$`)
+	defaultProfileRegex := regexp.MustCompile(`^\[default\]$`)
+	ssoSessionRegex := regexp.MustCompile(`^\[sso-session\s+(.+)\]$`)
+
+	for scanner.Scan() {
+		lineNumber++
+		line := strings.TrimSpace(scanner.Text())
+
+		// Skip empty lines and comments
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+
+		// Check for profile section
+		if matches := profileNameRegex.FindStringSubmatch(line); matches != nil {
+			// Save previous profile if exists and valid
+			if currentProfile != nil {
+				if err := currentProfile.Validate(); err != nil {
+					parseErrors = append(parseErrors, NewValidationError(
+						fmt.Sprintf("invalid profile at line %d", lineNumber-1), err).
+						WithContext("profile_name", currentProfile.Name).
+						WithContext("line_number", lineNumber-1))
+				} else {
+					cf.Profiles[currentProfile.Name] = *currentProfile
+				}
+			}
+			// Save previous session if exists and valid
+			if currentSession != nil {
+				if err := currentSession.Validate(); err != nil {
+					parseErrors = append(parseErrors, NewValidationError(
+						fmt.Sprintf("invalid SSO session at line %d", lineNumber-1), err).
+						WithContext("session_name", currentSession.Name).
+						WithContext("line_number", lineNumber-1))
+				} else {
+					cf.Sessions[currentSession.Name] = *currentSession
+				}
+				currentSession = nil
+			}
+
+			// Validate profile name
+			profileName := strings.TrimSpace(matches[1])
+			if profileName == "" {
+				parseErrors = append(parseErrors, NewValidationError(
+					fmt.Sprintf("empty profile name at line %d", lineNumber), nil).
+					WithContext("line_number", lineNumber))
+				currentProfile = nil
+				continue
+			}
+
+			// Start new profile
+			currentProfile = &Profile{
+				Name:            profileName,
+				OtherProperties: make(map[string]string),
+			}
+		} else if matches := defaultProfileRegex.FindStringSubmatch(line); matches != nil {
+			// Handle default profile
+			if currentProfile != nil {
+				if err := currentProfile.Validate(); err != nil {
+					parseErrors = append(parseErrors, NewValidationError(
+						fmt.Sprintf("invalid profile at line %d", lineNumber-1), err).
+						WithContext("profile_name", currentProfile.Name).
+						WithContext("line_number", lineNumber-1))
+				} else {
+					cf.Profiles[currentProfile.Name] = *currentProfile
+				}
+			}
+			// Save previous session if exists and valid
+			if currentSession != nil {
+				if err := currentSession.Validate(); err != nil {
+					parseErrors = append(parseErrors, NewValidationError(
+						fmt.Sprintf("invalid SSO session at line %d", lineNumber-1), err).
+						WithContext("session_name", currentSession.Name).
+						WithContext("line_number", lineNumber-1))
+				} else {
+					cf.Sessions[currentSession.Name] = *currentSession
+				}
+				currentSession = nil
+			}
+
+			currentProfile = &Profile{
+				Name:            "default",
+				OtherProperties: make(map[string]string),
+			}
+		} else if matches := ssoSessionRegex.FindStringSubmatch(line); matches != nil {
+			// Save previous profile if exists and valid
+			if currentProfile != nil {
+				if err := currentProfile.Validate(); err != nil {
+					parseErrors = append(parseErrors, NewValidationError(
+						fmt.Sprintf("invalid profile at line %d", lineNumber-1), err).
+						WithContext("profile_name", currentProfile.Name).
+						WithContext("line_number", lineNumber-1))
+				} else {
+					cf.Profiles[currentProfile.Name] = *currentProfile
+				}
+				currentProfile = nil
+			}
+			// Save previous session if exists and valid
+			if currentSession != nil {
+				if err := currentSession.Validate(); err != nil {
+					parseErrors = append(parseErrors, NewValidationError(
+						fmt.Sprintf("invalid SSO session at line %d", lineNumber-1), err).
+						WithContext("session_name", currentSession.Name).
+						WithContext("line_number", lineNumber-1))
+				} else {
+					cf.Sessions[currentSession.Name] = *currentSession
+				}
+			}
+
+			// Validate session name
+			sessionName := strings.TrimSpace(matches[1])
+			if sessionName == "" {
+				parseErrors = append(parseErrors, NewValidationError(
+					fmt.Sprintf("empty SSO session name at line %d", lineNumber), nil).
+					WithContext("line_number", lineNumber))
+				currentSession = nil
+				continue
+			}
+
+			// Start new SSO session
+			currentSession = &SSOSession{
+				Name: sessionName,
+			}
+		} else if currentSession != nil {
+			// Parse SSO session property line
+			if strings.Contains(line, "=") {
+				parts := strings.SplitN(line, "=", 2)
+				if len(parts) == 2 {
+					key := strings.TrimSpace(parts[0])
+					value := strings.TrimSpace(parts[1])
+
+					// Validate property format
+					if key == "" {
+						parseErrors = append(parseErrors, NewValidationError(
+							fmt.Sprintf("empty property key at line %d", lineNumber), nil).
+							WithContext("line_number", lineNumber).
+							WithContext("line_content", line))
+						continue
+					}
+
+					// Set known SSO session properties
+					switch key {
+					case "sso_start_url":
+						currentSession.SSOStartURL = value
+					case "sso_region":
+						currentSession.SSORegion = value
+					default:
+						// Log unknown property but continue
+						parseErrors = append(parseErrors, NewValidationError(
+							fmt.Sprintf("unknown SSO session property '%s' at line %d", key, lineNumber), nil).
+							WithContext("line_number", lineNumber).
+							WithContext("property_key", key).
+							WithContext("session_name", currentSession.Name))
+					}
+				} else {
+					parseErrors = append(parseErrors, NewValidationError(
+						fmt.Sprintf("malformed property line at %d", lineNumber), nil).
+						WithContext("line_number", lineNumber).
+						WithContext("line_content", line))
+				}
+			} else {
+				parseErrors = append(parseErrors, NewValidationError(
+					fmt.Sprintf("invalid SSO session property format at line %d", lineNumber), nil).
+					WithContext("line_number", lineNumber).
+					WithContext("line_content", line))
+			}
+		} else if currentProfile != nil {
+			// Parse property line
+			if strings.Contains(line, "=") {
+				parts := strings.SplitN(line, "=", 2)
+				if len(parts) == 2 {
+					key := strings.TrimSpace(parts[0])
+					value := strings.TrimSpace(parts[1])
+
+					// Validate property format
+					if key == "" {
+						parseErrors = append(parseErrors, NewValidationError(
+							fmt.Sprintf("empty property key at line %d", lineNumber), nil).
+							WithContext("line_number", lineNumber).
+							WithContext("line_content", line))
+						continue
+					}
+
+					// Set known properties
+					switch key {
+					case "region":
+						currentProfile.Region = value
+					case "sso_start_url":
+						currentProfile.SSOStartURL = value
+					case "sso_region":
+						currentProfile.SSORegion = value
+					case "sso_account_id":
+						currentProfile.SSOAccountID = value
+					case "sso_role_name":
+						currentProfile.SSORoleName = value
+					case "sso_session":
+						currentProfile.SSOSession = value
+					case "output":
+						currentProfile.Output = value
+					default:
+						// Store other properties
+						currentProfile.OtherProperties[key] = value
+					}
+				} else {
+					parseErrors = append(parseErrors, NewValidationError(
+						fmt.Sprintf("malformed property line at %d", lineNumber), nil).
+						WithContext("line_number", lineNumber).
+						WithContext("line_content", line))
+				}
+			} else {
+				parseErrors = append(parseErrors, NewValidationError(
+					fmt.Sprintf("invalid profile property format at line %d", lineNumber), nil).
+					WithContext("line_number", lineNumber).
+					WithContext("line_content", line))
+			}
+		} else {
+			// Line outside of any section
+			parseErrors = append(parseErrors, NewValidationError(
+				fmt.Sprintf("property outside of section at line %d", lineNumber), nil).
+				WithContext("line_number", lineNumber).
+				WithContext("line_content", line))
+		}
+	}
+
+	// Save the last profile if valid
+	if currentProfile != nil {
+		if err := currentProfile.Validate(); err != nil {
+			parseErrors = append(parseErrors, NewValidationError(
+				fmt.Sprintf("invalid profile at end of file"), err).
+				WithContext("profile_name", currentProfile.Name))
+		} else {
+			cf.Profiles[currentProfile.Name] = *currentProfile
+		}
+	}
+
+	// Save the last session if valid
+	if currentSession != nil {
+		if err := currentSession.Validate(); err != nil {
+			parseErrors = append(parseErrors, NewValidationError(
+				fmt.Sprintf("invalid SSO session at end of file"), err).
+				WithContext("session_name", currentSession.Name))
+		} else {
+			cf.Sessions[currentSession.Name] = *currentSession
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return NewFileSystemError("failed to read config file", err).
+			WithContext("file_path", cf.FilePath)
+	}
+
+	// If we have parse errors but successfully parsed some content, return a warning
+	if len(parseErrors) > 0 {
+		// Create a composite error with all parse errors
+		compositeErr := NewValidationError(
+			fmt.Sprintf("config file contains %d parsing errors but partial recovery was successful", len(parseErrors)), nil).
+			WithContext("file_path", cf.FilePath).
+			WithContext("total_errors", len(parseErrors)).
+			WithContext("profiles_parsed", len(cf.Profiles)).
+			WithContext("sessions_parsed", len(cf.Sessions))
+
+		// Add individual errors to context
+		for i, parseErr := range parseErrors {
+			if pgErr, ok := parseErr.(ProfileGeneratorError); ok {
+				compositeErr = compositeErr.WithContext(fmt.Sprintf("error_%d", i), pgErr.Error())
+			}
+		}
+
+		// Return the composite error as a warning - caller can decide whether to proceed
+		return compositeErr
+	}
+
+	return nil
+}
+
 // GetProfile retrieves a profile by name
 func (cf *AWSConfigFile) GetProfile(name string) (Profile, bool) {
 	profile, exists := cf.Profiles[name]
@@ -284,15 +580,20 @@ func (cf *AWSConfigFile) AddProfile(name string, profile Profile) error {
 	return nil
 }
 
-// WriteToFile writes the config file to disk with backup creation
+// WriteToFile writes the config file to disk with backup creation and file locking
 func (cf *AWSConfigFile) WriteToFile() error {
+	// Validate write permissions before attempting
+	if err := validateFilePermissionsForWrite(cf.FilePath); err != nil {
+		return err
+	}
+
 	// Create backup if file exists
+	backupPath := ""
 	if _, err := os.Stat(cf.FilePath); err == nil {
-		backupPath := cf.FilePath + ".backup"
-		if err := copyFile(cf.FilePath, backupPath); err != nil {
-			return NewFileSystemError("failed to create backup", err).
-				WithContext("file_path", cf.FilePath).
-				WithContext("backup_path", backupPath)
+		var backupErr error
+		backupPath, backupErr = cf.CreateBackup()
+		if backupErr != nil {
+			return backupErr
 		}
 	}
 
@@ -302,40 +603,82 @@ func (cf *AWSConfigFile) WriteToFile() error {
 			WithContext("directory", filepath.Dir(cf.FilePath))
 	}
 
-	// Write config file
-	file, err := os.Create(cf.FilePath)
-	if err != nil {
-		return NewFileSystemError("failed to create config file", err).
-			WithContext("file_path", cf.FilePath)
-	}
-	defer file.Close()
-
-	// Set proper permissions
-	if err := file.Chmod(0600); err != nil {
-		return NewFileSystemError("failed to set file permissions", err).
-			WithContext("file_path", cf.FilePath)
-	}
-
-	// Write profiles
-	for _, profile := range cf.Profiles {
-		if _, err := file.WriteString(profile.ToConfigString()); err != nil {
-			return NewFileSystemError("failed to write profile", err).
-				WithContext("profile_name", profile.Name)
+	// Write with file locking for concurrent access protection
+	writeErr := withFileLock(cf.FilePath, func(file *os.File) error {
+		// Truncate file to start fresh
+		if err := file.Truncate(0); err != nil {
+			return NewFileSystemError("failed to truncate config file", err).
+				WithContext("file_path", cf.FilePath)
 		}
+
+		// Seek to beginning
+		if _, err := file.Seek(0, 0); err != nil {
+			return NewFileSystemError("failed to seek to beginning of file", err).
+				WithContext("file_path", cf.FilePath)
+		}
+
+		// Set proper permissions
+		if err := file.Chmod(0600); err != nil {
+			return NewFileSystemError("failed to set file permissions", err).
+				WithContext("file_path", cf.FilePath)
+		}
+
+		// Write SSO sessions first
+		for _, session := range cf.Sessions {
+			sessionConfig := fmt.Sprintf("[sso-session %s]\n", session.Name)
+			if session.SSOStartURL != "" {
+				sessionConfig += fmt.Sprintf("sso_start_url = %s\n", session.SSOStartURL)
+			}
+			if session.SSORegion != "" {
+				sessionConfig += fmt.Sprintf("sso_region = %s\n", session.SSORegion)
+			}
+			sessionConfig += "\n"
+
+			if _, err := file.WriteString(sessionConfig); err != nil {
+				return NewFileSystemError("failed to write SSO session", err).
+					WithContext("session_name", session.Name)
+			}
+		}
+
+		// Write profiles
+		for _, profile := range cf.Profiles {
+			if _, err := file.WriteString(profile.ToConfigString()); err != nil {
+				return NewFileSystemError("failed to write profile", err).
+					WithContext("profile_name", profile.Name)
+			}
+		}
+
+		return nil
+	})
+
+	// If write failed and we have a backup, attempt to restore
+	if writeErr != nil && backupPath != "" {
+		if restoreErr := cf.RestoreFromBackup(backupPath); restoreErr != nil {
+			// Return both errors
+			return NewFileSystemError("write failed and backup restore failed", writeErr).
+				WithContext("restore_error", restoreErr.Error()).
+				WithContext("backup_path", backupPath)
+		}
+		return writeErr
 	}
 
-	return nil
+	return writeErr
 }
 
-// AppendToFile appends new profiles to the end of the config file
+// AppendToFile appends new profiles to the end of the config file with file locking
 func (cf *AWSConfigFile) AppendToFile(profiles []GeneratedProfile) error {
+	// Validate write permissions before attempting
+	if err := validateFilePermissionsForWrite(cf.FilePath); err != nil {
+		return err
+	}
+
 	// Create backup if file exists
+	backupPath := ""
 	if _, err := os.Stat(cf.FilePath); err == nil {
-		backupPath := cf.FilePath + ".backup"
-		if err := copyFile(cf.FilePath, backupPath); err != nil {
-			return NewFileSystemError("failed to create backup", err).
-				WithContext("file_path", cf.FilePath).
-				WithContext("backup_path", backupPath)
+		var backupErr error
+		backupPath, backupErr = cf.CreateBackup()
+		if backupErr != nil {
+			return backupErr
 		}
 	}
 
@@ -345,40 +688,66 @@ func (cf *AWSConfigFile) AppendToFile(profiles []GeneratedProfile) error {
 			WithContext("directory", filepath.Dir(cf.FilePath))
 	}
 
-	// Open file for appending
-	file, err := os.OpenFile(cf.FilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
-	if err != nil {
-		return NewFileSystemError("failed to open config file for appending", err).
-			WithContext("file_path", cf.FilePath)
-	}
-	defer file.Close()
+	// Append with file locking for concurrent access protection
+	appendErr := func() error {
+		// Open file for appending with locking
+		file, err := os.OpenFile(cf.FilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
+		if err != nil {
+			return NewFileSystemError("failed to open config file for appending", err).
+				WithContext("file_path", cf.FilePath)
+		}
+		defer file.Close()
 
-	// Set proper permissions
-	if err := file.Chmod(0600); err != nil {
-		return NewFileSystemError("failed to set file permissions", err).
-			WithContext("file_path", cf.FilePath)
-	}
+		// Acquire lock
+		if err := acquireFileLock(file); err != nil {
+			return err
+		}
+		defer func() {
+			if releaseErr := releaseFileLock(file); releaseErr != nil {
+				// Log the error but don't override the main error
+			}
+		}()
 
-	// Append new profiles
-	for _, genProfile := range profiles {
-		profile := Profile{
-			Name:            genProfile.Name,
-			Region:          genProfile.Region,
-			SSOStartURL:     genProfile.SSOStartURL,
-			SSORegion:       genProfile.SSORegion,
-			SSOAccountID:    genProfile.SSOAccountID,
-			SSORoleName:     genProfile.SSORoleName,
-			SSOSession:      genProfile.SSOSession,
-			OtherProperties: make(map[string]string),
+		// Set proper permissions
+		if err := file.Chmod(0600); err != nil {
+			return NewFileSystemError("failed to set file permissions", err).
+				WithContext("file_path", cf.FilePath)
 		}
 
-		if _, err := file.WriteString(profile.ToConfigString()); err != nil {
-			return NewFileSystemError("failed to write profile", err).
-				WithContext("profile_name", profile.Name)
+		// Append new profiles
+		for _, genProfile := range profiles {
+			profile := Profile{
+				Name:            genProfile.Name,
+				Region:          genProfile.Region,
+				SSOStartURL:     genProfile.SSOStartURL,
+				SSORegion:       genProfile.SSORegion,
+				SSOAccountID:    genProfile.SSOAccountID,
+				SSORoleName:     genProfile.SSORoleName,
+				SSOSession:      genProfile.SSOSession,
+				OtherProperties: make(map[string]string),
+			}
+
+			if _, err := file.WriteString(profile.ToConfigString()); err != nil {
+				return NewFileSystemError("failed to write profile", err).
+					WithContext("profile_name", profile.Name)
+			}
 		}
+
+		return nil
+	}()
+
+	// If append failed and we have a backup, attempt to restore
+	if appendErr != nil && backupPath != "" {
+		if restoreErr := cf.RestoreFromBackup(backupPath); restoreErr != nil {
+			// Return both errors
+			return NewFileSystemError("append failed and backup restore failed", appendErr).
+				WithContext("restore_error", restoreErr.Error()).
+				WithContext("backup_path", backupPath)
+		}
+		return appendErr
 	}
 
-	return nil
+	return appendErr
 }
 
 // GenerateProfileText generates formatted profile text for multiple profiles
@@ -480,7 +849,7 @@ func (p *Profile) IsLegacySSO() bool {
 	return p.IsSSO() && p.SSOSession == "" && p.SSOAccountID != "" && p.SSORoleName != ""
 }
 
-// validateFilePermissions checks if the file has proper permissions
+// validateFilePermissions checks if the file has proper permissions for reading and writing
 func validateFilePermissions(filePath string) error {
 	fileInfo, err := os.Stat(filePath)
 	if err != nil {
@@ -498,6 +867,105 @@ func validateFilePermissions(filePath string) error {
 	return nil
 }
 
+// validateFilePermissionsForWrite checks if the file has proper permissions for modification
+func validateFilePermissionsForWrite(filePath string) error {
+	// Check if file exists
+	fileInfo, err := os.Stat(filePath)
+	if os.IsNotExist(err) {
+		// File doesn't exist, check if directory is writable
+		dir := filepath.Dir(filePath)
+		dirInfo, err := os.Stat(dir)
+		if err != nil {
+			return NewFileSystemError("failed to get directory info", err).
+				WithContext("directory", dir)
+		}
+
+		// Check if directory is writable
+		if dirInfo.Mode().Perm()&0200 == 0 {
+			return NewFileSystemError("directory is not writable", nil).
+				WithContext("directory", dir).
+				WithContext("permissions", dirInfo.Mode().String())
+		}
+
+		return nil
+	}
+
+	if err != nil {
+		return NewFileSystemError("failed to get file info", err).
+			WithContext("file_path", filePath)
+	}
+
+	// Check if file is writable
+	if fileInfo.Mode().Perm()&0200 == 0 {
+		return NewFileSystemError("config file is not writable", nil).
+			WithContext("file_path", filePath).
+			WithContext("permissions", fileInfo.Mode().String())
+	}
+
+	// Check if file is owned by current user (security check)
+	if stat, ok := fileInfo.Sys().(*syscall.Stat_t); ok {
+		currentUID := os.Getuid()
+		if int(stat.Uid) != currentUID {
+			return NewFileSystemError("config file is not owned by current user", nil).
+				WithContext("file_path", filePath).
+				WithContext("file_uid", stat.Uid).
+				WithContext("current_uid", currentUID)
+		}
+	}
+
+	return nil
+}
+
+// acquireFileLock acquires an exclusive lock on the config file for concurrent access protection
+func acquireFileLock(file *os.File) error {
+	// Use flock for file locking on Unix systems
+	err := syscall.Flock(int(file.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
+	if err != nil {
+		if err == syscall.EWOULDBLOCK {
+			return NewFileSystemError("config file is locked by another process", err).
+				WithContext("file_path", file.Name())
+		}
+		return NewFileSystemError("failed to acquire file lock", err).
+			WithContext("file_path", file.Name())
+	}
+	return nil
+}
+
+// releaseFileLock releases the exclusive lock on the config file
+func releaseFileLock(file *os.File) error {
+	err := syscall.Flock(int(file.Fd()), syscall.LOCK_UN)
+	if err != nil {
+		return NewFileSystemError("failed to release file lock", err).
+			WithContext("file_path", file.Name())
+	}
+	return nil
+}
+
+// withFileLock executes a function while holding an exclusive lock on the file
+func withFileLock(filePath string, fn func(*os.File) error) error {
+	// Open file for reading and writing
+	file, err := os.OpenFile(filePath, os.O_RDWR, 0600)
+	if err != nil {
+		return NewFileSystemError("failed to open file for locking", err).
+			WithContext("file_path", filePath)
+	}
+	defer file.Close()
+
+	// Acquire lock
+	if err := acquireFileLock(file); err != nil {
+		return err
+	}
+	defer func() {
+		if releaseErr := releaseFileLock(file); releaseErr != nil {
+			// Log the error but don't override the main error
+			// In a real implementation, you might want to use a logger here
+		}
+	}()
+
+	// Execute the function
+	return fn(file)
+}
+
 // copyFile copies a file from src to dst
 func copyFile(src, dst string) error {
 	srcFile, err := os.Open(src)
@@ -513,6 +981,49 @@ func copyFile(src, dst string) error {
 	defer dstFile.Close()
 
 	if err := dstFile.Chmod(0600); err != nil {
+		return err
+	}
+
+	buf := make([]byte, 4096)
+	for {
+		n, err := srcFile.Read(buf)
+		if n == 0 {
+			break
+		}
+		if err != nil {
+			return err
+		}
+
+		if _, err := dstFile.Write(buf[:n]); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// copyFileWithPermissions copies a file from src to dst while preserving permissions
+func copyFileWithPermissions(src, dst string) error {
+	// Get source file info for permissions
+	srcInfo, err := os.Stat(src)
+	if err != nil {
+		return err
+	}
+
+	srcFile, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer srcFile.Close()
+
+	dstFile, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer dstFile.Close()
+
+	// Set same permissions as source
+	if err := dstFile.Chmod(srcInfo.Mode()); err != nil {
 		return err
 	}
 
@@ -1013,8 +1524,407 @@ func (cf *AWSConfigFile) RestoreFromBackup(backupPath string) error {
 	if err := copyFileWithPermissions(backupPath, cf.FilePath); err != nil {
 		return NewFileSystemError("failed to restore from backup", err).
 			WithContext("backup_path", backupPath).
-			WithContext("target_path", cf.FilePath)
+			WithContext("original_path", cf.FilePath)
 	}
+
+	// Reload the config from the restored file
+	if err := cf.reloadFromFile(); err != nil {
+		return NewFileSystemError("failed to reload config after restore", err).
+			WithContext("file_path", cf.FilePath)
+	}
+
+	return nil
+}
+
+// reloadFromFile reloads the config file content into memory
+func (cf *AWSConfigFile) reloadFromFile() error {
+	// Clear existing data
+	cf.Profiles = make(map[string]Profile)
+	cf.Sessions = make(map[string]SSOSession)
+
+	// Check if file exists
+	if _, err := os.Stat(cf.FilePath); os.IsNotExist(err) {
+		return nil // Empty config if file doesn't exist
+	}
+
+	// Read and parse the file
+	file, err := os.Open(cf.FilePath)
+	if err != nil {
+		return NewFileSystemError("failed to open config file for reload", err).
+			WithContext("file_path", cf.FilePath)
+	}
+	defer file.Close()
+
+	return cf.parseConfigFileWithRecovery(file)
+}
+
+// Transaction represents a transactional operation on the config file
+type Transaction struct {
+	configFile   *AWSConfigFile
+	backupPath   string
+	operations   []TransactionOperation
+	committed    bool
+	rolledBack   bool
+	tempFiles    []string
+}
+
+// TransactionOperation represents a single operation within a transaction
+type TransactionOperation struct {
+	Type        OperationType
+	ProfileName string
+	OldProfile  *Profile
+	NewProfile  *Profile
+	Description string
+}
+
+// OperationType represents the type of operation in a transaction
+type OperationType int
+
+const (
+	OpAdd OperationType = iota
+	OpUpdate
+	OpRemove
+)
+
+// String returns the string representation of the operation type
+func (ot OperationType) String() string {
+	switch ot {
+	case OpAdd:
+		return "add"
+	case OpUpdate:
+		return "update"
+	case OpRemove:
+		return "remove"
+	default:
+		return "unknown"
+	}
+}
+
+// BeginTransaction starts a new transaction for atomic operations
+func (cf *AWSConfigFile) BeginTransaction() (*Transaction, error) {
+	// Create backup before starting transaction
+	backupPath, err := cf.CreateBackup()
+	if err != nil {
+		return nil, NewBackupError("failed to create transaction backup", err, "", cf.FilePath).
+			WithOperation("begin_transaction")
+	}
+
+	return &Transaction{
+		configFile: cf,
+		backupPath: backupPath,
+		operations: make([]TransactionOperation, 0),
+		tempFiles:  make([]string, 0),
+	}, nil
+}
+
+// AddProfile adds a profile operation to the transaction
+func (tx *Transaction) AddProfile(name string, profile Profile) error {
+	if tx.committed || tx.rolledBack {
+		return NewValidationError("transaction is already completed", nil).
+			WithContext("committed", tx.committed).
+			WithContext("rolled_back", tx.rolledBack)
+	}
+
+	// Check if profile already exists
+	if _, exists := tx.configFile.Profiles[name]; exists {
+		return NewValidationError("profile already exists", nil).
+			WithContext("profile_name", name)
+	}
+
+	// Validate the profile
+	if err := profile.Validate(); err != nil {
+		return err
+	}
+
+	// Record the operation
+	tx.operations = append(tx.operations, TransactionOperation{
+		Type:        OpAdd,
+		ProfileName: name,
+		NewProfile:  &profile,
+		Description: fmt.Sprintf("add profile %s", name),
+	})
+
+	// Apply the operation to the in-memory config
+	profile.Name = name
+	tx.configFile.Profiles[name] = profile
+
+	return nil
+}
+
+// UpdateProfile adds a profile update operation to the transaction
+func (tx *Transaction) UpdateProfile(name string, newProfile Profile) error {
+	if tx.committed || tx.rolledBack {
+		return NewValidationError("transaction is already completed", nil).
+			WithContext("committed", tx.committed).
+			WithContext("rolled_back", tx.rolledBack)
+	}
+
+	// Check if profile exists
+	oldProfile, exists := tx.configFile.Profiles[name]
+	if !exists {
+		return NewValidationError("profile does not exist", nil).
+			WithContext("profile_name", name)
+	}
+
+	// Validate the new profile
+	if err := newProfile.Validate(); err != nil {
+		return err
+	}
+
+	// Record the operation
+	oldProfileCopy := oldProfile
+	tx.operations = append(tx.operations, TransactionOperation{
+		Type:        OpUpdate,
+		ProfileName: name,
+		OldProfile:  &oldProfileCopy,
+		NewProfile:  &newProfile,
+		Description: fmt.Sprintf("update profile %s", name),
+	})
+
+	// Apply the operation to the in-memory config
+	newProfile.Name = name
+	tx.configFile.Profiles[name] = newProfile
+
+	return nil
+}
+
+// RemoveProfile adds a profile removal operation to the transaction
+func (tx *Transaction) RemoveProfile(name string) error {
+	if tx.committed || tx.rolledBack {
+		return NewValidationError("transaction is already completed", nil).
+			WithContext("committed", tx.committed).
+			WithContext("rolled_back", tx.rolledBack)
+	}
+
+	// Check if profile exists
+	oldProfile, exists := tx.configFile.Profiles[name]
+	if !exists {
+		return NewValidationError("profile does not exist", nil).
+			WithContext("profile_name", name)
+	}
+
+	// Record the operation
+	oldProfileCopy := oldProfile
+	tx.operations = append(tx.operations, TransactionOperation{
+		Type:        OpRemove,
+		ProfileName: name,
+		OldProfile:  &oldProfileCopy,
+		Description: fmt.Sprintf("remove profile %s", name),
+	})
+
+	// Apply the operation to the in-memory config
+	delete(tx.configFile.Profiles, name)
+
+	return nil
+}
+
+// ReplaceProfile adds a profile replacement operation to the transaction
+func (tx *Transaction) ReplaceProfile(oldName, newName string, newProfile Profile) error {
+	if tx.committed || tx.rolledBack {
+		return NewValidationError("transaction is already completed", nil).
+			WithContext("committed", tx.committed).
+			WithContext("rolled_back", tx.rolledBack)
+	}
+
+	// If names are the same, this is just an update
+	if oldName == newName {
+		return tx.UpdateProfile(oldName, newProfile)
+	}
+
+	// Check if old profile exists
+	oldProfile, exists := tx.configFile.Profiles[oldName]
+	if !exists {
+		return NewValidationError("profile to replace does not exist", nil).
+			WithContext("profile_name", oldName)
+	}
+
+	// Check if new name already exists (unless it's the same profile)
+	if _, exists := tx.configFile.Profiles[newName]; exists {
+		return NewValidationError("new profile name already exists", nil).
+			WithContext("profile_name", newName)
+	}
+
+	// Validate the new profile
+	if err := newProfile.Validate(); err != nil {
+		return err
+	}
+
+	// This is a combination of remove and add operations
+	// First remove the old profile
+	if err := tx.RemoveProfile(oldName); err != nil {
+		return err
+	}
+
+	// Then add the new profile
+	return tx.AddProfile(newName, newProfile)
+}
+
+// Commit applies all transaction operations to the file system
+func (tx *Transaction) Commit() error {
+	if tx.committed || tx.rolledBack {
+		return NewValidationError("transaction is already completed", nil).
+			WithContext("committed", tx.committed).
+			WithContext("rolled_back", tx.rolledBack)
+	}
+
+	// Validate config integrity before committing
+	if err := tx.configFile.ValidateConfigIntegrity(); err != nil {
+		// Rollback on validation failure
+		if rollbackErr := tx.Rollback(); rollbackErr != nil {
+			return NewValidationError("commit validation failed and rollback failed", err).
+				WithContext("rollback_error", rollbackErr.Error())
+		}
+		return NewValidationError("commit validation failed", err)
+	}
+
+	// Write the config to file
+	if err := tx.configFile.WriteToFile(); err != nil {
+		// Rollback on write failure
+		if rollbackErr := tx.Rollback(); rollbackErr != nil {
+			return NewFileSystemError("commit write failed and rollback failed", err).
+				WithContext("rollback_error", rollbackErr.Error())
+		}
+		return NewFileSystemError("commit write failed", err)
+	}
+
+	// Mark as committed
+	tx.committed = true
+
+	// Clean up backup and temp files
+	if err := tx.cleanup(); err != nil {
+		// Log cleanup error but don't fail the commit
+		// In a real implementation, you might want to use a logger here
+	}
+
+	return nil
+}
+
+// Rollback reverts all transaction operations
+func (tx *Transaction) Rollback() error {
+	if tx.committed {
+		return NewValidationError("cannot rollback committed transaction", nil)
+	}
+
+	if tx.rolledBack {
+		return NewValidationError("transaction is already rolled back", nil)
+	}
+
+	// Restore from backup if it exists
+	if tx.backupPath != "" {
+		if err := tx.configFile.RestoreFromBackup(tx.backupPath); err != nil {
+			return NewBackupError("failed to restore from backup during rollback", err, 
+				tx.backupPath, tx.configFile.FilePath).
+				WithOperation("rollback")
+		}
+	}
+
+	// Mark as rolled back
+	tx.rolledBack = true
+
+	// Clean up temp files
+	if err := tx.cleanup(); err != nil {
+		// Log cleanup error but don't fail the rollback
+	}
+
+	return nil
+}
+
+// cleanup removes temporary files created during the transaction
+func (tx *Transaction) cleanup() error {
+	var cleanupErrors []error
+
+	// Remove backup file if transaction was committed successfully
+	if tx.committed && tx.backupPath != "" {
+		if err := os.Remove(tx.backupPath); err != nil && !os.IsNotExist(err) {
+			cleanupErrors = append(cleanupErrors, 
+				NewFileSystemError("failed to remove backup file", err).
+					WithContext("backup_path", tx.backupPath))
+		}
+	}
+
+	// Remove any temporary files
+	for _, tempFile := range tx.tempFiles {
+		if err := os.Remove(tempFile); err != nil && !os.IsNotExist(err) {
+			cleanupErrors = append(cleanupErrors, 
+				NewFileSystemError("failed to remove temporary file", err).
+					WithContext("temp_file", tempFile))
+		}
+	}
+
+	// Return composite error if there were cleanup issues
+	if len(cleanupErrors) > 0 {
+		return NewFileSystemError(
+			fmt.Sprintf("cleanup completed with %d errors", len(cleanupErrors)), nil).
+			WithContext("error_count", len(cleanupErrors))
+	}
+
+	return nil
+}
+
+// GetOperations returns a copy of all operations in the transaction
+func (tx *Transaction) GetOperations() []TransactionOperation {
+	operations := make([]TransactionOperation, len(tx.operations))
+	copy(operations, tx.operations)
+	return operations
+}
+
+// GetOperationSummary returns a human-readable summary of transaction operations
+func (tx *Transaction) GetOperationSummary() string {
+	if len(tx.operations) == 0 {
+		return "No operations in transaction"
+	}
+
+	var summary strings.Builder
+	summary.WriteString(fmt.Sprintf("Transaction with %d operations:\n", len(tx.operations)))
+
+	for i, op := range tx.operations {
+		summary.WriteString(fmt.Sprintf("  %d. %s\n", i+1, op.Description))
+	}
+
+	if tx.committed {
+		summary.WriteString("Status: Committed\n")
+	} else if tx.rolledBack {
+		summary.WriteString("Status: Rolled back\n")
+	} else {
+		summary.WriteString("Status: Pending\n")
+	}
+
+	return summary.String()
+}
+
+// ExecuteAtomicProfileOperations executes multiple profile operations atomically
+func (cf *AWSConfigFile) ExecuteAtomicProfileOperations(operations []func(*Transaction) error) error {
+	// Begin transaction
+	tx, err := cf.BeginTransaction()
+	if err != nil {
+		return err
+	}
+
+	// Ensure rollback on panic or error
+	defer func() {
+		if !tx.committed && !tx.rolledBack {
+			if rollbackErr := tx.Rollback(); rollbackErr != nil {
+				// Log rollback error but don't override the main error
+			}
+		}
+	}()
+
+	// Execute all operations
+	for i, operation := range operations {
+		if err := operation(tx); err != nil {
+			// Rollback on any operation failure
+			if rollbackErr := tx.Rollback(); rollbackErr != nil {
+				return NewValidationError(
+					fmt.Sprintf("operation %d failed and rollback failed", i+1), err).
+					WithContext("rollback_error", rollbackErr.Error())
+			}
+			return NewValidationError(fmt.Sprintf("operation %d failed", i+1), err)
+		}
+	}
+
+	// Commit all operations
+	return tx.Commit()
+}
 
 	// Reload the config from the restored file
 	restoredConfig, err := LoadAWSConfigFile(cf.FilePath)
