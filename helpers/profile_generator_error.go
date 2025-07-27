@@ -38,7 +38,7 @@ type ProfileGeneratorError struct {
 	Type    ErrorType
 	Message string
 	Cause   error
-	Context map[string]interface{}
+	Context map[string]any
 }
 
 // Error implements the error interface
@@ -55,9 +55,9 @@ func (e ProfileGeneratorError) Unwrap() error {
 }
 
 // WithContext adds context information to the error
-func (e ProfileGeneratorError) WithContext(key string, value interface{}) ProfileGeneratorError {
+func (e ProfileGeneratorError) WithContext(key string, value any) ProfileGeneratorError {
 	if e.Context == nil {
-		e.Context = make(map[string]interface{})
+		e.Context = make(map[string]any)
 	}
 	e.Context[key] = value
 	return e
@@ -69,7 +69,7 @@ func NewValidationError(message string, cause error) ProfileGeneratorError {
 		Type:    ErrorTypeValidation,
 		Message: message,
 		Cause:   cause,
-		Context: make(map[string]interface{}),
+		Context: make(map[string]any),
 	}
 }
 
@@ -79,7 +79,7 @@ func NewAuthError(message string, cause error) ProfileGeneratorError {
 		Type:    ErrorTypeAuth,
 		Message: message,
 		Cause:   cause,
-		Context: make(map[string]interface{}),
+		Context: make(map[string]any),
 	}
 }
 
@@ -89,7 +89,7 @@ func NewAPIError(message string, cause error) ProfileGeneratorError {
 		Type:    ErrorTypeAPI,
 		Message: message,
 		Cause:   cause,
-		Context: make(map[string]interface{}),
+		Context: make(map[string]any),
 	}
 }
 
@@ -99,7 +99,7 @@ func NewFileSystemError(message string, cause error) ProfileGeneratorError {
 		Type:    ErrorTypeFileSystem,
 		Message: message,
 		Cause:   cause,
-		Context: make(map[string]interface{}),
+		Context: make(map[string]any),
 	}
 }
 
@@ -109,6 +109,6 @@ func NewNetworkError(message string, cause error) ProfileGeneratorError {
 		Type:    ErrorTypeNetwork,
 		Message: message,
 		Cause:   cause,
-		Context: make(map[string]interface{}),
+		Context: make(map[string]any),
 	}
 }

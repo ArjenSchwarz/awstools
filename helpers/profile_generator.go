@@ -298,18 +298,26 @@ func (pg *ProfileGenerator) AppendToConfig(profiles []GeneratedProfile) error {
 	return nil
 }
 
-// GenerateProfilesWorkflow executes the complete profile generation workflow
+// GenerateProfilesWorkflow executes the complete profile generation workflow with conflict resolution
 func (pg *ProfileGenerator) GenerateProfilesWorkflow() (*ProfileGenerationResult, error) {
 	result := &ProfileGenerationResult{
 		ConflictingProfiles: []string{},
 		SuccessfulProfiles:  []string{},
 		Errors:              []ProfileGeneratorError{},
+		DetectedConflicts:   []ProfileConflict{},
+		ResolutionActions:   []ConflictAction{},
+		ReplacedProfiles:    []ProfileReplacement{},
+		SkippedRoles:        []DiscoveredRole{},
 	}
 
 	// Validate template profile
 	templateProfile, err := pg.ValidateTemplateProfile()
 	if err != nil {
-		result.AddError(err.(ProfileGeneratorError))
+		if pgErr, ok := err.(ProfileGeneratorError); ok {
+			result.AddError(pgErr)
+		} else {
+			result.AddError(NewValidationError("template profile validation failed", err))
+		}
 		return result, err
 	}
 	result.TemplateProfile = *templateProfile
@@ -317,34 +325,90 @@ func (pg *ProfileGenerator) GenerateProfilesWorkflow() (*ProfileGenerationResult
 	// Discover roles
 	discoveredRoles, err := pg.DiscoverRoles(templateProfile)
 	if err != nil {
-		result.AddError(err.(ProfileGeneratorError))
+		if pgErr, ok := err.(ProfileGeneratorError); ok {
+			result.AddError(pgErr)
+		} else {
+			result.AddError(NewAPIError("role discovery failed", err))
+		}
 		return result, err
 	}
 	result.DiscoveredRoles = discoveredRoles
 
-	// Generate profiles
-	generatedProfiles, err := pg.GenerateProfiles(templateProfile, discoveredRoles)
+	// Detect profile conflicts
+	conflicts, err := pg.DetectProfileConflicts(discoveredRoles)
 	if err != nil {
-		result.AddError(err.(ProfileGeneratorError))
+		if pgErr, ok := err.(ProfileGeneratorError); ok {
+			result.AddError(pgErr)
+		} else {
+			result.AddError(NewValidationError("conflict detection failed", err))
+		}
 		return result, err
 	}
-	result.GeneratedProfiles = generatedProfiles
+	result.DetectedConflicts = conflicts
+
+	// Separate conflicted and non-conflicted roles
+	_, nonConflictedRoles := pg.FilterRolesByConflicts(discoveredRoles, conflicts)
+
+	// Resolve conflicts if any exist
+	var conflictResolution *ConflictResolutionResult
+	if len(conflicts) > 0 {
+		conflictResolution, err = pg.ResolveConflicts(conflicts)
+		if err != nil {
+			if pgErr, ok := err.(ProfileGeneratorError); ok {
+				result.AddError(pgErr)
+			} else {
+				result.AddError(NewValidationError("conflict resolution failed", err))
+			}
+			return result, err
+		}
+		result.ResolutionActions = conflictResolution.Actions
+		result.SkippedRoles = conflictResolution.SkippedRoles
+	} else {
+		conflictResolution = &ConflictResolutionResult{
+			GeneratedProfiles: []GeneratedProfile{},
+			SkippedRoles:      []DiscoveredRole{},
+			Actions:           []ConflictAction{},
+		}
+	}
+
+	// Generate profiles for non-conflicted roles
+	nonConflictedProfiles, err := pg.GenerateProfilesForNonConflictedRoles(nonConflictedRoles)
+	if err != nil {
+		if pgErr, ok := err.(ProfileGeneratorError); ok {
+			result.AddError(pgErr)
+		} else {
+			result.AddError(NewValidationError("profile generation failed", err))
+		}
+		return result, err
+	}
+
+	// Combine all generated profiles
+	allGeneratedProfiles := append(conflictResolution.GeneratedProfiles, nonConflictedProfiles...)
+	result.GeneratedProfiles = allGeneratedProfiles
 
 	// Preview profiles
-	if err := pg.PreviewProfiles(generatedProfiles); err != nil {
-		result.AddError(err.(ProfileGeneratorError))
+	if err := pg.PreviewProfiles(allGeneratedProfiles); err != nil {
+		if pgErr, ok := err.(ProfileGeneratorError); ok {
+			result.AddError(pgErr)
+		} else {
+			result.AddError(NewValidationError("profile preview failed", err))
+		}
 		return result, err
 	}
 
 	// Append to config (if approved)
 	if pg.autoApprove {
-		if err := pg.AppendToConfig(generatedProfiles); err != nil {
-			result.AddError(err.(ProfileGeneratorError))
+		if err := pg.AppendToConfig(allGeneratedProfiles); err != nil {
+			if pgErr, ok := err.(ProfileGeneratorError); ok {
+				result.AddError(pgErr)
+			} else {
+				result.AddError(NewFileSystemError("config file update failed", err))
+			}
 			return result, err
 		}
 
 		// Track successful profiles
-		for _, profile := range generatedProfiles {
+		for _, profile := range allGeneratedProfiles {
 			result.SuccessfulProfiles = append(result.SuccessfulProfiles, profile.Name)
 		}
 	}
@@ -773,4 +837,67 @@ func (pg *ProfileGenerator) GetConflictStrategy() ConflictResolutionStrategy {
 // SetConflictStrategy sets the conflict resolution strategy
 func (pg *ProfileGenerator) SetConflictStrategy(strategy ConflictResolutionStrategy) {
 	pg.conflictStrategy = strategy
+}
+
+// GetProgressInfo returns information about the current progress of profile generation
+func (pg *ProfileGenerator) GetProgressInfo(result *ProfileGenerationResult) map[string]any {
+	info := make(map[string]any)
+
+	info["template_profile"] = result.TemplateProfile.Name
+	info["discovered_roles"] = len(result.DiscoveredRoles)
+	info["detected_conflicts"] = len(result.DetectedConflicts)
+	info["resolution_actions"] = len(result.ResolutionActions)
+	info["generated_profiles"] = len(result.GeneratedProfiles)
+	info["successful_profiles"] = len(result.SuccessfulProfiles)
+	info["skipped_roles"] = len(result.SkippedRoles)
+	info["errors"] = len(result.Errors)
+	info["has_backup"] = result.BackupPath != ""
+	info["backup_path"] = result.BackupPath
+
+	// Calculate success rate
+	totalRoles := len(result.DiscoveredRoles)
+	if totalRoles > 0 {
+		successRate := float64(len(result.SuccessfulProfiles)) / float64(totalRoles) * 100
+		info["success_rate"] = fmt.Sprintf("%.1f%%", successRate)
+	} else {
+		info["success_rate"] = "N/A"
+	}
+
+	return info
+}
+
+// FormatProgressMessage creates a formatted progress message for display
+func (pg *ProfileGenerator) FormatProgressMessage(phase string, message string, details map[string]any) string {
+	var msg strings.Builder
+
+	// Add phase indicator
+	switch phase {
+	case "validation":
+		msg.WriteString("🔍 ")
+	case "discovery":
+		msg.WriteString("🔍 ")
+	case "conflict_detection":
+		msg.WriteString("⚠️  ")
+	case "conflict_resolution":
+		msg.WriteString("🔧 ")
+	case "generation":
+		msg.WriteString("📝 ")
+	case "success":
+		msg.WriteString("✅ ")
+	case "error":
+		msg.WriteString("❌ ")
+	default:
+		msg.WriteString("ℹ️  ")
+	}
+
+	msg.WriteString(message)
+
+	// Add details if provided
+	if details != nil && len(details) > 0 {
+		for key, value := range details {
+			msg.WriteString(fmt.Sprintf(" [%s: %v]", key, value))
+		}
+	}
+
+	return msg.String()
 }
