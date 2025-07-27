@@ -159,6 +159,150 @@ func (pg *ProfileGenerator) GenerateProfilesForNonConflictedRoles(nonConflictedR
 
 ---
 
+### Issue: Inefficient Regex Compilation in Config File Parsing
+**Location**: `helpers/aws_config_file.go` (lines 150-160, 200-210)
+**Description**: Regular expressions for parsing profile sections are compiled on every call to `parseConfigFile` and `parseConfigFileWithRecovery`, causing unnecessary CPU overhead during config file parsing.
+**Impact**: Minor to moderate performance impact - regex compilation overhead on every config file parse operation
+**Solution**:
+```go
+// Compile regex patterns once at package level
+var (
+    profileNameRegex   = regexp.MustCompile(`^\[profile\s+(.+)\]`)
+    defaultProfileRegex = regexp.MustCompile(`^\[default\]`)
+    ssoSessionRegex    = regexp.MustCompile(`^\[sso-session\s+(.+)\]`)
+)
+
+// Use pre-compiled patterns in parsing functions
+func (cf *AWSConfigFile) parseConfigFile(file *os.File) error {
+    scanner := bufio.NewScanner(file)
+    // ... existing code ...
+    
+    // Use pre-compiled regex patterns
+    if matches := profileNameRegex.FindStringSubmatch(line); matches != nil {
+        // ... existing logic ...
+    }
+}
+```
+**Trade-offs**: Slightly more memory usage for compiled patterns, but significant performance improvement for repeated parsing operations
+
+---
+
+### Issue: Redundant SSO Configuration Resolution in Conflict Detection
+**Location**: `helpers/profile_conflict_detector.go` (lines 60-80)
+**Description**: The `preResolveSSO()` method iterates through all profiles and resolves SSO configurations, but doesn't handle errors efficiently and may resolve configurations that are never used.
+**Impact**: Minor performance impact - unnecessary SSO resolution for profiles that won't be involved in conflicts
+**Solution**:
+```go
+// Lazy resolution with error handling and caching
+func (pcd *ProfileConflictDetector) getResolvedSSOConfig(profileName string, profile Profile) (*ResolvedSSOConfig, error) {
+    // Check cache first
+    if config, exists := pcd.resolvedSSOConfigs[profileName]; exists {
+        return config, nil
+    }
+    
+    // Only resolve if profile is SSO
+    if !profile.IsSSO() {
+        return nil, fmt.Errorf("profile %s is not an SSO profile", profileName)
+    }
+    
+    // Resolve and cache
+    resolvedConfig, err := pcd.configFile.ResolveProfileSSOConfig(profile)
+    if err != nil {
+        return nil, err
+    }
+    
+    pcd.resolvedSSOConfigs[profileName] = resolvedConfig
+    return resolvedConfig, nil
+}
+```
+**Trade-offs**: More complex caching logic but avoids unnecessary resolution and provides better error handling
+
+---
+
+### Issue: Inefficient String Concatenation in Profile Generation
+**Location**: `helpers/profile_generator_types.go` (lines 100-120)
+**Description**: The `ToConfigString()` method uses string concatenation with `fmt.Sprintf` for each line, which creates multiple temporary strings.
+**Impact**: Minor performance impact - unnecessary string allocations during profile serialization
+**Solution**:
+```go
+func (gp *GeneratedProfile) ToConfigString() string {
+    var config strings.Builder
+    // More accurate size estimation: profile name + region + SSO config
+    estimatedSize := len(gp.Name) + len(gp.Region) + len(gp.SSOStartURL) + len(gp.SSORegion) + 100
+    config.Grow(estimatedSize)
+    
+    config.WriteString("[profile ")
+    config.WriteString(gp.Name)
+    config.WriteString("]\nregion = ")
+    config.WriteString(gp.Region)
+    config.WriteString("\nsso_start_url = ")
+    config.WriteString(gp.SSOStartURL)
+    config.WriteString("\nsso_region = ")
+    config.WriteString(gp.SSORegion)
+    config.WriteString("\n")
+
+    if gp.IsLegacy {
+        config.WriteString("sso_account_id = ")
+        config.WriteString(gp.SSOAccountID)
+        config.WriteString("\nsso_role_name = ")
+        config.WriteString(gp.SSORoleName)
+        config.WriteString("\n")
+    } else {
+        config.WriteString("sso_session = ")
+        config.WriteString(gp.SSOSession)
+        config.WriteString("\n")
+    }
+
+    return config.String()
+}
+```
+**Trade-offs**: More verbose code but eliminates temporary string allocations from fmt.Sprintf calls
+
+---
+
+### Issue: Inefficient Map Key Generation in Role Filtering
+**Location**: `helpers/profile_generator.go` (lines 580-590, 600-610)
+**Description**: The `FilterRolesByConflicts` function generates map keys using `fmt.Sprintf` for each role, creating unnecessary string allocations.
+**Impact**: Minor performance impact - string allocation overhead during role filtering
+**Solution**:
+```go
+func (pg *ProfileGenerator) FilterRolesByConflicts(discoveredRoles []DiscoveredRole, conflicts []ProfileConflict) (conflictedRoles []DiscoveredRole, nonConflictedRoles []DiscoveredRole) {
+    // Create a map of conflicted roles for efficient lookup
+    conflictedRoleMap := make(map[string]bool, len(conflicts))
+    
+    // Pre-allocate string builder for key generation
+    var keyBuilder strings.Builder
+    keyBuilder.Grow(32) // Typical account ID (12) + separator (1) + role name (~15-20)
+    
+    for _, conflict := range conflicts {
+        keyBuilder.Reset()
+        keyBuilder.WriteString(conflict.DiscoveredRole.AccountID)
+        keyBuilder.WriteString(":")
+        keyBuilder.WriteString(conflict.DiscoveredRole.PermissionSetName)
+        conflictedRoleMap[keyBuilder.String()] = true
+    }
+
+    // Separate roles based on conflict status
+    for _, role := range discoveredRoles {
+        keyBuilder.Reset()
+        keyBuilder.WriteString(role.AccountID)
+        keyBuilder.WriteString(":")
+        keyBuilder.WriteString(role.PermissionSetName)
+        
+        if conflictedRoleMap[keyBuilder.String()] {
+            conflictedRoles = append(conflictedRoles, role)
+        } else {
+            nonConflictedRoles = append(nonConflictedRoles, role)
+        }
+    }
+
+    return conflictedRoles, nonConflictedRoles
+}
+```
+**Trade-offs**: More complex key generation logic but eliminates fmt.Sprintf allocations
+
+---
+
 ## Summary
 
 The profile generator enhancement code is generally well-optimized with good use of:
@@ -167,4 +311,10 @@ The profile generator enhancement code is generally well-optimized with good use
 - Efficient profile lookup indices for O(1) operations
 - String builder capacity estimation for reduced allocations
 
-The identified improvements are mostly minor optimizations that would provide marginal performance gains. The code already demonstrates good performance practices overall.
+The identified improvements are mostly minor optimizations that would provide marginal performance gains. The code already demonstrates good performance practices overall. The most impactful improvements would be:
+
+1. **Regex compilation optimization** - Move regex compilation to package level for config parsing
+2. **Lazy SSO resolution** - Only resolve SSO configurations when needed during conflict detection
+3. **String building optimizations** - Eliminate fmt.Sprintf calls in hot paths
+
+These optimizations would be most beneficial in scenarios with large numbers of profiles or frequent config file parsing operations.

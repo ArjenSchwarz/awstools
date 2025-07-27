@@ -1,6 +1,7 @@
 package helpers
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -1813,4 +1814,915 @@ func TestAWSConfigFile_PermissionPreservation(t *testing.T) {
 
 	// Clean up
 	os.Remove(backupPath)
+}
+func TestAWSConfigFile_ParseConfigFileWithRecovery(t *testing.T) {
+	tests := []struct {
+		name           string
+		configContent  string
+		expectProfiles int
+		expectSessions int
+		expectError    bool
+		errorType      ErrorType
+	}{
+		{
+			name: "valid config with profiles and sessions",
+			configContent: `[sso-session dev]
+sso_start_url = https://example.awsapps.com/start
+sso_region = us-east-1
+
+[profile dev-admin]
+sso_session = dev
+sso_account_id = 123456789012
+sso_role_name = AdministratorAccess
+region = us-east-1
+
+[profile legacy-profile]
+sso_start_url = https://example.awsapps.com/start
+sso_region = us-east-1
+sso_account_id = 123456789012
+sso_role_name = ReadOnlyAccess
+region = us-east-1`,
+			expectProfiles: 2,
+			expectSessions: 1,
+			expectError:    false,
+		},
+		{
+			name: "malformed config with partial recovery",
+			configContent: `[sso-session dev]
+sso_start_url = https://example.awsapps.com/start
+sso_region = us-east-1
+
+[profile dev-admin]
+sso_session = dev
+sso_account_id = 123456789012
+sso_role_name = AdministratorAccess
+region = us-east-1
+
+[profile invalid-profile]
+malformed_line_without_equals
+sso_account_id = 123456789012
+
+[profile valid-profile]
+sso_session = dev
+sso_account_id = 987654321098
+sso_role_name = ReadOnlyAccess
+region = us-west-2`,
+			expectProfiles: 2, // dev-admin and valid-profile should be parsed
+			expectSessions: 1,
+			expectError:    true,
+			errorType:      ErrorTypeValidation,
+		},
+		{
+			name: "empty profile name",
+			configContent: `[profile ]
+sso_session = dev
+sso_account_id = 123456789012`,
+			expectProfiles: 0,
+			expectSessions: 0,
+			expectError:    true,
+			errorType:      ErrorTypeValidation,
+		},
+		{
+			name: "property outside section",
+			configContent: `sso_start_url = https://example.awsapps.com/start
+
+[profile dev-admin]
+sso_account_id = 123456789012`,
+			expectProfiles: 1,
+			expectSessions: 0,
+			expectError:    true,
+			errorType:      ErrorTypeValidation,
+		},
+		{
+			name: "unknown SSO session property",
+			configContent: `[sso-session dev]
+sso_start_url = https://example.awsapps.com/start
+sso_region = us-east-1
+unknown_property = value
+
+[profile dev-admin]
+sso_session = dev
+sso_account_id = 123456789012
+sso_role_name = AdministratorAccess`,
+			expectProfiles: 1,
+			expectSessions: 1,
+			expectError:    true,
+			errorType:      ErrorTypeValidation,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create temporary file
+			tmpFile, err := os.CreateTemp("", "aws-config-test-*.conf")
+			require.NoError(t, err)
+			defer os.Remove(tmpFile.Name())
+
+			// Write test content
+			_, err = tmpFile.WriteString(tt.configContent)
+			require.NoError(t, err)
+			tmpFile.Close()
+
+			// Create config file instance
+			configFile := &AWSConfigFile{
+				FilePath: tmpFile.Name(),
+				Profiles: make(map[string]Profile),
+				Sessions: make(map[string]SSOSession),
+			}
+
+			// Open file for parsing
+			file, err := os.Open(tmpFile.Name())
+			require.NoError(t, err)
+			defer file.Close()
+
+			// Parse with recovery
+			err = configFile.parseConfigFileWithRecovery(file)
+
+			if tt.expectError {
+				assert.Error(t, err)
+				if pgErr, ok := err.(ProfileGeneratorError); ok {
+					assert.Equal(t, tt.errorType, pgErr.Type)
+				}
+			} else {
+				assert.NoError(t, err)
+			}
+
+			assert.Equal(t, tt.expectProfiles, len(configFile.Profiles))
+			assert.Equal(t, tt.expectSessions, len(configFile.Sessions))
+		})
+	}
+}
+
+func TestValidateFilePermissionsForWrite(t *testing.T) {
+	t.Run("writable file", func(t *testing.T) {
+		tmpFile, err := os.CreateTemp("", "aws-config-test-*.conf")
+		require.NoError(t, err)
+		defer os.Remove(tmpFile.Name())
+		tmpFile.Close()
+
+		// Set writable permissions
+		err = os.Chmod(tmpFile.Name(), 0600)
+		require.NoError(t, err)
+
+		err = validateFilePermissionsForWrite(tmpFile.Name())
+		assert.NoError(t, err)
+	})
+
+	t.Run("read-only file", func(t *testing.T) {
+		tmpFile, err := os.CreateTemp("", "aws-config-test-*.conf")
+		require.NoError(t, err)
+		defer os.Remove(tmpFile.Name())
+		tmpFile.Close()
+
+		// Set read-only permissions
+		err = os.Chmod(tmpFile.Name(), 0400)
+		require.NoError(t, err)
+
+		err = validateFilePermissionsForWrite(tmpFile.Name())
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "not writable")
+	})
+
+	t.Run("non-existent file with writable directory", func(t *testing.T) {
+		tmpDir, err := os.MkdirTemp("", "aws-config-test-*")
+		require.NoError(t, err)
+		defer os.RemoveAll(tmpDir)
+
+		nonExistentFile := filepath.Join(tmpDir, "config")
+		err = validateFilePermissionsForWrite(nonExistentFile)
+		assert.NoError(t, err)
+	})
+
+	t.Run("non-existent file with read-only directory", func(t *testing.T) {
+		tmpDir, err := os.MkdirTemp("", "aws-config-test-*")
+		require.NoError(t, err)
+		defer os.RemoveAll(tmpDir)
+
+		// Set directory to read-only
+		err = os.Chmod(tmpDir, 0500)
+		require.NoError(t, err)
+
+		nonExistentFile := filepath.Join(tmpDir, "config")
+		err = validateFilePermissionsForWrite(nonExistentFile)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "not writable")
+	})
+}
+
+func TestWithFileLock(t *testing.T) {
+	t.Run("successful lock and operation", func(t *testing.T) {
+		tmpFile, err := os.CreateTemp("", "aws-config-test-*.conf")
+		require.NoError(t, err)
+		defer os.Remove(tmpFile.Name())
+		tmpFile.Close()
+
+		executed := false
+		err = withFileLock(tmpFile.Name(), func(file *os.File) error {
+			executed = true
+			// Write some test data
+			_, writeErr := file.WriteString("test data")
+			return writeErr
+		})
+
+		assert.NoError(t, err)
+		assert.True(t, executed)
+
+		// Verify data was written
+		content, err := os.ReadFile(tmpFile.Name())
+		require.NoError(t, err)
+		assert.Equal(t, "test data", string(content))
+	})
+
+	t.Run("function returns error", func(t *testing.T) {
+		tmpFile, err := os.CreateTemp("", "aws-config-test-*.conf")
+		require.NoError(t, err)
+		defer os.Remove(tmpFile.Name())
+		tmpFile.Close()
+
+		testError := errors.New("test error")
+		err = withFileLock(tmpFile.Name(), func(file *os.File) error {
+			return testError
+		})
+
+		assert.Equal(t, testError, err)
+	})
+
+	t.Run("non-existent file", func(t *testing.T) {
+		err = withFileLock("/non/existent/file", func(file *os.File) error {
+			return nil
+		})
+
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to open file for locking")
+	})
+}
+
+func TestAWSConfigFile_WriteToFileWithLocking(t *testing.T) {
+	t.Run("successful write with backup", func(t *testing.T) {
+		tmpFile, err := os.CreateTemp("", "aws-config-test-*.conf")
+		require.NoError(t, err)
+		defer os.Remove(tmpFile.Name())
+
+		// Write initial content
+		initialContent := "[profile initial]\nregion = us-east-1\n"
+		_, err = tmpFile.WriteString(initialContent)
+		require.NoError(t, err)
+		tmpFile.Close()
+
+		// Create config file instance
+		configFile := &AWSConfigFile{
+			FilePath: tmpFile.Name(),
+			Profiles: map[string]Profile{
+				"test-profile": {
+					Name:         "test-profile",
+					Region:       "us-west-2",
+					SSOStartURL:  "https://example.awsapps.com/start",
+					SSORegion:    "us-east-1",
+					SSOAccountID: "123456789012",
+					SSORoleName:  "AdministratorAccess",
+				},
+			},
+			Sessions: map[string]SSOSession{
+				"dev": {
+					Name:        "dev",
+					SSOStartURL: "https://example.awsapps.com/start",
+					SSORegion:   "us-east-1",
+				},
+			},
+		}
+
+		err = configFile.WriteToFile()
+		assert.NoError(t, err)
+
+		// Verify content was written
+		content, err := os.ReadFile(tmpFile.Name())
+		require.NoError(t, err)
+		assert.Contains(t, string(content), "[sso-session dev]")
+		assert.Contains(t, string(content), "[profile test-profile]")
+
+		// Verify backup was created
+		backupFiles, err := filepath.Glob(tmpFile.Name() + ".backup.*")
+		require.NoError(t, err)
+		assert.Len(t, backupFiles, 1)
+
+		// Verify backup contains original content
+		backupContent, err := os.ReadFile(backupFiles[0])
+		require.NoError(t, err)
+		assert.Equal(t, initialContent, string(backupContent))
+
+		// Cleanup backup
+		os.Remove(backupFiles[0])
+	})
+
+	t.Run("write failure with backup restore", func(t *testing.T) {
+		tmpFile, err := os.CreateTemp("", "aws-config-test-*.conf")
+		require.NoError(t, err)
+		defer os.Remove(tmpFile.Name())
+
+		// Write initial content
+		initialContent := "[profile initial]\nregion = us-east-1\n"
+		_, err = tmpFile.WriteString(initialContent)
+		require.NoError(t, err)
+		tmpFile.Close()
+
+		// Make file read-only to cause write failure
+		err = os.Chmod(tmpFile.Name(), 0400)
+		require.NoError(t, err)
+
+		configFile := &AWSConfigFile{
+			FilePath: tmpFile.Name(),
+			Profiles: map[string]Profile{
+				"test-profile": {
+					Name:   "test-profile",
+					Region: "us-west-2",
+				},
+			},
+			Sessions: make(map[string]SSOSession),
+		}
+
+		err = configFile.WriteToFile()
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "not writable")
+	})
+}
+
+func TestAWSConfigFile_AppendToFileWithLocking(t *testing.T) {
+	t.Run("successful append with backup", func(t *testing.T) {
+		tmpFile, err := os.CreateTemp("", "aws-config-test-*.conf")
+		require.NoError(t, err)
+		defer os.Remove(tmpFile.Name())
+
+		// Write initial content
+		initialContent := "[profile initial]\nregion = us-east-1\n\n"
+		_, err = tmpFile.WriteString(initialContent)
+		require.NoError(t, err)
+		tmpFile.Close()
+
+		configFile := &AWSConfigFile{
+			FilePath: tmpFile.Name(),
+			Profiles: make(map[string]Profile),
+			Sessions: make(map[string]SSOSession),
+		}
+
+		profiles := []GeneratedProfile{
+			{
+				Name:         "test-profile",
+				Region:       "us-west-2",
+				SSOStartURL:  "https://example.awsapps.com/start",
+				SSORegion:    "us-east-1",
+				SSOAccountID: "123456789012",
+				SSORoleName:  "AdministratorAccess",
+			},
+		}
+
+		err = configFile.AppendToFile(profiles)
+		assert.NoError(t, err)
+
+		// Verify content was appended
+		content, err := os.ReadFile(tmpFile.Name())
+		require.NoError(t, err)
+		assert.Contains(t, string(content), "[profile initial]")
+		assert.Contains(t, string(content), "[profile test-profile]")
+
+		// Verify backup was created
+		backupFiles, err := filepath.Glob(tmpFile.Name() + ".backup.*")
+		require.NoError(t, err)
+		assert.Len(t, backupFiles, 1)
+
+		// Cleanup backup
+		os.Remove(backupFiles[0])
+	})
+
+	t.Run("append failure with permission error", func(t *testing.T) {
+		tmpFile, err := os.CreateTemp("", "aws-config-test-*.conf")
+		require.NoError(t, err)
+		defer os.Remove(tmpFile.Name())
+		tmpFile.Close()
+
+		// Make file read-only to cause append failure
+		err = os.Chmod(tmpFile.Name(), 0400)
+		require.NoError(t, err)
+
+		configFile := &AWSConfigFile{
+			FilePath: tmpFile.Name(),
+			Profiles: make(map[string]Profile),
+			Sessions: make(map[string]SSOSession),
+		}
+
+		profiles := []GeneratedProfile{
+			{
+				Name:   "test-profile",
+				Region: "us-west-2",
+			},
+		}
+
+		err = configFile.AppendToFile(profiles)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "not writable")
+	})
+}
+
+func TestCopyFileWithPermissions(t *testing.T) {
+	t.Run("successful copy with permission preservation", func(t *testing.T) {
+		// Create source file with specific permissions
+		srcFile, err := os.CreateTemp("", "src-*.conf")
+		require.NoError(t, err)
+		defer os.Remove(srcFile.Name())
+
+		content := "test content"
+		_, err = srcFile.WriteString(content)
+		require.NoError(t, err)
+		srcFile.Close()
+
+		// Set specific permissions
+		err = os.Chmod(srcFile.Name(), 0640)
+		require.NoError(t, err)
+
+		// Create destination path
+		dstFile, err := os.CreateTemp("", "dst-*.conf")
+		require.NoError(t, err)
+		dstPath := dstFile.Name()
+		dstFile.Close()
+		os.Remove(dstPath) // Remove so we can test creation
+
+		// Copy file
+		err = copyFileWithPermissions(srcFile.Name(), dstPath)
+		assert.NoError(t, err)
+		defer os.Remove(dstPath)
+
+		// Verify content
+		dstContent, err := os.ReadFile(dstPath)
+		require.NoError(t, err)
+		assert.Equal(t, content, string(dstContent))
+
+		// Verify permissions
+		srcInfo, err := os.Stat(srcFile.Name())
+		require.NoError(t, err)
+		dstInfo, err := os.Stat(dstPath)
+		require.NoError(t, err)
+		assert.Equal(t, srcInfo.Mode(), dstInfo.Mode())
+	})
+}
+func TestTransaction_BasicOperations(t *testing.T) {
+	// Create a temporary config file
+	tmpFile, err := os.CreateTemp("", "aws-config-test-*.conf")
+	require.NoError(t, err)
+	defer os.Remove(tmpFile.Name())
+
+	// Write initial content
+	initialContent := `[profile existing]
+region = us-east-1
+sso_start_url = https://example.awsapps.com/start
+sso_region = us-east-1
+sso_account_id = 123456789012
+sso_role_name = ReadOnlyAccess
+`
+	_, err = tmpFile.WriteString(initialContent)
+	require.NoError(t, err)
+	tmpFile.Close()
+
+	// Load config file
+	configFile, err := LoadAWSConfigFile(tmpFile.Name())
+	require.NoError(t, err)
+
+	t.Run("successful transaction with add, update, remove", func(t *testing.T) {
+		// Begin transaction
+		tx, err := configFile.BeginTransaction()
+		require.NoError(t, err)
+
+		// Add a new profile
+		newProfile := Profile{
+			Name:         "new-profile",
+			Region:       "us-west-2",
+			SSOStartURL:  "https://example.awsapps.com/start",
+			SSORegion:    "us-east-1",
+			SSOAccountID: "987654321098",
+			SSORoleName:  "AdministratorAccess",
+		}
+		err = tx.AddProfile("new-profile", newProfile)
+		assert.NoError(t, err)
+
+		// Update existing profile
+		updatedProfile := Profile{
+			Name:         "existing",
+			Region:       "us-west-1", // Changed region
+			SSOStartURL:  "https://example.awsapps.com/start",
+			SSORegion:    "us-east-1",
+			SSOAccountID: "123456789012",
+			SSORoleName:  "ReadOnlyAccess",
+		}
+		err = tx.UpdateProfile("existing", updatedProfile)
+		assert.NoError(t, err)
+
+		// Verify operations are recorded
+		operations := tx.GetOperations()
+		assert.Len(t, operations, 2)
+		assert.Equal(t, OpAdd, operations[0].Type)
+		assert.Equal(t, "new-profile", operations[0].ProfileName)
+		assert.Equal(t, OpUpdate, operations[1].Type)
+		assert.Equal(t, "existing", operations[1].ProfileName)
+
+		// Commit transaction
+		err = tx.Commit()
+		assert.NoError(t, err)
+
+		// Verify changes were applied
+		assert.True(t, configFile.HasProfile("new-profile"))
+		existingProfile, exists := configFile.GetProfile("existing")
+		assert.True(t, exists)
+		assert.Equal(t, "us-west-1", existingProfile.Region)
+
+		// Verify file was updated
+		content, err := os.ReadFile(tmpFile.Name())
+		require.NoError(t, err)
+		assert.Contains(t, string(content), "[profile new-profile]")
+		assert.Contains(t, string(content), "region = us-west-1")
+	})
+}
+
+func TestTransaction_Rollback(t *testing.T) {
+	// Create a temporary config file
+	tmpFile, err := os.CreateTemp("", "aws-config-test-*.conf")
+	require.NoError(t, err)
+	defer os.Remove(tmpFile.Name())
+
+	// Write initial content
+	initialContent := `[profile existing]
+region = us-east-1
+sso_start_url = https://example.awsapps.com/start
+sso_region = us-east-1
+sso_account_id = 123456789012
+sso_role_name = ReadOnlyAccess
+`
+	_, err = tmpFile.WriteString(initialContent)
+	require.NoError(t, err)
+	tmpFile.Close()
+
+	// Load config file
+	configFile, err := LoadAWSConfigFile(tmpFile.Name())
+	require.NoError(t, err)
+
+	t.Run("rollback after failed operation", func(t *testing.T) {
+		// Begin transaction
+		tx, err := configFile.BeginTransaction()
+		require.NoError(t, err)
+
+		// Add a valid profile
+		validProfile := Profile{
+			Name:         "valid-profile",
+			Region:       "us-west-2",
+			SSOStartURL:  "https://example.awsapps.com/start",
+			SSORegion:    "us-east-1",
+			SSOAccountID: "987654321098",
+			SSORoleName:  "AdministratorAccess",
+		}
+		err = tx.AddProfile("valid-profile", validProfile)
+		assert.NoError(t, err)
+
+		// Try to add an invalid profile (should fail validation)
+		invalidProfile := Profile{
+			Name: "", // Invalid - empty name
+		}
+		err = tx.AddProfile("invalid-profile", invalidProfile)
+		assert.Error(t, err)
+
+		// Rollback the transaction
+		err = tx.Rollback()
+		assert.NoError(t, err)
+
+		// Verify original state is restored
+		assert.False(t, configFile.HasProfile("valid-profile"))
+		assert.True(t, configFile.HasProfile("existing"))
+
+		// Verify file content is unchanged
+		content, err := os.ReadFile(tmpFile.Name())
+		require.NoError(t, err)
+		assert.NotContains(t, string(content), "[profile valid-profile]")
+		assert.Contains(t, string(content), "[profile existing]")
+	})
+
+	t.Run("automatic rollback on commit failure", func(t *testing.T) {
+		// Make file read-only to cause commit failure
+		err = os.Chmod(tmpFile.Name(), 0400)
+		require.NoError(t, err)
+		defer os.Chmod(tmpFile.Name(), 0600) // Restore permissions
+
+		// Begin transaction
+		tx, err := configFile.BeginTransaction()
+		require.NoError(t, err)
+
+		// Add a profile
+		newProfile := Profile{
+			Name:         "test-profile",
+			Region:       "us-west-2",
+			SSOStartURL:  "https://example.awsapps.com/start",
+			SSORegion:    "us-east-1",
+			SSOAccountID: "987654321098",
+			SSORoleName:  "AdministratorAccess",
+		}
+		err = tx.AddProfile("test-profile", newProfile)
+		assert.NoError(t, err)
+
+		// Commit should fail and trigger automatic rollback
+		err = tx.Commit()
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "commit write failed")
+
+		// Verify profile was not added to in-memory config after rollback
+		assert.False(t, configFile.HasProfile("test-profile"))
+	})
+}
+
+func TestTransaction_ReplaceProfile(t *testing.T) {
+	// Create a temporary config file
+	tmpFile, err := os.CreateTemp("", "aws-config-test-*.conf")
+	require.NoError(t, err)
+	defer os.Remove(tmpFile.Name())
+
+	// Write initial content
+	initialContent := `[profile old-name]
+region = us-east-1
+sso_start_url = https://example.awsapps.com/start
+sso_region = us-east-1
+sso_account_id = 123456789012
+sso_role_name = ReadOnlyAccess
+`
+	_, err = tmpFile.WriteString(initialContent)
+	require.NoError(t, err)
+	tmpFile.Close()
+
+	// Load config file
+	configFile, err := LoadAWSConfigFile(tmpFile.Name())
+	require.NoError(t, err)
+
+	t.Run("successful profile replacement", func(t *testing.T) {
+		// Begin transaction
+		tx, err := configFile.BeginTransaction()
+		require.NoError(t, err)
+
+		// Replace profile with new name
+		newProfile := Profile{
+			Name:         "new-name",
+			Region:       "us-west-2", // Changed region
+			SSOStartURL:  "https://example.awsapps.com/start",
+			SSORegion:    "us-east-1",
+			SSOAccountID: "123456789012",
+			SSORoleName:  "AdministratorAccess", // Changed role
+		}
+		err = tx.ReplaceProfile("old-name", "new-name", newProfile)
+		assert.NoError(t, err)
+
+		// Verify operations are recorded (should be remove + add)
+		operations := tx.GetOperations()
+		assert.Len(t, operations, 2)
+		assert.Equal(t, OpRemove, operations[0].Type)
+		assert.Equal(t, "old-name", operations[0].ProfileName)
+		assert.Equal(t, OpAdd, operations[1].Type)
+		assert.Equal(t, "new-name", operations[1].ProfileName)
+
+		// Commit transaction
+		err = tx.Commit()
+		assert.NoError(t, err)
+
+		// Verify changes were applied
+		assert.False(t, configFile.HasProfile("old-name"))
+		assert.True(t, configFile.HasProfile("new-name"))
+
+		newProfileResult, exists := configFile.GetProfile("new-name")
+		assert.True(t, exists)
+		assert.Equal(t, "us-west-2", newProfileResult.Region)
+		assert.Equal(t, "AdministratorAccess", newProfileResult.SSORoleName)
+	})
+}
+
+func TestExecuteAtomicProfileOperations(t *testing.T) {
+	// Create a temporary config file
+	tmpFile, err := os.CreateTemp("", "aws-config-test-*.conf")
+	require.NoError(t, err)
+	defer os.Remove(tmpFile.Name())
+
+	// Write initial content
+	initialContent := `[profile existing]
+region = us-east-1
+`
+	_, err = tmpFile.WriteString(initialContent)
+	require.NoError(t, err)
+	tmpFile.Close()
+
+	// Load config file
+	configFile, err := LoadAWSConfigFile(tmpFile.Name())
+	require.NoError(t, err)
+
+	t.Run("successful atomic operations", func(t *testing.T) {
+		operations := []func(*Transaction) error{
+			func(tx *Transaction) error {
+				return tx.AddProfile("profile1", Profile{
+					Name:   "profile1",
+					Region: "us-west-1",
+				})
+			},
+			func(tx *Transaction) error {
+				return tx.AddProfile("profile2", Profile{
+					Name:   "profile2",
+					Region: "us-west-2",
+				})
+			},
+			func(tx *Transaction) error {
+				return tx.UpdateProfile("existing", Profile{
+					Name:   "existing",
+					Region: "eu-west-1", // Changed region
+				})
+			},
+		}
+
+		err = configFile.ExecuteAtomicProfileOperations(operations)
+		assert.NoError(t, err)
+
+		// Verify all operations were applied
+		assert.True(t, configFile.HasProfile("profile1"))
+		assert.True(t, configFile.HasProfile("profile2"))
+
+		existingProfile, exists := configFile.GetProfile("existing")
+		assert.True(t, exists)
+		assert.Equal(t, "eu-west-1", existingProfile.Region)
+	})
+
+	t.Run("failed atomic operations with rollback", func(t *testing.T) {
+		// Record initial state
+		initialProfileCount := len(configFile.Profiles)
+
+		operations := []func(*Transaction) error{
+			func(tx *Transaction) error {
+				return tx.AddProfile("temp-profile1", Profile{
+					Name:   "temp-profile1",
+					Region: "us-east-1",
+				})
+			},
+			func(tx *Transaction) error {
+				return tx.AddProfile("temp-profile2", Profile{
+					Name:   "temp-profile2",
+					Region: "us-east-2",
+				})
+			},
+			func(tx *Transaction) error {
+				// This operation should fail - invalid profile
+				return tx.AddProfile("invalid", Profile{
+					Name: "", // Invalid - empty name
+				})
+			},
+		}
+
+		err = configFile.ExecuteAtomicProfileOperations(operations)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "operation 3 failed")
+
+		// Verify no operations were applied (rollback successful)
+		assert.False(t, configFile.HasProfile("temp-profile1"))
+		assert.False(t, configFile.HasProfile("temp-profile2"))
+		assert.False(t, configFile.HasProfile("invalid"))
+		assert.Equal(t, initialProfileCount, len(configFile.Profiles))
+	})
+}
+
+func TestTransaction_OperationSummary(t *testing.T) {
+	// Create a temporary config file
+	tmpFile, err := os.CreateTemp("", "aws-config-test-*.conf")
+	require.NoError(t, err)
+	defer os.Remove(tmpFile.Name())
+	tmpFile.Close()
+
+	// Load config file
+	configFile, err := LoadAWSConfigFile(tmpFile.Name())
+	require.NoError(t, err)
+
+	t.Run("operation summary", func(t *testing.T) {
+		// Begin transaction
+		tx, err := configFile.BeginTransaction()
+		require.NoError(t, err)
+
+		// Add some operations
+		err = tx.AddProfile("profile1", Profile{Name: "profile1", Region: "us-east-1"})
+		assert.NoError(t, err)
+
+		err = tx.AddProfile("profile2", Profile{Name: "profile2", Region: "us-west-1"})
+		assert.NoError(t, err)
+
+		// Get summary
+		summary := tx.GetOperationSummary()
+		assert.Contains(t, summary, "Transaction with 2 operations:")
+		assert.Contains(t, summary, "1. add profile profile1")
+		assert.Contains(t, summary, "2. add profile profile2")
+		assert.Contains(t, summary, "Status: Pending")
+
+		// Commit and check summary again
+		err = tx.Commit()
+		assert.NoError(t, err)
+
+		summary = tx.GetOperationSummary()
+		assert.Contains(t, summary, "Status: Committed")
+	})
+
+	t.Run("empty transaction summary", func(t *testing.T) {
+		tx, err := configFile.BeginTransaction()
+		require.NoError(t, err)
+
+		summary := tx.GetOperationSummary()
+		assert.Equal(t, "No operations in transaction", summary)
+	})
+}
+
+func TestTransaction_ErrorHandling(t *testing.T) {
+	// Create a temporary config file
+	tmpFile, err := os.CreateTemp("", "aws-config-test-*.conf")
+	require.NoError(t, err)
+	defer os.Remove(tmpFile.Name())
+	tmpFile.Close()
+
+	// Load config file
+	configFile, err := LoadAWSConfigFile(tmpFile.Name())
+	require.NoError(t, err)
+
+	t.Run("operations on completed transaction", func(t *testing.T) {
+		// Begin and commit transaction
+		tx, err := configFile.BeginTransaction()
+		require.NoError(t, err)
+
+		err = tx.Commit()
+		assert.NoError(t, err)
+
+		// Try to add profile to committed transaction
+		err = tx.AddProfile("test", Profile{Name: "test"})
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "transaction is already completed")
+
+		// Try to rollback committed transaction
+		err = tx.Rollback()
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "cannot rollback committed transaction")
+	})
+
+	t.Run("operations on rolled back transaction", func(t *testing.T) {
+		// Begin and rollback transaction
+		tx, err := configFile.BeginTransaction()
+		require.NoError(t, err)
+
+		err = tx.Rollback()
+		assert.NoError(t, err)
+
+		// Try to add profile to rolled back transaction
+		err = tx.AddProfile("test", Profile{Name: "test"})
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "transaction is already completed")
+
+		// Try to rollback again
+		err = tx.Rollback()
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "transaction is already rolled back")
+	})
+
+	t.Run("duplicate profile addition", func(t *testing.T) {
+		tx, err := configFile.BeginTransaction()
+		require.NoError(t, err)
+
+		// Add profile
+		err = tx.AddProfile("duplicate", Profile{Name: "duplicate", Region: "us-east-1"})
+		assert.NoError(t, err)
+
+		// Try to add same profile again
+		err = tx.AddProfile("duplicate", Profile{Name: "duplicate", Region: "us-west-1"})
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "profile already exists")
+
+		// Rollback to clean up
+		err = tx.Rollback()
+		assert.NoError(t, err)
+	})
+
+	t.Run("update non-existent profile", func(t *testing.T) {
+		tx, err := configFile.BeginTransaction()
+		require.NoError(t, err)
+
+		// Try to update non-existent profile
+		err = tx.UpdateProfile("non-existent", Profile{Name: "non-existent"})
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "profile does not exist")
+
+		// Rollback to clean up
+		err = tx.Rollback()
+		assert.NoError(t, err)
+	})
+
+	t.Run("remove non-existent profile", func(t *testing.T) {
+		tx, err := configFile.BeginTransaction()
+		require.NoError(t, err)
+
+		// Try to remove non-existent profile
+		err = tx.RemoveProfile("non-existent")
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "profile does not exist")
+
+		// Rollback to clean up
+		err = tx.Rollback()
+		assert.NoError(t, err)
+	})
 }
