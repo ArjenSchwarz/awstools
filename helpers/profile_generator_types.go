@@ -6,7 +6,24 @@ import (
 	"strings"
 )
 
-// TemplateProfile represents a template profile configuration
+// TemplateProfile represents a template profile configuration used as the basis for generating
+// new AWS CLI profiles. It contains the SSO configuration and other settings that will be
+// applied to all generated profiles.
+//
+// The template profile must be an existing SSO profile in the AWS config file and serves as
+// the authentication context for discovering available roles and accounts.
+//
+// Example usage:
+//
+//	template := &TemplateProfile{
+//	    Name: "my-sso-profile",
+//	    SSOStartURL: "https://my-org.awsapps.com/start",
+//	    SSORegion: "us-east-1",
+//	    IsSSO: true,
+//	}
+//	if err := template.Validate(); err != nil {
+//	    // handle validation error
+//	}
 type TemplateProfile struct {
 	Name         string `json:"name" yaml:"name"`
 	Region       string `json:"region" yaml:"region"`
@@ -19,7 +36,16 @@ type TemplateProfile struct {
 	IsValid      bool   `json:"is_valid" yaml:"is_valid"`
 }
 
-// Validate checks if the template profile is valid for profile generation
+// Validate checks if the template profile is valid for profile generation.
+// It ensures all required fields are present and the profile is properly configured for SSO.
+//
+// Validation rules:
+// - Profile name must not be empty
+// - Profile must be configured for SSO (IsSSO = true)
+// - SSO start URL and region are required
+// - Either SSO session (new format) or account ID + role name (legacy format) must be present
+//
+// Returns a ProfileGeneratorError with detailed context if validation fails.
 func (tp *TemplateProfile) Validate() error {
 	if tp.Name == "" {
 		return NewValidationError("template profile name is required", nil)
@@ -50,12 +76,37 @@ func (tp *TemplateProfile) Validate() error {
 	return nil
 }
 
-// IsLegacyFormat returns true if the profile uses the legacy SSO format
+// IsLegacyFormat returns true if the profile uses the legacy SSO format.
+// Legacy format uses sso_account_id and sso_role_name directly in the profile,
+// while new format uses sso_session to reference a separate SSO session configuration.
+//
+// Legacy format example:
+//
+//	[profile my-profile]
+//	sso_start_url = https://my-org.awsapps.com/start
+//	sso_region = us-east-1
+//	sso_account_id = 123456789012
+//	sso_role_name = AdministratorAccess
+//
+// New format example:
+//
+//	[profile my-profile]
+//	sso_session = my-session
+//	sso_account_id = 123456789012
+//	sso_role_name = AdministratorAccess
 func (tp *TemplateProfile) IsLegacyFormat() bool {
 	return tp.SSOSession == "" && tp.SSOAccountID != "" && tp.SSORoleName != ""
 }
 
-// GeneratedProfile represents a generated profile configuration
+// GeneratedProfile represents a generated profile configuration that will be written
+// to the AWS config file. It contains all the necessary information to create a working
+// AWS CLI profile for a specific role in a specific account.
+//
+// Generated profiles inherit their SSO configuration from the template profile but are
+// customized with account-specific and role-specific information discovered through
+// the SSO enumeration process.
+//
+// The profile can be in either legacy or new SSO format, determined by the IsLegacy field.
 type GeneratedProfile struct {
 	Name         string `json:"name" yaml:"name"`
 	AccountID    string `json:"account_id" yaml:"account_id"`
@@ -70,7 +121,16 @@ type GeneratedProfile struct {
 	IsLegacy     bool   `json:"is_legacy" yaml:"is_legacy"`
 }
 
-// Validate checks if the generated profile is valid
+// Validate checks if the generated profile is valid and ready for writing to config file.
+// It ensures all required fields are present and the profile format is consistent.
+//
+// Validation rules:
+// - Profile name, account ID, role name, SSO start URL, and SSO region are required
+// - Legacy profiles cannot have SSO session configured
+// - New format profiles must have SSO session configured
+// - Format consistency is enforced based on IsLegacy flag
+//
+// Returns a ProfileGeneratorError with detailed context if validation fails.
 func (gp *GeneratedProfile) Validate() error {
 	if gp.Name == "" {
 		return NewValidationError("generated profile name is required", nil)
@@ -110,7 +170,27 @@ func (gp *GeneratedProfile) Validate() error {
 	return nil
 }
 
-// ToConfigString returns the profile configuration in AWS config file format
+// ToConfigString returns the profile configuration in AWS config file format.
+// It generates the appropriate format based on whether the profile uses legacy or new SSO format.
+//
+// Legacy format output:
+//
+//	[profile example-profile]
+//	region = us-east-1
+//	sso_start_url = https://my-org.awsapps.com/start
+//	sso_region = us-east-1
+//	sso_account_id = 123456789012
+//	sso_role_name = AdministratorAccess
+//
+// New format output:
+//
+//	[profile example-profile]
+//	region = us-east-1
+//	sso_start_url = https://my-org.awsapps.com/start
+//	sso_region = us-east-1
+//	sso_session = my-session
+//
+// The output includes a trailing newline for proper file formatting.
 func (gp *GeneratedProfile) ToConfigString() string {
 	var config strings.Builder
 	// Estimate size: profile name + region + SSO config (~150-200 chars)
@@ -130,7 +210,22 @@ func (gp *GeneratedProfile) ToConfigString() string {
 	return config.String()
 }
 
-// DiscoveredRole represents a role discovered through SSO enumeration
+// DiscoveredRole represents a role discovered through SSO enumeration process.
+// It contains information about an AWS role that the user has access to through SSO,
+// including account details and permission set information.
+//
+// The role discovery process queries the SSO service to find all accounts and roles
+// that the user can assume using their SSO credentials. Each discovered role can
+// potentially become a generated profile.
+//
+// Example:
+//
+//	role := DiscoveredRole{
+//	    AccountID: "123456789012",
+//	    AccountName: "production",
+//	    PermissionSetName: "AdministratorAccess",
+//	    RoleName: "AWSReservedSSO_AdministratorAccess_abc123",
+//	}
 type DiscoveredRole struct {
 	AccountID         string `json:"account_id" yaml:"account_id"`
 	AccountName       string `json:"account_name" yaml:"account_name"`
@@ -140,7 +235,16 @@ type DiscoveredRole struct {
 	RoleName          string `json:"role_name" yaml:"role_name"`
 }
 
-// Validate checks if the discovered role is valid
+// Validate checks if the discovered role is valid and contains all required information.
+// It ensures the role has proper AWS account ID format and all necessary fields.
+//
+// Validation rules:
+// - Account ID must be present and exactly 12 digits
+// - Permission set name is required (used for profile naming)
+// - Role name is required (used for AWS API calls)
+// - Account ID must match AWS account ID format (12 digits)
+//
+// Returns a ProfileGeneratorError with detailed context if validation fails.
 func (dr *DiscoveredRole) Validate() error {
 	if dr.AccountID == "" {
 		return NewValidationError("account ID is required", nil)
@@ -166,7 +270,19 @@ func (dr *DiscoveredRole) Validate() error {
 	return nil
 }
 
-// ProfileGenerationResult represents the result of profile generation
+// ProfileGenerationResult represents the comprehensive result of the profile generation process.
+// It contains all information about what was discovered, what conflicts were detected,
+// how they were resolved, and what profiles were ultimately generated.
+//
+// This result structure supports the enhanced conflict resolution workflow by tracking:
+// - Original discovered roles and template profile used
+// - Conflicts detected between discovered roles and existing profiles
+// - Actions taken to resolve each conflict (replace, skip, create)
+// - Final generated profiles and any errors encountered
+// - Backup information for recovery purposes
+//
+// The result can be used to generate detailed reports and provide user feedback
+// about the profile generation process.
 type ProfileGenerationResult struct {
 	TemplateProfile     TemplateProfile         `json:"template_profile" yaml:"template_profile"`
 	DiscoveredRoles     []DiscoveredRole        `json:"discovered_roles" yaml:"discovered_roles"`
@@ -183,7 +299,14 @@ type ProfileGenerationResult struct {
 	BackupPath        string               `json:"backup_path" yaml:"backup_path"`
 }
 
-// Validate checks if the profile generation result is valid
+// Validate checks if the profile generation result is valid and internally consistent.
+// It validates the template profile, all discovered roles, and all generated profiles
+// to ensure the result represents a valid profile generation operation.
+//
+// This validation is useful for testing and ensuring data integrity throughout
+// the profile generation workflow.
+//
+// Returns the first validation error encountered, or nil if all components are valid.
 func (pgr *ProfileGenerationResult) Validate() error {
 	if err := pgr.TemplateProfile.Validate(); err != nil {
 		return err
@@ -204,12 +327,16 @@ func (pgr *ProfileGenerationResult) Validate() error {
 	return nil
 }
 
-// HasErrors returns true if there are any errors in the result
+// HasErrors returns true if there are any errors in the result.
+// This is a convenience method for checking if the profile generation
+// encountered any errors during execution.
 func (pgr *ProfileGenerationResult) HasErrors() bool {
 	return len(pgr.Errors) > 0
 }
 
-// AddError adds an error to the result
+// AddError adds an error to the result.
+// This method is used internally during profile generation to accumulate
+// errors that occur during the process.
 func (pgr *ProfileGenerationResult) AddError(err ProfileGeneratorError) {
 	pgr.Errors = append(pgr.Errors, err)
 }

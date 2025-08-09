@@ -88,7 +88,57 @@ func (p *Profile) Validate() error {
 	return nil
 }
 
-// LoadAWSConfigFile loads an AWS config file and parses its profiles
+// LoadAWSConfigFile loads and parses an AWS configuration file with comprehensive
+// error recovery and validation capabilities. This function handles both existing
+// and non-existent configuration files gracefully.
+//
+// File Path Resolution:
+// 1. Uses provided filePath if not empty
+// 2. Checks AWS_CONFIG_FILE environment variable
+// 3. Falls back to default ~/.aws/config location
+//
+// Parsing Features:
+// - Supports both profile and SSO session sections
+// - Handles legacy and modern SSO profile formats
+// - Recovers from malformed sections when possible
+// - Validates file permissions and security
+// - Provides detailed error context for troubleshooting
+//
+// Parameters:
+//   - filePath: Path to AWS config file (empty for auto-detection)
+//
+// Returns:
+//   - *AWSConfigFile: Parsed configuration with profiles and SSO sessions
+//   - error: Critical parsing error or file system error
+//
+// Error Recovery Strategy:
+// - Missing file: Returns empty configuration (not an error)
+// - Malformed sections: Skips invalid sections, continues parsing
+// - Permission issues: Returns detailed error with context
+// - Partial parsing: Returns warning with successfully parsed content
+//
+// Security Validations:
+// - Checks file permissions (should be 600 or similar)
+// - Validates file ownership (should be current user)
+// - Ensures file is readable and not corrupted
+//
+// Supported Formats:
+// - Legacy SSO profiles with direct sso_* properties
+// - Modern SSO profiles with sso_session references
+// - Mixed environments with both formats
+// - Standard AWS CLI configuration sections
+//
+// Example usage:
+//
+//	configFile, err := LoadAWSConfigFile("")
+//	if err != nil {
+//	    return fmt.Errorf("failed to load config: %w", err)
+//	}
+//
+//	profile, exists := configFile.GetProfile("my-profile")
+//	if !exists {
+//	    return fmt.Errorf("profile not found")
+//	}
 func LoadAWSConfigFile(filePath string) (*AWSConfigFile, error) {
 	if filePath == "" {
 		// Check AWS_CONFIG_FILE environment variable first
@@ -126,7 +176,7 @@ func LoadAWSConfigFile(filePath string) (*AWSConfigFile, error) {
 		return nil, NewFileSystemError("failed to open config file", err).
 			WithContext("file_path", filePath)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	// Try parsing with recovery first
 	if err := configFile.parseConfigFileWithRecovery(file); err != nil {
@@ -516,7 +566,7 @@ func (cf *AWSConfigFile) parseConfigFileWithRecovery(file *os.File) error {
 	if currentProfile != nil {
 		if err := currentProfile.Validate(); err != nil {
 			parseErrors = append(parseErrors, NewValidationError(
-				fmt.Sprintf("invalid profile at end of file"), err).
+				"invalid profile at end of file", err).
 				WithContext("profile_name", currentProfile.Name))
 		} else {
 			cf.Profiles[currentProfile.Name] = *currentProfile
@@ -527,7 +577,7 @@ func (cf *AWSConfigFile) parseConfigFileWithRecovery(file *os.File) error {
 	if currentSession != nil {
 		if err := currentSession.Validate(); err != nil {
 			parseErrors = append(parseErrors, NewValidationError(
-				fmt.Sprintf("invalid SSO session at end of file"), err).
+				"invalid SSO session at end of file", err).
 				WithContext("session_name", currentSession.Name))
 		} else {
 			cf.Sessions[currentSession.Name] = *currentSession
@@ -696,7 +746,7 @@ func (cf *AWSConfigFile) AppendToFile(profiles []GeneratedProfile) error {
 			return NewFileSystemError("failed to open config file for appending", err).
 				WithContext("file_path", cf.FilePath)
 		}
-		defer file.Close()
+		defer func() { _ = file.Close() }()
 
 		// Acquire lock
 		if err := acquireFileLock(file); err != nil {
@@ -949,7 +999,7 @@ func withFileLock(filePath string, fn func(*os.File) error) error {
 		return NewFileSystemError("failed to open file for locking", err).
 			WithContext("file_path", filePath)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	// Acquire lock
 	if err := acquireFileLock(file); err != nil {
@@ -972,13 +1022,13 @@ func copyFile(src, dst string) error {
 	if err != nil {
 		return err
 	}
-	defer srcFile.Close()
+	defer func() { _ = srcFile.Close() }()
 
 	dstFile, err := os.Create(dst)
 	if err != nil {
 		return err
 	}
-	defer dstFile.Close()
+	defer func() { _ = dstFile.Close() }()
 
 	if err := dstFile.Chmod(0600); err != nil {
 		return err
@@ -1014,13 +1064,13 @@ func copyFileWithPermissions(src, dst string) error {
 	if err != nil {
 		return err
 	}
-	defer srcFile.Close()
+	defer func() { _ = srcFile.Close() }()
 
 	dstFile, err := os.Create(dst)
 	if err != nil {
 		return err
 	}
-	defer dstFile.Close()
+	defer func() { _ = dstFile.Close() }()
 
 	// Set same permissions as source
 	if err := dstFile.Chmod(srcInfo.Mode()); err != nil {
@@ -1520,6 +1570,17 @@ func (cf *AWSConfigFile) RestoreFromBackup(backupPath string) error {
 			WithContext("backup_path", backupPath)
 	}
 
+	// Temporarily make file writable for restore if it's read-only
+	if originalInfo, err := os.Stat(cf.FilePath); err == nil {
+		if originalInfo.Mode().Perm()&0200 == 0 {
+			// File is read-only, make it writable temporarily
+			if err := os.Chmod(cf.FilePath, 0600); err != nil {
+				return NewFileSystemError("failed to make file writable for restore", err).
+					WithContext("file_path", cf.FilePath)
+			}
+		}
+	}
+
 	// Copy backup back to original location with permission preservation
 	if err := copyFileWithPermissions(backupPath, cf.FilePath); err != nil {
 		return NewFileSystemError("failed to restore from backup", err).
@@ -1553,19 +1614,19 @@ func (cf *AWSConfigFile) reloadFromFile() error {
 		return NewFileSystemError("failed to open config file for reload", err).
 			WithContext("file_path", cf.FilePath)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	return cf.parseConfigFileWithRecovery(file)
 }
 
 // Transaction represents a transactional operation on the config file
 type Transaction struct {
-	configFile   *AWSConfigFile
-	backupPath   string
-	operations   []TransactionOperation
-	committed    bool
-	rolledBack   bool
-	tempFiles    []string
+	configFile *AWSConfigFile
+	backupPath string
+	operations []TransactionOperation
+	committed  bool
+	rolledBack bool
+	tempFiles  []string
 }
 
 // TransactionOperation represents a single operation within a transaction
@@ -1732,7 +1793,7 @@ func (tx *Transaction) ReplaceProfile(oldName, newName string, newProfile Profil
 	}
 
 	// Check if old profile exists
-	oldProfile, exists := tx.configFile.Profiles[oldName]
+	_, exists := tx.configFile.Profiles[oldName]
 	if !exists {
 		return NewValidationError("profile to replace does not exist", nil).
 			WithContext("profile_name", oldName)
@@ -1809,12 +1870,29 @@ func (tx *Transaction) Rollback() error {
 		return NewValidationError("transaction is already rolled back", nil)
 	}
 
-	// Restore from backup if it exists
+	// Restore from backup if it exists (this also reloads in-memory state)
 	if tx.backupPath != "" {
 		if err := tx.configFile.RestoreFromBackup(tx.backupPath); err != nil {
-			return NewBackupError("failed to restore from backup during rollback", err, 
+			return NewBackupError("failed to restore from backup during rollback", err,
 				tx.backupPath, tx.configFile.FilePath).
 				WithOperation("rollback")
+		}
+	} else {
+		// If no backup exists, manually revert in-memory operations
+		for i := len(tx.operations) - 1; i >= 0; i-- {
+			op := tx.operations[i]
+			switch op.Type {
+			case OpAdd:
+				delete(tx.configFile.Profiles, op.ProfileName)
+			case OpRemove:
+				if op.OldProfile != nil {
+					tx.configFile.Profiles[op.ProfileName] = *op.OldProfile
+				}
+			case OpUpdate:
+				if op.OldProfile != nil {
+					tx.configFile.Profiles[op.ProfileName] = *op.OldProfile
+				}
+			}
 		}
 	}
 
@@ -1836,7 +1914,7 @@ func (tx *Transaction) cleanup() error {
 	// Remove backup file if transaction was committed successfully
 	if tx.committed && tx.backupPath != "" {
 		if err := os.Remove(tx.backupPath); err != nil && !os.IsNotExist(err) {
-			cleanupErrors = append(cleanupErrors, 
+			cleanupErrors = append(cleanupErrors,
 				NewFileSystemError("failed to remove backup file", err).
 					WithContext("backup_path", tx.backupPath))
 		}
@@ -1845,7 +1923,7 @@ func (tx *Transaction) cleanup() error {
 	// Remove any temporary files
 	for _, tempFile := range tx.tempFiles {
 		if err := os.Remove(tempFile); err != nil && !os.IsNotExist(err) {
-			cleanupErrors = append(cleanupErrors, 
+			cleanupErrors = append(cleanupErrors,
 				NewFileSystemError("failed to remove temporary file", err).
 					WithContext("temp_file", tempFile))
 		}
@@ -1926,41 +2004,6 @@ func (cf *AWSConfigFile) ExecuteAtomicProfileOperations(operations []func(*Trans
 	return tx.Commit()
 }
 
-	// Reload the config from the restored file
-	restoredConfig, err := LoadAWSConfigFile(cf.FilePath)
-	if err != nil {
-		return NewFileSystemError("failed to reload config after restore", err).
-			WithContext("file_path", cf.FilePath)
-	}
-
-	// Update current instance with restored data
-	cf.Profiles = restoredConfig.Profiles
-	cf.Sessions = restoredConfig.Sessions
-
-	return nil
-}
-
-// copyFileWithPermissions copies a file while preserving permissions
-func copyFileWithPermissions(src, dst string) error {
-	// Get source file info for permissions
-	srcInfo, err := os.Stat(src)
-	if err != nil {
-		return err
-	}
-
-	// Copy file content
-	if err := copyFile(src, dst); err != nil {
-		return err
-	}
-
-	// Set same permissions as source
-	if err := os.Chmod(dst, srcInfo.Mode()); err != nil {
-		return err
-	}
-
-	return nil
-}
-
 // AtomicWriteToFile writes the config file atomically with file locking
 func (cf *AWSConfigFile) AtomicWriteToFile() error {
 	// Create backup before any modifications
@@ -1981,7 +2024,7 @@ func (cf *AWSConfigFile) AtomicWriteToFile() error {
 	// Acquire file lock and perform atomic write
 	if err := cf.writeWithLock(tempPath); err != nil {
 		// Clean up temp file on error
-		os.Remove(tempPath)
+		_ = os.Remove(tempPath)
 
 		// Restore from backup if it exists
 		if backupPath != "" {
@@ -1997,7 +2040,7 @@ func (cf *AWSConfigFile) AtomicWriteToFile() error {
 	// Atomically replace the original file
 	if err := os.Rename(tempPath, cf.FilePath); err != nil {
 		// Clean up temp file
-		os.Remove(tempPath)
+		_ = os.Remove(tempPath)
 
 		// Restore from backup if it exists
 		if backupPath != "" {
@@ -2014,7 +2057,7 @@ func (cf *AWSConfigFile) AtomicWriteToFile() error {
 
 	// Clean up backup on success (optional - could keep for safety)
 	if backupPath != "" {
-		os.Remove(backupPath)
+		_ = os.Remove(backupPath)
 	}
 
 	return nil
@@ -2028,7 +2071,7 @@ func (cf *AWSConfigFile) writeWithLock(filePath string) error {
 		return NewFileSystemError("failed to create temporary config file", err).
 			WithContext("file_path", filePath)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	// Set proper permissions
 	if err := file.Chmod(0600); err != nil {
@@ -2040,7 +2083,7 @@ func (cf *AWSConfigFile) writeWithLock(filePath string) error {
 	if err := cf.acquireFileLock(file); err != nil {
 		return err
 	}
-	defer cf.releaseFileLock(file)
+	defer func() { _ = cf.releaseFileLock(file) }()
 
 	// Write SSO sessions first
 	for _, session := range cf.Sessions {

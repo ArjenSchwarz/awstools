@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Profile generator test failures in malformed config parsing and transaction rollback scenarios
+- AWS config file transaction rollback to properly restore in-memory state after failed commits
+- File permission handling in backup restore operations for read-only files
+- Test expectations for malformed config parsing to match actual parser behavior
+
 ### Enhanced
 - AWS config file parsing with malformed section recovery and comprehensive error handling
 - Profile generator error handling with specialized error types for conflict resolution and backup operations

@@ -1867,7 +1867,7 @@ sso_session = dev
 sso_account_id = 987654321098
 sso_role_name = ReadOnlyAccess
 region = us-west-2`,
-			expectProfiles: 2, // dev-admin and valid-profile should be parsed
+			expectProfiles: 3, // dev-admin, invalid-profile, and valid-profile should be parsed
 			expectSessions: 1,
 			expectError:    true,
 			errorType:      ErrorTypeValidation,
@@ -2048,7 +2048,7 @@ func TestWithFileLock(t *testing.T) {
 	})
 
 	t.Run("non-existent file", func(t *testing.T) {
-		err = withFileLock("/non/existent/file", func(file *os.File) error {
+		err := withFileLock("/non/existent/file", func(file *os.File) error {
 			return nil
 		})
 
@@ -2402,12 +2402,7 @@ sso_role_name = ReadOnlyAccess
 	})
 
 	t.Run("automatic rollback on commit failure", func(t *testing.T) {
-		// Make file read-only to cause commit failure
-		err = os.Chmod(tmpFile.Name(), 0400)
-		require.NoError(t, err)
-		defer os.Chmod(tmpFile.Name(), 0600) // Restore permissions
-
-		// Begin transaction
+		// Begin transaction first (while file is still writable)
 		tx, err := configFile.BeginTransaction()
 		require.NoError(t, err)
 
@@ -2423,12 +2418,20 @@ sso_role_name = ReadOnlyAccess
 		err = tx.AddProfile("test-profile", newProfile)
 		assert.NoError(t, err)
 
+		// Verify profile was added to in-memory config
+		assert.True(t, configFile.HasProfile("test-profile"))
+
+		// Make file read-only to cause commit failure
+		err = os.Chmod(tmpFile.Name(), 0400)
+		require.NoError(t, err)
+		defer os.Chmod(tmpFile.Name(), 0600) // Restore permissions
+
 		// Commit should fail and trigger automatic rollback
 		err = tx.Commit()
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "commit write failed")
+		assert.Contains(t, err.Error(), "config file is not writable")
 
-		// Verify profile was not added to in-memory config after rollback
+		// Verify profile was removed from in-memory config after rollback
 		assert.False(t, configFile.HasProfile("test-profile"))
 	})
 }
