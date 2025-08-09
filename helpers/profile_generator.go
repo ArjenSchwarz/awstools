@@ -13,23 +13,123 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 )
 
-// ProfileGenerator handles the complete profile generation workflow
+// ProfileGenerator handles the complete profile generation workflow with enhanced
+// conflict resolution capabilities. It orchestrates the entire process from template
+// profile validation through role discovery to final profile generation and conflict resolution.
+//
+// The ProfileGenerator implements a comprehensive workflow:
+// 1. Template Profile Validation: Ensures the template profile is valid for SSO
+// 2. Role Discovery: Enumerates accessible roles through SSO APIs
+// 3. Conflict Detection: Identifies conflicts with existing profiles
+// 4. Conflict Resolution: Applies user-specified resolution strategy
+// 5. Profile Generation: Creates new profiles for non-conflicted roles
+// 6. Configuration Update: Writes profiles to AWS config file
+//
+// Conflict Resolution Strategies:
+// - ConflictPrompt: Interactive prompts for each conflict (default)
+// - ConflictReplace: Automatically replace existing profiles
+// - ConflictSkip: Skip roles that have existing profiles
+//
+// Key Features:
+// - Supports both legacy and modern SSO profile formats
+// - Efficient conflict detection with caching and indexing
+// - Atomic operations with backup and recovery
+// - Comprehensive error handling and recovery
+// - Detailed progress reporting and logging
+// - File locking for concurrent access protection
+//
+// Error Recovery:
+// - Automatic backup creation before modifications
+// - Rollback capability on partial failures
+// - Graceful handling of malformed configurations
+// - Detailed error context for troubleshooting
+//
+// Example usage:
+//
+//	generator, err := NewProfileGenerator(
+//	    "my-sso-template",
+//	    "{account_name}-{role_name}",
+//	    false, // not auto-approve
+//	    "", // default config file
+//	    ConflictPrompt,
+//	    awsConfig,
+//	)
+//	if err != nil {
+//	    return err
+//	}
+//
+//	result, err := generator.GenerateProfilesWorkflow()
+//	if err != nil {
+//	    return err
+//	}
+//
+//	fmt.Println(result.GenerateConflictReport())
 type ProfileGenerator struct {
-	templateProfile  string
-	namingPattern    string
-	autoApprove      bool
-	outputFile       string
-	conflictStrategy ConflictResolutionStrategy
-	awsConfig        aws.Config
-	ssoClient        *sso.Client
-	stsClient        *sts.Client
-	iamClient        *iam.Client
-	roleDiscovery    *RoleDiscovery
-	conflictDetector *ProfileConflictDetector
-	logger           Logger
+	templateProfile  string                     // Name of the template profile to use for SSO configuration
+	namingPattern    string                     // Pattern for generating profile names (e.g., "{account_name}-{role_name}")
+	autoApprove      bool                       // Whether to automatically approve profile generation without user confirmation
+	outputFile       string                     // Custom output file path (empty for default ~/.aws/config)
+	conflictStrategy ConflictResolutionStrategy // Strategy for resolving profile conflicts
+	awsConfig        aws.Config                 // AWS SDK configuration for API calls
+	ssoClient        *sso.Client                // AWS SSO client for role discovery
+	stsClient        *sts.Client                // AWS STS client for token validation
+	iamClient        *iam.Client                // AWS IAM client for role information
+	roleDiscovery    *RoleDiscovery             // Role discovery service for enumerating accessible roles
+	conflictDetector *ProfileConflictDetector   // Conflict detection service (initialized lazily)
+	logger           Logger                     // Logger for progress and diagnostic messages
 }
 
-// NewProfileGenerator creates a new profile generator
+// NewProfileGenerator creates a new profile generator with comprehensive validation
+// and initialization of all required components for the profile generation workflow.
+//
+// The constructor performs extensive validation and setup:
+// 1. Validates required parameters (template profile name)
+// 2. Sets default naming pattern if not provided
+// 3. Validates the naming pattern syntax
+// 4. Creates AWS service clients (SSO, STS, IAM)
+// 5. Initializes role discovery service
+// 6. Sets up default logger (can be overridden)
+//
+// Parameters:
+//   - templateProfile: Name of existing SSO profile to use as template (required)
+//   - namingPattern: Pattern for generating profile names (defaults to "{account_name}-{role_name}")
+//   - autoApprove: Whether to skip user confirmation prompts
+//   - outputFile: Custom output file path (empty for default ~/.aws/config)
+//   - conflictStrategy: How to handle conflicts with existing profiles
+//   - awsConfig: AWS SDK configuration for API authentication
+//
+// Returns:
+//   - *ProfileGenerator: Initialized generator ready for profile generation
+//   - error: Validation or initialization error
+//
+// Validation Rules:
+// - Template profile name cannot be empty
+// - Naming pattern must be valid (contains recognized placeholders)
+// - AWS configuration must be valid for SSO operations
+//
+// Error Handling:
+// - Returns ValidationError for invalid parameters
+// - Returns initialization errors from AWS service clients
+// - Provides detailed error context for troubleshooting
+//
+// Default Values:
+// - Naming pattern: "{account_name}-{role_name}" if not specified
+// - Logger: Default console logger (can be overridden with SetLogger)
+// - Conflict detector: Initialized lazily when first needed
+//
+// Example usage:
+//
+//	generator, err := NewProfileGenerator(
+//	    "my-sso-profile",           // template profile
+//	    "{account_name}-{role_name}", // naming pattern
+//	    false,                      // require user approval
+//	    "",                         // use default config file
+//	    ConflictPrompt,             // prompt for conflicts
+//	    awsConfig,                  // AWS configuration
+//	)
+//	if err != nil {
+//	    return fmt.Errorf("failed to create generator: %w", err)
+//	}
 func NewProfileGenerator(templateProfile, namingPattern string, autoApprove bool, outputFile string, conflictStrategy ConflictResolutionStrategy, awsConfig aws.Config) (*ProfileGenerator, error) {
 	if templateProfile == "" {
 		return nil, NewValidationError("template profile name is required", nil)
@@ -298,7 +398,80 @@ func (pg *ProfileGenerator) AppendToConfig(profiles []GeneratedProfile) error {
 	return nil
 }
 
-// GenerateProfilesWorkflow executes the complete profile generation workflow with conflict resolution
+// GenerateProfilesWorkflow executes the complete profile generation workflow with
+// enhanced conflict resolution capabilities. This is the main orchestration method
+// that coordinates all phases of profile generation.
+//
+// Workflow Phases:
+// 1. Template Profile Validation
+//   - Loads and validates the template profile from AWS config
+//   - Ensures profile is properly configured for SSO
+//   - Validates SSO configuration format (legacy or modern)
+//
+// 2. Role Discovery
+//   - Validates SSO token access
+//   - Enumerates all accessible accounts and roles
+//   - Applies retry logic for transient failures
+//
+// 3. Conflict Detection
+//   - Analyzes discovered roles against existing profiles
+//   - Identifies role-based and name-based conflicts
+//   - Classifies conflicts for appropriate resolution
+//
+// 4. Conflict Resolution
+//   - Applies configured resolution strategy
+//   - Handles user interaction for prompt strategy
+//   - Tracks all resolution actions taken
+//
+// 5. Profile Generation
+//   - Generates profiles for non-conflicted roles
+//   - Creates profiles for resolved conflicts
+//   - Validates all generated profiles
+//
+// 6. Configuration Update (if auto-approved)
+//   - Creates backup of existing configuration
+//   - Writes new profiles to AWS config file
+//   - Provides rollback on failures
+//
+// Returns:
+//   - *ProfileGenerationResult: Comprehensive result with all workflow information
+//   - error: Critical error that prevented workflow completion
+//
+// Result Information:
+// - Template profile used and discovered roles
+// - Detected conflicts and resolution actions taken
+// - Generated profiles and successful operations
+// - Replaced profiles and skipped roles
+// - Backup path for recovery
+// - Detailed error information
+//
+// Error Handling Strategy:
+// - Each phase captures errors in the result object
+// - Critical errors stop workflow execution
+// - Non-critical errors are logged and workflow continues
+// - Partial results are always returned for analysis
+//
+// Recovery and Rollback:
+// - Automatic backup creation before any modifications
+// - Rollback capability on partial failures
+// - Detailed error context for manual recovery
+// - Preservation of original configuration on errors
+//
+// Example usage:
+//
+//	result, err := generator.GenerateProfilesWorkflow()
+//	if err != nil {
+//	    fmt.Printf("Workflow failed: %v\n", err)
+//	    if result != nil {
+//	        fmt.Printf("Partial results: %s\n", result.Summary())
+//	    }
+//	    return err
+//	}
+//
+//	fmt.Printf("Generated %d profiles successfully\n", len(result.GeneratedProfiles))
+//	if len(result.DetectedConflicts) > 0 {
+//	    fmt.Printf("Resolved %d conflicts\n", len(result.DetectedConflicts))
+//	}
 func (pg *ProfileGenerator) GenerateProfilesWorkflow() (*ProfileGenerationResult, error) {
 	result := &ProfileGenerationResult{
 		ConflictingProfiles: []string{},
@@ -383,11 +556,10 @@ func (pg *ProfileGenerator) GenerateProfilesWorkflow() (*ProfileGenerationResult
 	}
 
 	// Combine all generated profiles
-	allGeneratedProfiles := append(conflictResolution.GeneratedProfiles, nonConflictedProfiles...)
-	result.GeneratedProfiles = allGeneratedProfiles
+	result.GeneratedProfiles = append(conflictResolution.GeneratedProfiles, nonConflictedProfiles...)
 
 	// Preview profiles
-	if err := pg.PreviewProfiles(allGeneratedProfiles); err != nil {
+	if err := pg.PreviewProfiles(result.GeneratedProfiles); err != nil {
 		if pgErr, ok := err.(ProfileGeneratorError); ok {
 			result.AddError(pgErr)
 		} else {
@@ -398,7 +570,7 @@ func (pg *ProfileGenerator) GenerateProfilesWorkflow() (*ProfileGenerationResult
 
 	// Append to config (if approved)
 	if pg.autoApprove {
-		if err := pg.AppendToConfig(allGeneratedProfiles); err != nil {
+		if err := pg.AppendToConfig(result.GeneratedProfiles); err != nil {
 			if pgErr, ok := err.(ProfileGeneratorError); ok {
 				result.AddError(pgErr)
 			} else {
@@ -408,7 +580,7 @@ func (pg *ProfileGenerator) GenerateProfilesWorkflow() (*ProfileGenerationResult
 		}
 
 		// Track successful profiles
-		for _, profile := range allGeneratedProfiles {
+		for _, profile := range result.GeneratedProfiles {
 			result.SuccessfulProfiles = append(result.SuccessfulProfiles, profile.Name)
 		}
 	}
@@ -893,7 +1065,7 @@ func (pg *ProfileGenerator) FormatProgressMessage(phase string, message string, 
 	msg.WriteString(message)
 
 	// Add details if provided
-	if details != nil && len(details) > 0 {
+	if len(details) > 0 {
 		for key, value := range details {
 			msg.WriteString(fmt.Sprintf(" [%s: %v]", key, value))
 		}

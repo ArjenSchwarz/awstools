@@ -19,40 +19,170 @@ var ssoCmd = &cobra.Command{
 	Long:  `Various AWS SSO commands`,
 }
 
-// profileGeneratorCmd represents the profile-generator command
+// profileGeneratorCmd represents the profile-generator command with enhanced conflict resolution
 var profileGeneratorCmd = &cobra.Command{
 	Use:   "profile-generator",
-	Short: "Generate AWS CLI profiles for all assumable roles",
-	Long: `Generate AWS CLI profiles for all assumable roles in AWS IAM Identity Center.
+	Short: "Generate AWS CLI profiles for all assumable roles with intelligent conflict resolution",
+	Long: `Generate AWS CLI profiles for all assumable roles in AWS IAM Identity Center with
+intelligent conflict detection and resolution capabilities.
 
+OVERVIEW:
 This command uses an existing SSO profile as a template to discover all accessible accounts
-and permission sets, then generates corresponding AWS CLI profiles using a configurable
-naming pattern.
+and permission sets through the AWS SSO API, then generates corresponding AWS CLI profiles
+using a configurable naming pattern. The enhanced version includes sophisticated conflict
+detection and resolution to handle existing profiles gracefully.
 
-When existing profiles are found for the same roles, you can control how conflicts are resolved:
-- Default behavior: prompt for each conflict
-- --replace-existing: replace existing profiles with new names based on the pattern
-- --skip-existing: skip generating profiles for roles that already have profiles
+CONFLICT RESOLUTION:
+When existing profiles are found that correspond to the same AWS roles or use the same
+profile names, you can control how conflicts are resolved:
 
-Examples:
+• Default behavior (no flags): Interactive prompts for each conflict
+  - Shows detailed conflict information
+  - Allows per-conflict decision making
+  - Provides cancel option to exit without changes
+
+• --replace-existing: Automatically replace existing profiles
+  - Removes old profiles and creates new ones with pattern-based names
+  - Preserves custom configuration properties when possible
+  - Creates automatic backup before making changes
+
+• --skip-existing: Skip roles that already have profiles
+  - Preserves all existing profile configurations
+  - Only generates profiles for roles without existing profiles
+  - Provides summary of skipped roles
+
+NAMING PATTERNS:
+The naming pattern supports the following placeholders:
+• {account_name} - AWS account name (from Organizations API)
+• {account_id} - 12-digit AWS account ID
+• {account_alias} - Account alias if available
+• {role_name} - Permission set name (e.g., "AdministratorAccess")
+• {region} - AWS region from template profile
+
+SUPPORTED PROFILE FORMATS:
+• Legacy SSO format: Direct sso_account_id and sso_role_name properties
+• Modern SSO format: sso_session references with separate session configuration
+• Mixed environments: Handles both formats transparently
+
+SAFETY FEATURES:
+• Automatic backup creation before any modifications
+• File locking to prevent concurrent access issues
+• Atomic operations with rollback on failures
+• Comprehensive error recovery and guidance
+• Detailed operation logging and progress reporting
+
+EXAMPLES:
+
+Basic Usage:
   # Generate profiles using 'my-sso-profile' as template
   awstools sso profile-generator --template my-sso-profile
 
-  # Use custom naming pattern
+Custom Naming:
+  # Use account ID instead of account name in profile names
   awstools sso profile-generator --template my-sso-profile --pattern "{account_id}-{role_name}"
+  
+  # Use shorter pattern for concise profile names
+  awstools sso profile-generator --template my-sso-profile --pattern "{account_name}-{role_name}"
 
-  # Auto-approve without confirmation
-  awstools sso profile-generator --template my-sso-profile --yes
-
+Conflict Resolution:
   # Replace existing profiles with new names based on pattern
   awstools sso profile-generator --template my-sso-profile --replace-existing
-
-  # Skip roles that already have profiles
+  
+  # Skip roles that already have profiles (preserve existing)
   awstools sso profile-generator --template my-sso-profile --skip-existing
+  
+  # Interactive mode with per-conflict decisions (default)
+  awstools sso profile-generator --template my-sso-profile
 
+Automation:
+  # Auto-approve without confirmation prompts
+  awstools sso profile-generator --template my-sso-profile --yes
+  
+  # Combine auto-approve with conflict resolution
+  awstools sso profile-generator --template my-sso-profile --replace-existing --yes
+
+Custom Output:
   # Output to a specific file instead of ~/.aws/config
-  awstools sso profile-generator --template my-sso-profile --output-file /path/to/config
-`,
+  awstools sso profile-generator --template my-sso-profile --output-file /path/to/custom-config
+  
+  # Generate profiles for review without modifying config
+  awstools sso profile-generator --template my-sso-profile --output-file ./preview-profiles.txt
+
+Advanced Scenarios:
+  # Standardize existing profile names using new pattern
+  awstools sso profile-generator --template legacy-sso --pattern "aws-{account_name}-{role_name}" --replace-existing
+  
+  # Add new roles while preserving existing profiles
+  awstools sso profile-generator --template my-sso --skip-existing --yes
+
+BEST PRACTICES:
+
+Profile Name Standardization:
+• Use consistent naming patterns across your organization
+• Include account identifiers to avoid confusion in multi-account setups
+• Consider role-based naming for easier identification
+• Example patterns:
+  - "{account_name}-{role_name}" (default, human-readable)
+  - "{account_id}-{role_name}" (unique, shorter)
+  - "aws-{account_name}-{role_name}" (prefixed for organization)
+
+Conflict Resolution Strategy:
+• Use --skip-existing for additive operations (only add new profiles)
+• Use --replace-existing for standardization (update existing profile names)
+• Use interactive mode (default) for mixed scenarios requiring decisions
+• Always review changes before applying with --yes flag
+
+Safety and Recovery:
+• Automatic backups are created before any modifications
+• Backup files are stored with timestamp: ~/.aws/config.backup.YYYYMMDD-HHMMSS
+• Test with --output-file first to preview changes
+• Keep your original config file backed up separately
+
+Performance Optimization:
+• Use specific naming patterns to reduce conflicts
+• Run during off-peak hours for large organizations
+• Consider batching operations by account or role type
+
+TROUBLESHOOTING:
+
+Common Issues and Solutions:
+• "Template profile not found"
+  → Run: aws configure list-profiles
+  → Verify profile name spelling and existence
+
+• "SSO session expired"
+  → Run: aws sso login
+  → Check session validity: aws sts get-caller-identity --profile <template>
+
+• "Permission denied on config file"
+  → Check permissions: ls -la ~/.aws/config
+  → Fix permissions: chmod 600 ~/.aws/config
+
+• "No accessible roles found"
+  → Verify SSO permissions in AWS console
+  → Check account access through SSO portal
+  → Ensure template profile has proper SSO configuration
+
+• "Profile conflicts detected"
+  → Use --replace-existing to update existing profiles
+  → Use --skip-existing to preserve existing profiles
+  → Use interactive mode to decide per conflict
+
+Recovery Procedures:
+• Restore from automatic backup: cp ~/.aws/config.backup.* ~/.aws/config
+• Verify restored config: aws configure list-profiles
+• Test profile functionality: aws sts get-caller-identity --profile <name>
+
+Advanced Usage:
+• Custom output locations: --output-file /path/to/custom-config
+• Automation scripts: --yes --replace-existing for unattended operation
+• Preview mode: --output-file /tmp/preview.txt (review before applying)
+• Batch processing: Use shell scripts to process multiple templates
+
+For more information:
+• AWS SSO Configuration: https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-sso.html
+• AWS CLI Profiles: https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-profiles.html
+• SSO Session Management: https://docs.aws.amazon.com/cli/latest/userguide/sso-configure-profile-token.html`,
 	Run: profileGenerator,
 }
 
@@ -60,27 +190,27 @@ func init() {
 	rootCmd.AddCommand(ssoCmd)
 	ssoCmd.AddCommand(profileGeneratorCmd)
 
-	// Add flags for profile-generator command
-	profileGeneratorCmd.Flags().StringP("template", "t", "", "Template profile name (required)")
-	profileGeneratorCmd.Flags().StringP("pattern", "p", "{account_name}-{role_name}", "Naming pattern for generated profiles")
-	profileGeneratorCmd.Flags().BoolP("yes", "y", false, "Auto-approve appending profiles without confirmation")
-	profileGeneratorCmd.Flags().StringP("output-file", "F", "", "Output to file instead of appending to ~/.aws/config")
+	// Core flags for profile generation
+	profileGeneratorCmd.Flags().StringP("template", "t", "", "Template profile name (required) - must be an existing SSO profile")
+	profileGeneratorCmd.Flags().StringP("pattern", "p", "{account_name}-{role_name}", "Naming pattern for generated profiles (supports placeholders: {account_name}, {account_id}, {account_alias}, {role_name}, {region})")
+	profileGeneratorCmd.Flags().BoolP("yes", "y", false, "Auto-approve appending profiles without confirmation prompts")
+	profileGeneratorCmd.Flags().StringP("output-file", "F", "", "Output to file instead of appending to ~/.aws/config (useful for preview or custom locations)")
 
-	// Conflict resolution flags
-	profileGeneratorCmd.Flags().Bool("replace-existing", false, "Replace existing profiles with new names based on pattern")
-	profileGeneratorCmd.Flags().Bool("skip-existing", false, "Skip generating profiles for roles that already have profiles")
+	// Enhanced conflict resolution flags with detailed descriptions
+	profileGeneratorCmd.Flags().Bool("replace-existing", false, "Replace existing profiles with new names based on pattern (creates automatic backup for safety)")
+	profileGeneratorCmd.Flags().Bool("skip-existing", false, "Skip generating profiles for roles that already have profiles (preserves existing configurations completely)")
 
-	// Mark template flag as required
-	profileGeneratorCmd.MarkFlagRequired("template")
+	// Mark template flag as required since it's essential for operation
+	_ = profileGeneratorCmd.MarkFlagRequired("template")
 
-	// Add mutual exclusion validation for conflict resolution flags
+	// Ensure conflict resolution flags are mutually exclusive to prevent ambiguous behavior
 	profileGeneratorCmd.MarkFlagsMutuallyExclusive("replace-existing", "skip-existing")
 }
 
 var ssoresourceid string
 
 // profileGenerator implements the profile-generator command
-func profileGenerator(cmd *cobra.Command, args []string) {
+func profileGenerator(cmd *cobra.Command, _ []string) {
 	// Parse command line flags
 	templateProfile, _ := cmd.Flags().GetString("template")
 	namingPattern, _ := cmd.Flags().GetString("pattern")
@@ -136,49 +266,6 @@ func confirmProfileAddition(profiles []helpers.GeneratedProfile) bool {
 
 	response = strings.ToLower(strings.TrimSpace(response))
 	return response == "y" || response == "yes"
-}
-
-// displayProfileGenerationResults displays the generation results using go-output
-func displayProfileGenerationResults(result *helpers.ProfileGenerationResult) {
-	if len(result.GeneratedProfiles) == 0 {
-		fmt.Println("No profiles were generated.")
-		return
-	}
-
-	// Create output for generated profiles
-	keys := []string{"ProfileName", "Account", "Role", "Region", "Format", "Status"}
-	output := format.OutputArray{Keys: keys, Settings: settings.NewOutputSettings()}
-	output.Settings.Title = "Generated AWS CLI Profiles"
-	output.Settings.SortKey = "ProfileName"
-
-	for _, profile := range result.GeneratedProfiles {
-		content := make(map[string]any)
-		content["ProfileName"] = profile.Name
-		content["Account"] = fmt.Sprintf("%s (%s)", profile.AccountName, profile.AccountID)
-		content["Role"] = profile.RoleName
-		content["Region"] = profile.Region
-
-		formatType := "New (sso_session)"
-		if profile.IsLegacy {
-			formatType = "Legacy (sso_account_id + sso_role_name)"
-		}
-		content["Format"] = formatType
-
-		// Determine status based on whether this profile was part of conflict resolution
-		status := "New"
-		for _, action := range result.ResolutionActions {
-			if action.Action == helpers.ActionReplace && action.NewName == profile.Name {
-				status = "Replaced"
-				break
-			}
-		}
-		content["Status"] = status
-
-		holder := format.OutputHolder{Contents: content}
-		output.AddHolder(holder)
-	}
-
-	output.Write()
 }
 
 // countActionsByType counts the number of actions of a specific type
@@ -453,7 +540,7 @@ func displayRecoveryInformation(result *helpers.ProfileGenerationResult) {
 	fmt.Println()
 }
 
-// displayErrorWithRecovery shows an error with contextual recovery information
+// displayErrorWithRecovery shows an error with comprehensive contextual recovery information
 func displayErrorWithRecovery(message string, err error) {
 	fmt.Fprintf(os.Stderr, "❌ %s: %v\n", message, err)
 
@@ -462,6 +549,11 @@ func displayErrorWithRecovery(message string, err error) {
 		switch pgErr.Type {
 		case helpers.ErrorTypeValidation:
 			fmt.Fprintln(os.Stderr, "💡 Recovery: Check the input parameters and configuration")
+			fmt.Fprintln(os.Stderr, "   Common validation issues:")
+			fmt.Fprintln(os.Stderr, "   - Template profile name is empty or doesn't exist")
+			fmt.Fprintln(os.Stderr, "   - Template profile is not configured for SSO")
+			fmt.Fprintln(os.Stderr, "   - Naming pattern contains invalid placeholders")
+			fmt.Fprintln(os.Stderr, "   - Conflicting flags provided (--replace-existing and --skip-existing)")
 			if pgErr.Context != nil {
 				fmt.Fprintln(os.Stderr, "📋 Error Context:")
 				for key, value := range pgErr.Context {
@@ -470,21 +562,41 @@ func displayErrorWithRecovery(message string, err error) {
 			}
 		case helpers.ErrorTypeFileSystem:
 			fmt.Fprintln(os.Stderr, "💡 Recovery: Check file permissions and ensure the directory exists")
-			fmt.Fprintln(os.Stderr, "   - Verify ~/.aws directory exists and is writable")
-			fmt.Fprintln(os.Stderr, "   - Check disk space availability")
+			fmt.Fprintln(os.Stderr, "   File system troubleshooting:")
+			fmt.Fprintln(os.Stderr, "   - Verify ~/.aws directory exists: mkdir -p ~/.aws")
+			fmt.Fprintln(os.Stderr, "   - Check file permissions: ls -la ~/.aws/config")
+			fmt.Fprintln(os.Stderr, "   - Ensure config file is writable: chmod 600 ~/.aws/config")
+			fmt.Fprintln(os.Stderr, "   - Check disk space availability: df -h ~")
+			fmt.Fprintln(os.Stderr, "   - Verify file ownership: ls -la ~/.aws/")
 		case helpers.ErrorTypeAPI:
 			fmt.Fprintln(os.Stderr, "💡 Recovery: Check AWS credentials and connectivity")
-			fmt.Fprintln(os.Stderr, "   - Run: aws sso login")
+			fmt.Fprintln(os.Stderr, "   AWS API troubleshooting:")
+			fmt.Fprintln(os.Stderr, "   - Refresh SSO session: aws sso login")
 			fmt.Fprintln(os.Stderr, "   - Verify network connectivity to AWS")
-			fmt.Fprintln(os.Stderr, "   - Check if the template profile is valid")
+			fmt.Fprintln(os.Stderr, "   - Check template profile configuration: aws configure list --profile <template-name>")
+			fmt.Fprintln(os.Stderr, "   - Test SSO access: aws sts get-caller-identity --profile <template-name>")
+			fmt.Fprintln(os.Stderr, "   - Verify SSO session is not expired")
 		default:
 			fmt.Fprintln(os.Stderr, "💡 Recovery: Review the error message and check your configuration")
+			fmt.Fprintln(os.Stderr, "   General troubleshooting:")
 			fmt.Fprintln(os.Stderr, "   - Verify all required parameters are provided")
 			fmt.Fprintln(os.Stderr, "   - Check AWS SSO session status")
+			fmt.Fprintln(os.Stderr, "   - Review command syntax and flag usage")
 		}
 	} else {
 		fmt.Fprintln(os.Stderr, "💡 Recovery: Review the error message and check your configuration")
+		fmt.Fprintln(os.Stderr, "   Basic troubleshooting steps:")
 		fmt.Fprintln(os.Stderr, "   - Verify all required parameters are provided")
-		fmt.Fprintln(os.Stderr, "   - Check AWS SSO session status")
+		fmt.Fprintln(os.Stderr, "   - Check AWS SSO session status: aws sso login")
+		fmt.Fprintln(os.Stderr, "   - Ensure template profile exists and is valid")
+		fmt.Fprintln(os.Stderr, "   - Review command documentation: awstools sso profile-generator --help")
 	}
+
+	// Add common troubleshooting section
+	fmt.Fprintln(os.Stderr, "\n🔧 Common Solutions:")
+	fmt.Fprintln(os.Stderr, "   1. Refresh your SSO session: aws sso login")
+	fmt.Fprintln(os.Stderr, "   2. Verify template profile: aws configure list --profile <template-name>")
+	fmt.Fprintln(os.Stderr, "   3. Check file permissions: ls -la ~/.aws/config")
+	fmt.Fprintln(os.Stderr, "   4. Review command syntax: awstools sso profile-generator --help")
+	fmt.Fprintln(os.Stderr, "   5. Test with minimal flags first: awstools sso profile-generator --template <name>")
 }

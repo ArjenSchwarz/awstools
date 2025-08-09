@@ -5,24 +5,85 @@ import (
 	"strings"
 )
 
-// max returns the maximum of two integers
-func max(a, b int) int {
+// maxInt returns the maximum of two integers
+func maxInt(a, b int) int {
 	if a > b {
 		return a
 	}
 	return b
 }
 
-// ProfileConflictDetector handles the logic for detecting profile conflicts
+// ProfileConflictDetector handles the logic for detecting profile conflicts between
+// discovered AWS roles and existing AWS CLI profiles. It provides efficient conflict
+// detection using pre-built indexes and cached SSO configuration resolution.
+//
+// The detector implements a sophisticated conflict detection algorithm that:
+// - Matches profiles based on SSO configuration rather than profile names
+// - Supports both legacy and modern SSO profile formats
+// - Uses efficient O(1) lookups through profile indexing
+// - Pre-resolves and caches SSO configurations for performance
+// - Classifies conflicts by type (same role vs same name)
+//
+// Conflict Detection Algorithm:
+// 1. Pre-resolve all SSO configurations for existing profiles
+// 2. For each discovered role, generate the proposed profile name
+// 3. Find existing profiles that match the role's SSO configuration
+// 4. Find existing profiles that have the same name as proposed
+// 5. Classify conflicts and return detailed conflict information
+//
+// Performance Optimizations:
+// - Profile lookup index for O(1) profile searches by account ID and name
+// - Pre-resolved SSO configuration cache to avoid repeated resolution
+// - Efficient memory allocation with capacity estimation
+// - Batch processing of conflict detection operations
+//
+// Example usage:
+//
+//	detector := NewProfileConflictDetector(configFile, namingPattern)
+//	conflicts, err := detector.DetectConflicts(discoveredRoles)
+//	if err != nil {
+//	    // handle error
+//	}
+//
+//	for _, conflict := range conflicts {
+//	    fmt.Printf("Conflict: %s -> %s (%s)\n",
+//	        conflict.DiscoveredRole.RoleName,
+//	        conflict.ProposedName,
+//	        conflict.ConflictType.String())
+//	}
 type ProfileConflictDetector struct {
-	configFile         *AWSConfigFile
-	namingPattern      *NamingPattern
-	logger             Logger
-	profileIndex       *ProfileLookupIndex
-	resolvedSSOConfigs map[string]*ResolvedSSOConfig // Profile name -> resolved SSO config
+	configFile         *AWSConfigFile                // AWS config file containing existing profiles
+	namingPattern      *NamingPattern                // Pattern for generating profile names
+	logger             Logger                        // Logger for diagnostic messages
+	profileIndex       *ProfileLookupIndex           // Efficient profile lookup index
+	resolvedSSOConfigs map[string]*ResolvedSSOConfig // Profile name -> resolved SSO config cache
 }
 
-// NewProfileConflictDetector creates a new profile conflict detector
+// NewProfileConflictDetector creates a new profile conflict detector with optimized
+// performance features including profile indexing and SSO configuration caching.
+//
+// The constructor performs several initialization steps:
+// 1. Creates the detector with provided config file and naming pattern
+// 2. Builds an efficient profile lookup index for O(1) searches
+// 3. Pre-resolves and caches SSO configurations for all existing profiles
+// 4. Sets up a default logger (can be overridden with SetLogger)
+//
+// Parameters:
+//   - configFile: AWS config file containing existing profiles to check against
+//   - namingPattern: Pattern used to generate profile names for discovered roles
+//
+// Returns:
+//   - *ProfileConflictDetector: Initialized detector ready for conflict detection
+//
+// Performance Notes:
+// - Profile index creation is O(n) where n is the number of existing profiles
+// - SSO configuration pre-resolution is O(n) but saves time during conflict detection
+// - Memory usage scales linearly with the number of existing profiles
+//
+// Error Handling:
+// - If profile index creation fails, detector falls back to linear search
+// - If SSO resolution fails for a profile, it's skipped with a warning
+// - Detector remains functional even with partial initialization failures
 func NewProfileConflictDetector(configFile *AWSConfigFile, namingPattern *NamingPattern) *ProfileConflictDetector {
 	detector := &ProfileConflictDetector{
 		configFile:         configFile,
@@ -60,7 +121,49 @@ func (pcd *ProfileConflictDetector) preResolveSSO() {
 	}
 }
 
-// DetectConflicts analyzes all discovered roles for conflicts
+// DetectConflicts analyzes all discovered roles for conflicts with existing profiles.
+// This is the main entry point for conflict detection and implements the complete
+// conflict detection workflow.
+//
+// The method processes each discovered role through the following steps:
+// 1. Validates the discovered role data
+// 2. Generates the proposed profile name using the naming pattern
+// 3. Searches for existing profiles that match the role's SSO configuration
+// 4. Searches for existing profiles that have the same name as proposed
+// 5. Classifies the type of conflict detected
+// 6. Creates detailed conflict information for resolution
+//
+// Parameters:
+//   - discoveredRoles: Slice of roles discovered through SSO enumeration
+//
+// Returns:
+//   - []ProfileConflict: Slice of detected conflicts with detailed information
+//   - error: Any error encountered during conflict detection
+//
+// Performance Characteristics:
+// - Time complexity: O(n) where n is the number of discovered roles
+// - Space complexity: O(c) where c is the number of conflicts (typically << n)
+// - Uses pre-built indexes and caches for efficient profile lookups
+//
+// Error Handling:
+// - Individual role analysis failures are logged as warnings and skipped
+// - Only critical errors (e.g., invalid input) cause the method to fail
+// - Partial results are returned even if some roles fail analysis
+//
+// Conflict Types Detected:
+// - Same Role: Existing profile points to the same AWS role
+// - Same Name: Proposed profile name already exists but points to different role
+//
+// Example usage:
+//
+//	conflicts, err := detector.DetectConflicts(discoveredRoles)
+//	if err != nil {
+//	    return fmt.Errorf("conflict detection failed: %w", err)
+//	}
+//
+//	if len(conflicts) > 0 {
+//	    fmt.Printf("Found %d conflicts requiring resolution\n", len(conflicts))
+//	}
 func (pcd *ProfileConflictDetector) DetectConflicts(discoveredRoles []DiscoveredRole) ([]ProfileConflict, error) {
 	if len(discoveredRoles) == 0 {
 		return []ProfileConflict{}, nil
@@ -68,7 +171,7 @@ func (pcd *ProfileConflictDetector) DetectConflicts(discoveredRoles []Discovered
 
 	// Pre-allocate slice capacity based on discovered roles count
 	// Estimate that 20-30% of roles might have conflicts
-	estimatedConflicts := max(len(discoveredRoles)/4, 10)
+	estimatedConflicts := maxInt(len(discoveredRoles)/4, 10)
 	conflicts := make([]ProfileConflict, 0, estimatedConflicts)
 
 	for _, role := range discoveredRoles {
@@ -87,7 +190,42 @@ func (pcd *ProfileConflictDetector) DetectConflicts(discoveredRoles []Discovered
 	return conflicts, nil
 }
 
-// AnalyzeRole checks a single role for conflicts
+// AnalyzeRole checks a single discovered role for conflicts with existing profiles.
+// This method implements the core conflict detection logic for individual roles.
+//
+// The analysis process follows these steps:
+// 1. Validates the discovered role has all required fields
+// 2. Generates the proposed profile name using the configured naming pattern
+// 3. Searches for existing profiles that match the role's SSO configuration
+// 4. Searches for existing profiles that have the same name as proposed
+// 5. Combines and deduplicates conflicting profiles
+// 6. Classifies the type of conflict detected
+// 7. Creates and validates the conflict object
+//
+// Parameters:
+//   - role: The discovered role to analyze for conflicts
+//
+// Returns:
+//   - *ProfileConflict: Detailed conflict information if conflicts found, nil otherwise
+//   - error: Any error encountered during role analysis
+//
+// Conflict Detection Logic:
+// - Role Match: Compares SSO start URL, account ID, and role name
+// - Name Match: Compares proposed profile name with existing profile names
+// - Supports both legacy SSO format and modern SSO session format
+// - Uses cached SSO configurations for efficient matching
+//
+// Error Handling:
+// - Invalid discovered role data returns validation error
+// - Profile name generation failures return validation error
+// - Profile matching failures are logged but don't fail the analysis
+// - Invalid conflict objects return validation error
+//
+// Performance Notes:
+// - Uses profile index for O(1) lookups when available
+// - Falls back to linear search if index is unavailable
+// - Leverages pre-resolved SSO configuration cache
+// - Efficient memory allocation for conflict data structures
 func (pcd *ProfileConflictDetector) AnalyzeRole(role DiscoveredRole) (*ProfileConflict, error) {
 	// Validate the discovered role
 	if err := role.Validate(); err != nil {
@@ -147,7 +285,39 @@ func (pcd *ProfileConflictDetector) AnalyzeRole(role DiscoveredRole) (*ProfileCo
 	return conflict, nil
 }
 
-// ClassifyConflict determines the type of conflict detected
+// ClassifyConflict determines the type of conflict detected between a discovered role
+// and existing profiles. This classification helps determine the appropriate resolution strategy.
+//
+// Conflict Classification Logic:
+// 1. Same Role Conflict: An existing profile already points to the same AWS role
+//   - Matches on SSO start URL, account ID, and role name
+//   - Indicates duplicate role configuration with potentially different profile names
+//   - Resolution typically involves replacing or renaming the existing profile
+//
+// 2. Same Name Conflict: The proposed profile name already exists
+//   - Matches on profile name but points to a different AWS role
+//   - Indicates naming collision between different roles
+//   - Resolution typically involves generating a different name or skipping
+//
+// The method prioritizes Same Role conflicts over Same Name conflicts when both
+// conditions are present, as role conflicts are more significant for functionality.
+//
+// Parameters:
+//   - existingProfiles: List of existing profiles that conflict with the discovered role
+//   - proposedName: The proposed name for the new profile
+//   - role: The discovered role being analyzed
+//
+// Returns:
+//   - ConflictType: The type of conflict detected (ConflictSameRole or ConflictSameName)
+//
+// Error Handling:
+// - Profile matching failures are logged as warnings but don't affect classification
+// - Defaults to ConflictSameRole if classification cannot be determined
+// - Handles both legacy and modern SSO profile formats transparently
+//
+// Example scenarios:
+// - Same Role: Existing "prod-admin" profile points to same role as discovered "production-AdministratorAccess"
+// - Same Name: Existing "prod-admin" profile points to different role than discovered "prod-admin"
 func (pcd *ProfileConflictDetector) ClassifyConflict(existingProfiles []Profile, proposedName string, role DiscoveredRole) ConflictType {
 	// Check if any existing profile matches the same role (SSO configuration)
 	for _, profile := range existingProfiles {
