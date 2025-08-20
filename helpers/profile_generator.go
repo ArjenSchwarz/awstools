@@ -13,6 +13,12 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 )
 
+// Constants for user actions
+const (
+	userActionReplace = "replace"
+	userActionSkip    = "skip"
+)
+
 // ProfileGenerator handles the complete profile generation workflow with enhanced
 // conflict resolution capabilities. It orchestrates the entire process from template
 // profile validation through role discovery to final profile generation and conflict resolution.
@@ -556,7 +562,8 @@ func (pg *ProfileGenerator) GenerateProfilesWorkflow() (*ProfileGenerationResult
 	}
 
 	// Combine all generated profiles
-	result.GeneratedProfiles = append(conflictResolution.GeneratedProfiles, nonConflictedProfiles...)
+	result.GeneratedProfiles = append(result.GeneratedProfiles, conflictResolution.GeneratedProfiles...)
+	result.GeneratedProfiles = append(result.GeneratedProfiles, nonConflictedProfiles...)
 
 	// Preview profiles
 	if err := pg.PreviewProfiles(result.GeneratedProfiles); err != nil {
@@ -714,14 +721,14 @@ func (pg *ProfileGenerator) PromptForConflictResolution(conflict ProfileConflict
 	}
 
 	switch choice {
-	case "r", "replace":
+	case "r", userActionReplace:
 		action.Action = ActionReplace
 		action.NewName = conflict.ProposedName
 		if len(conflict.ExistingProfiles) > 0 {
 			action.OldName = conflict.ExistingProfiles[0].Name
 		}
 		pg.logger.Printf("Selected: Replace existing profile(s)\n")
-	case "s", "skip":
+	case "s", userActionSkip:
 		action.Action = ActionSkip
 		pg.logger.Printf("Selected: Skip this role\n")
 	case "c", "cancel":

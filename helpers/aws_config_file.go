@@ -11,6 +11,12 @@ import (
 	"time"
 )
 
+// Constants for SSO configuration keys
+const (
+	ssoStartURLKey = "sso_start_url"
+	ssoRegionKey   = "sso_region"
+)
+
 // AWSConfigFile represents an AWS config file with its profiles
 type AWSConfigFile struct {
 	FilePath string
@@ -183,10 +189,7 @@ func LoadAWSConfigFile(filePath string) (*AWSConfigFile, error) {
 		// If it's a validation error with partial recovery, log warning but continue
 		if pgErr, ok := err.(ProfileGeneratorError); ok && pgErr.Type == ErrorTypeValidation {
 			// Check if we have any successfully parsed profiles
-			if len(configFile.Profiles) > 0 || len(configFile.Sessions) > 0 {
-				// Partial recovery successful - continue with warning
-				// In a real implementation, you might want to log this warning
-			} else {
+			if len(configFile.Profiles) == 0 && len(configFile.Sessions) == 0 {
 				// No profiles parsed, this is a critical error
 				return nil, err
 			}
@@ -197,138 +200,6 @@ func LoadAWSConfigFile(filePath string) (*AWSConfigFile, error) {
 	}
 
 	return configFile, nil
-}
-
-// parseConfigFile parses the AWS config file content
-func (cf *AWSConfigFile) parseConfigFile(file *os.File) error {
-	scanner := bufio.NewScanner(file)
-	var currentProfile *Profile
-	var currentSession *SSOSession
-	profileNameRegex := regexp.MustCompile(`^\[profile\s+(.+)\]$`)
-	defaultProfileRegex := regexp.MustCompile(`^\[default\]$`)
-	ssoSessionRegex := regexp.MustCompile(`^\[sso-session\s+(.+)\]$`)
-
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-
-		// Skip empty lines and comments
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-
-		// Check for profile section
-		if matches := profileNameRegex.FindStringSubmatch(line); matches != nil {
-			// Save previous profile if exists
-			if currentProfile != nil {
-				cf.Profiles[currentProfile.Name] = *currentProfile
-			}
-			// Save previous session if exists
-			if currentSession != nil {
-				cf.Sessions[currentSession.Name] = *currentSession
-				currentSession = nil
-			}
-
-			// Start new profile
-			currentProfile = &Profile{
-				Name:            matches[1],
-				OtherProperties: make(map[string]string),
-			}
-		} else if matches := defaultProfileRegex.FindStringSubmatch(line); matches != nil {
-			// Handle default profile
-			if currentProfile != nil {
-				cf.Profiles[currentProfile.Name] = *currentProfile
-			}
-			// Save previous session if exists
-			if currentSession != nil {
-				cf.Sessions[currentSession.Name] = *currentSession
-				currentSession = nil
-			}
-
-			currentProfile = &Profile{
-				Name:            "default",
-				OtherProperties: make(map[string]string),
-			}
-		} else if matches := ssoSessionRegex.FindStringSubmatch(line); matches != nil {
-			// Save previous profile if exists
-			if currentProfile != nil {
-				cf.Profiles[currentProfile.Name] = *currentProfile
-				currentProfile = nil
-			}
-			// Save previous session if exists
-			if currentSession != nil {
-				cf.Sessions[currentSession.Name] = *currentSession
-			}
-
-			// Start new SSO session
-			currentSession = &SSOSession{
-				Name: matches[1],
-			}
-		} else if currentSession != nil {
-			// Parse SSO session property line
-			if strings.Contains(line, "=") {
-				parts := strings.SplitN(line, "=", 2)
-				if len(parts) == 2 {
-					key := strings.TrimSpace(parts[0])
-					value := strings.TrimSpace(parts[1])
-
-					// Set known SSO session properties
-					switch key {
-					case "sso_start_url":
-						currentSession.SSOStartURL = value
-					case "sso_region":
-						currentSession.SSORegion = value
-					}
-				}
-			}
-		} else if currentProfile != nil {
-			// Parse property line
-			if strings.Contains(line, "=") {
-				parts := strings.SplitN(line, "=", 2)
-				if len(parts) == 2 {
-					key := strings.TrimSpace(parts[0])
-					value := strings.TrimSpace(parts[1])
-
-					// Set known properties
-					switch key {
-					case "region":
-						currentProfile.Region = value
-					case "sso_start_url":
-						currentProfile.SSOStartURL = value
-					case "sso_region":
-						currentProfile.SSORegion = value
-					case "sso_account_id":
-						currentProfile.SSOAccountID = value
-					case "sso_role_name":
-						currentProfile.SSORoleName = value
-					case "sso_session":
-						currentProfile.SSOSession = value
-					case "output":
-						currentProfile.Output = value
-					default:
-						// Store other properties
-						currentProfile.OtherProperties[key] = value
-					}
-				}
-			}
-		}
-	}
-
-	// Save the last profile
-	if currentProfile != nil {
-		cf.Profiles[currentProfile.Name] = *currentProfile
-	}
-
-	// Save the last session
-	if currentSession != nil {
-		cf.Sessions[currentSession.Name] = *currentSession
-	}
-
-	if err := scanner.Err(); err != nil {
-		return NewFileSystemError("failed to read config file", err).
-			WithContext("file_path", cf.FilePath)
-	}
-
-	return nil
 }
 
 // parseConfigFileWithRecovery parses the AWS config file with malformed section recovery
@@ -461,7 +332,7 @@ func (cf *AWSConfigFile) parseConfigFileWithRecovery(file *os.File) error {
 			currentSession = &SSOSession{
 				Name: sessionName,
 			}
-		} else if currentSession != nil {
+		} else if currentSession != nil { //nolint:gocritic // Sequential parsing logic requires if-else chain
 			// Parse SSO session property line
 			if strings.Contains(line, "=") {
 				parts := strings.SplitN(line, "=", 2)
@@ -480,9 +351,9 @@ func (cf *AWSConfigFile) parseConfigFileWithRecovery(file *os.File) error {
 
 					// Set known SSO session properties
 					switch key {
-					case "sso_start_url":
+					case ssoStartURLKey:
 						currentSession.SSOStartURL = value
-					case "sso_region":
+					case ssoRegionKey:
 						currentSession.SSORegion = value
 					default:
 						// Log unknown property but continue
@@ -525,9 +396,9 @@ func (cf *AWSConfigFile) parseConfigFileWithRecovery(file *os.File) error {
 					switch key {
 					case "region":
 						currentProfile.Region = value
-					case "sso_start_url":
+					case ssoStartURLKey:
 						currentProfile.SSOStartURL = value
-					case "sso_region":
+					case ssoRegionKey:
 						currentProfile.SSORegion = value
 					case "sso_account_id":
 						currentProfile.SSOAccountID = value
@@ -752,11 +623,7 @@ func (cf *AWSConfigFile) AppendToFile(profiles []GeneratedProfile) error {
 		if err := acquireFileLock(file); err != nil {
 			return err
 		}
-		defer func() {
-			if releaseErr := releaseFileLock(file); releaseErr != nil {
-				// Log the error but don't override the main error
-			}
-		}()
+		defer func() { _ = releaseFileLock(file) }()
 
 		// Set proper permissions
 		if err := file.Chmod(0600); err != nil {
@@ -1005,51 +872,10 @@ func withFileLock(filePath string, fn func(*os.File) error) error {
 	if err := acquireFileLock(file); err != nil {
 		return err
 	}
-	defer func() {
-		if releaseErr := releaseFileLock(file); releaseErr != nil {
-			// Log the error but don't override the main error
-			// In a real implementation, you might want to use a logger here
-		}
-	}()
+	defer func() { _ = releaseFileLock(file) }()
 
 	// Execute the function
 	return fn(file)
-}
-
-// copyFile copies a file from src to dst
-func copyFile(src, dst string) error {
-	srcFile, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = srcFile.Close() }()
-
-	dstFile, err := os.Create(dst)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = dstFile.Close() }()
-
-	if err := dstFile.Chmod(0600); err != nil {
-		return err
-	}
-
-	buf := make([]byte, 4096)
-	for {
-		n, err := srcFile.Read(buf)
-		if n == 0 {
-			break
-		}
-		if err != nil {
-			return err
-		}
-
-		if _, err := dstFile.Write(buf[:n]); err != nil {
-			return err
-		}
-	}
-
-	return nil
 }
 
 // copyFileWithPermissions copies a file from src to dst while preserving permissions
@@ -1465,8 +1291,8 @@ func (cf *AWSConfigFile) RemoveProfile(profileName string) error {
 // isSSORProperty checks if a property key is SSO-related
 func isSSORProperty(key string) bool {
 	ssoProperties := map[string]bool{
-		"sso_start_url":  true,
-		"sso_region":     true,
+		ssoStartURLKey:   true,
+		ssoRegionKey:     true,
 		"sso_account_id": true,
 		"sso_role_name":  true,
 		"sso_session":    true,
@@ -1641,9 +1467,13 @@ type TransactionOperation struct {
 // OperationType represents the type of operation in a transaction
 type OperationType int
 
+// OperationType constants represent different types of operations in a transaction
 const (
+	// OpAdd represents an add operation
 	OpAdd OperationType = iota
+	// OpUpdate represents an update operation
 	OpUpdate
+	// OpRemove represents a remove operation
 	OpRemove
 )
 
@@ -1657,7 +1487,7 @@ func (ot OperationType) String() string {
 	case OpRemove:
 		return "remove"
 	default:
-		return "unknown"
+		return unknownString
 	}
 }
 
@@ -1852,10 +1682,7 @@ func (tx *Transaction) Commit() error {
 	tx.committed = true
 
 	// Clean up backup and temp files
-	if err := tx.cleanup(); err != nil {
-		// Log cleanup error but don't fail the commit
-		// In a real implementation, you might want to use a logger here
-	}
+	_ = tx.cleanup()
 
 	return nil
 }
@@ -1900,9 +1727,7 @@ func (tx *Transaction) Rollback() error {
 	tx.rolledBack = true
 
 	// Clean up temp files
-	if err := tx.cleanup(); err != nil {
-		// Log cleanup error but don't fail the rollback
-	}
+	_ = tx.cleanup()
 
 	return nil
 }
@@ -1959,11 +1784,12 @@ func (tx *Transaction) GetOperationSummary() string {
 		summary.WriteString(fmt.Sprintf("  %d. %s\n", i+1, op.Description))
 	}
 
-	if tx.committed {
+	switch {
+	case tx.committed:
 		summary.WriteString("Status: Committed\n")
-	} else if tx.rolledBack {
+	case tx.rolledBack:
 		summary.WriteString("Status: Rolled back\n")
-	} else {
+	default:
 		summary.WriteString("Status: Pending\n")
 	}
 
@@ -1981,9 +1807,7 @@ func (cf *AWSConfigFile) ExecuteAtomicProfileOperations(operations []func(*Trans
 	// Ensure rollback on panic or error
 	defer func() {
 		if !tx.committed && !tx.rolledBack {
-			if rollbackErr := tx.Rollback(); rollbackErr != nil {
-				// Log rollback error but don't override the main error
-			}
+			_ = tx.Rollback()
 		}
 	}()
 
