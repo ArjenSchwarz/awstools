@@ -448,10 +448,14 @@ func (pgr *ProfileGenerationResult) GenerateConflictReport() string {
 // ConflictResolutionStrategy defines how to handle existing profile conflicts
 type ConflictResolutionStrategy int
 
+// ConflictResolutionStrategy constants represent different strategies for resolving conflicts
 const (
-	ConflictPrompt  ConflictResolutionStrategy = iota // Default: prompt user for each conflict
-	ConflictReplace                                   // Replace existing profiles
-	ConflictSkip                                      // Skip roles with existing profiles
+	// ConflictPrompt prompts the user for each conflict (default)
+	ConflictPrompt ConflictResolutionStrategy = iota
+	// ConflictReplace replaces existing profiles
+	ConflictReplace
+	// ConflictSkip skips roles with existing profiles
+	ConflictSkip
 )
 
 // String returns the string representation of the conflict resolution strategy
@@ -464,7 +468,7 @@ func (crs ConflictResolutionStrategy) String() string {
 	case ConflictSkip:
 		return "skip"
 	default:
-		return "unknown"
+		return unknownString
 	}
 }
 
@@ -482,9 +486,12 @@ func (crs ConflictResolutionStrategy) Validate() error {
 // ConflictType represents the type of profile conflict detected
 type ConflictType int
 
+// ConflictType constants represent different types of profile conflicts
 const (
-	ConflictSameRole ConflictType = iota // Same SSO account ID and role name
-	ConflictSameName                     // Same profile name but different role
+	// ConflictSameRole represents same SSO account ID and role name
+	ConflictSameRole ConflictType = iota
+	// ConflictSameName represents same profile name but different role
+	ConflictSameName
 )
 
 // String returns the string representation of the conflict type
@@ -495,7 +502,7 @@ func (ct ConflictType) String() string {
 	case ConflictSameName:
 		return "same_name"
 	default:
-		return "unknown"
+		return unknownString
 	}
 }
 
@@ -534,10 +541,14 @@ func (pc *ProfileConflict) Validate() error {
 // ActionType represents the action taken for a specific conflict
 type ActionType int
 
+// ActionType constants represent different actions for handling conflicts
 const (
-	ActionReplace ActionType = iota // Replace existing profile
-	ActionSkip                      // Skip generating profile for this role
-	ActionCreate                    // Create new profile (no conflict)
+	// ActionReplace replaces existing profile
+	ActionReplace ActionType = iota
+	// ActionSkip skips generating profile for this role
+	ActionSkip
+	// ActionCreate creates new profile (no conflict)
+	ActionCreate
 )
 
 // String returns the string representation of the action type
@@ -550,7 +561,7 @@ func (at ActionType) String() string {
 	case ActionCreate:
 		return "create"
 	default:
-		return "unknown"
+		return unknownString
 	}
 }
 

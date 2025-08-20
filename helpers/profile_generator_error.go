@@ -4,16 +4,27 @@ import (
 	"fmt"
 )
 
+// unknownString is the default string for unknown enum values
+const unknownString = "unknown"
+
 // ErrorType represents the category of profile generator errors
 type ErrorType int
 
+// ErrorType constants represent different categories of profile generator errors
 const (
+	// ErrorTypeValidation represents validation errors
 	ErrorTypeValidation ErrorType = iota
+	// ErrorTypeAuth represents authentication errors
 	ErrorTypeAuth
+	// ErrorTypeAPI represents API errors
 	ErrorTypeAPI
+	// ErrorTypeFileSystem represents file system errors
 	ErrorTypeFileSystem
+	// ErrorTypeNetwork represents network errors
 	ErrorTypeNetwork
+	// ErrorTypeConflictResolution represents conflict resolution errors
 	ErrorTypeConflictResolution
+	// ErrorTypeBackup represents backup errors
 	ErrorTypeBackup
 )
 
@@ -35,7 +46,7 @@ func (et ErrorType) String() string {
 	case ErrorTypeBackup:
 		return "backup"
 	default:
-		return "unknown"
+		return unknownString
 	}
 }
 

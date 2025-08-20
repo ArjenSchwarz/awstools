@@ -221,11 +221,12 @@ func profileGenerator(cmd *cobra.Command, _ []string) {
 
 	// Determine conflict resolution strategy
 	var conflictStrategy helpers.ConflictResolutionStrategy
-	if replaceExisting {
+	switch {
+	case replaceExisting:
 		conflictStrategy = helpers.ConflictReplace
-	} else if skipExisting {
+	case skipExisting:
 		conflictStrategy = helpers.ConflictSkip
-	} else {
+	default:
 		conflictStrategy = helpers.ConflictPrompt
 	}
 

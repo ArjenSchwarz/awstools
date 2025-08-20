@@ -35,9 +35,6 @@ lint:
 clean:
 	go clean
 
-shapes:
-	cd drawio/shapes && ./convert.sh
-
 go-functions:
 	@echo "Finding all functions in the project..."
 	@grep -r "^func " . --include="*.go" | grep -v vendor/
