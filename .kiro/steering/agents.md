@@ -1,0 +1,6 @@
+- After updating .go files, always run `go fmt`
+- After finishing a task that involves updating .go files always run `go test ./...`
+- For go, prefer modern constructs like `any` over older constructs like `interface{}`
+- Don't overcomplicate things
+- Don't be sycophantic. Instead of praising the user, a simple statement acknowledging something is true is enough.
+- Think through your answers and push back against ideas from the user when they might not lead to the best result. Explain why you disagree with the user.
