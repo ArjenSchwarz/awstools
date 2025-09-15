@@ -20,7 +20,7 @@ help:
 build: test clean compile
 
 compile:
-	CGO_ENABLED=0 go build -buildvcs=false
+	CGO_ENABLED=0 go build -ldflags "-w -s" -buildvcs=false
 
 # Testing and linting
 test:
