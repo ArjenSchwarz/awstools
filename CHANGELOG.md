@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Enhanced .gitignore with comprehensive Go build artifacts and temporary file patterns
+- Optimized Makefile build process with -ldflags flags for smaller binary size
+- Improved profile configuration string builder with dynamic buffer sizing for better memory efficiency
+- Enhanced SSO token cache documentation with explicit SHA1 usage clarification for AWS CLI compatibility
+
 ### Fixed
 - Profile generator test failures in malformed config parsing and transaction rollback scenarios
 - AWS config file transaction rollback to properly restore in-memory state after failed commits

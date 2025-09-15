@@ -1,4 +1,5 @@
 {
+  "includeCoAuthoredBy": false,
   "permissions": {
     "allow": [
       "Bash(go:*)",
@@ -22,10 +23,11 @@
       "Bash(gh api:*)",
       "WebFetch(domain:github.com)",
       "WebFetch(domain:docs.aws.amazon.com)",
-      "WebFetch(domain:pkg.go.dev)"
+      "WebFetch(domain:pkg.go.dev)",
+      "mcp__devtools__think",
+      "mcp__devtools__gemini-agent"
     ],
     "deny": []
   },
-  "defaultMode": "allowEdits",
-  "includeCoAuthoredBy": false
+  "defaultMode": "allowEdits"
 }

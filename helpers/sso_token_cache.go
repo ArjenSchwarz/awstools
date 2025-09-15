@@ -97,7 +97,10 @@ func (stc *SSOTokenCache) LoadTokenForProfile(startURL, region string) (*CachedT
 
 // getTokenFilePath generates the cache file path for a given start URL
 func (stc *SSOTokenCache) getTokenFilePath(startURL string) string {
-	// AWS CLI uses SHA1 hash of the start URL to generate cache file name
+	// NOTE: SHA1 is used here for compatibility with AWS CLI cache file naming conventions.
+	// This is NOT for security purposes. SHA1 is cryptographically weak and should not be used
+	// for integrity or authentication. AWS CLI uses SHA1 hash of the start URL to generate
+	// cache file names, and we follow the same convention to maintain compatibility.
 	hash := sha1.Sum([]byte(startURL))
 	hashStr := hex.EncodeToString(hash[:])
 

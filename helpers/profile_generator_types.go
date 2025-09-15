@@ -193,8 +193,11 @@ func (gp *GeneratedProfile) Validate() error {
 // The output includes a trailing newline for proper file formatting.
 func (gp *GeneratedProfile) ToConfigString() string {
 	var config strings.Builder
-	// Estimate size: profile name + region + SSO config (~150-200 chars)
-	config.Grow(200)
+	// Dynamically estimate buffer size based on field lengths plus formatting overhead
+	estimatedSize := len(gp.Name) + len(gp.Region) + len(gp.SSOStartURL) +
+		len(gp.SSORegion) + len(gp.SSOAccountID) + len(gp.SSORoleName) +
+		len(gp.SSOSession) + 100 // 100 bytes for formatting and field names
+	config.Grow(estimatedSize)
 	config.WriteString(fmt.Sprintf("[profile %s]\n", gp.Name))
 	config.WriteString(fmt.Sprintf("region = %s\n", gp.Region))
 	config.WriteString(fmt.Sprintf("sso_start_url = %s\n", gp.SSOStartURL))

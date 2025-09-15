@@ -1,6 +1,46 @@
+# Binary
 awstools
+
+# Build directories
 pkg/
 dist/
+
+# Documentation
 docs/public
 docs/.hugo*
 docs/resources/_gen/
+
+# Claude scripts
+.claude/scripts
+
+# Go build artifacts
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.out
+*.prof
+coverage.txt
+coverage.html
+
+# Go module cache
+go.sum.backup
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+
+# Debug files
+debug
+__debug_bin*
+
+# Go workspace file
+go.work
+go.work.sum
