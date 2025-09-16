@@ -3,6 +3,7 @@ package helpers
 import (
 	"context"
 	"fmt"
+	"maps"
 	"sync"
 	"time"
 
@@ -27,13 +28,13 @@ type RoleDiscovery struct {
 
 // Logger interface for logging operations
 type Logger interface {
-	Printf(format string, args ...interface{})
+	Printf(format string, args ...any)
 }
 
 // defaultLogger provides a default logger implementation
 type defaultLogger struct{}
 
-func (dl *defaultLogger) Printf(format string, args ...interface{}) {
+func (dl *defaultLogger) Printf(format string, args ...any) {
 	fmt.Printf(format, args...)
 }
 
@@ -296,7 +297,7 @@ func (rd *RoleDiscovery) DiscoverRolesWithRetry(templateProfile *TemplateProfile
 	var lastErr error
 	baseDelay := 1 * time.Second
 
-	for attempt := 0; attempt < maxRetries; attempt++ {
+	for attempt := range maxRetries {
 		roles, err := rd.DiscoverAccessibleRoles(templateProfile)
 		if err == nil {
 			return roles, nil
@@ -359,9 +360,7 @@ func (rd *RoleDiscovery) GetCachedAccountNames() map[string]string {
 	defer rd.cacheMutex.RUnlock()
 
 	cache := make(map[string]string)
-	for k, v := range rd.accountCache {
-		cache[k] = v
-	}
+	maps.Copy(cache, rd.accountCache)
 	return cache
 }
 
@@ -385,14 +384,12 @@ func (rd *RoleDiscovery) GetCachedAccountAliases() map[string]string {
 	defer rd.cacheMutex.RUnlock()
 
 	cache := make(map[string]string)
-	for k, v := range rd.aliasCache {
-		cache[k] = v
-	}
+	maps.Copy(cache, rd.aliasCache)
 	return cache
 }
 
 // GetTokenCacheInfo returns information about the SSO token cache
-func (rd *RoleDiscovery) GetTokenCacheInfo() (map[string]interface{}, error) {
+func (rd *RoleDiscovery) GetTokenCacheInfo() (map[string]any, error) {
 	return rd.tokenCache.GetCacheInfo()
 }
 

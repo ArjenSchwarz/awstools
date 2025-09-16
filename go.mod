@@ -1,6 +1,6 @@
 module github.com/ArjenSchwarz/awstools
 
-go 1.24.1
+go 1.25.1
 
 require (
 	github.com/ArjenSchwarz/go-output v1.4.0

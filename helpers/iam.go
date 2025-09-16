@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log"
+	"maps"
 	"net/url"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -101,9 +102,7 @@ func GetGroupPoliciesMapForGroups(groups []string, svc *iam.Client) map[string]s
 	result := make(map[string]string)
 	for _, group := range groups {
 		groupmap := GetGroupPoliciesMapForGroup(&group, svc)
-		for k, v := range groupmap {
-			result[k] = v
-		}
+		maps.Copy(result, groupmap)
 	}
 	return result
 }
@@ -155,9 +154,7 @@ func GetAttachedPoliciesMapForGroups(groups []string, svc *iam.Client) map[strin
 	result := make(map[string]string)
 	for _, group := range groups {
 		groupmap := GetAttachedPoliciesMapForGroup(&group, svc)
-		for k, v := range groupmap {
-			result[k] = v
-		}
+		maps.Copy(result, groupmap)
 	}
 	return result
 }
@@ -229,7 +226,7 @@ func GetUserDetails(svc *iam.Client) []IAMUser {
 			c <- userStruct
 		}(user)
 	}
-	for i := 0; i < len(users); i++ {
+	for i := range users {
 		userlist[i] = <-c
 	}
 	return userlist
@@ -280,18 +277,10 @@ func GetGroupDetails(svc *iam.Client) []IAMGroup {
 // GetAllPolicies retrieves a map of all the users policies
 func (user IAMUser) GetAllPolicies() map[string]string {
 	result := make(map[string]string)
-	for k, v := range user.InlinePolicies {
-		result[k] = v
-	}
-	for k, v := range user.AttachedPolicies {
-		result[k] = v
-	}
-	for k, v := range user.InlineGroupPolicies {
-		result[k] = v
-	}
-	for k, v := range user.AttachedGroupPolicies {
-		result[k] = v
-	}
+	maps.Copy(result, user.InlinePolicies)
+	maps.Copy(result, user.AttachedPolicies)
+	maps.Copy(result, user.InlineGroupPolicies)
+	maps.Copy(result, user.AttachedGroupPolicies)
 	return result
 }
 

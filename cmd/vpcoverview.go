@@ -82,7 +82,7 @@ func vpcOverview(_ *cobra.Command, _ []string) {
 			routeTable := helpers.GetSubnetRouteTable(subnet.ID, routeTables)
 			routeTableName, routes := helpers.FormatRouteTableInfo(routeTable)
 
-			content := make(map[string]interface{})
+			content := make(map[string]any)
 			content["Subnet"] = subnetDisplay
 			content["CIDR"] = subnet.CIDR
 			if subnet.IsPublic {
@@ -117,7 +117,7 @@ func vpcOverview(_ *cobra.Command, _ []string) {
 				ipOutput.Settings.Title = "IP Details for subnet " + subnetDisplay + " in VPC " + vpcDisplay
 
 				for _, ipDetail := range subnet.IPDetails {
-					ipContent := make(map[string]interface{})
+					ipContent := make(map[string]any)
 					ipContent["IP Address"] = ipDetail.IPAddress
 					ipContent["Usage Type"] = ipDetail.UsageType
 					ipContent["Attachment Info"] = ipDetail.AttachmentInfo
@@ -191,7 +191,7 @@ func vpcOverview(_ *cobra.Command, _ []string) {
 	}
 
 	for _, item := range summaryData {
-		summaryContent := make(map[string]interface{})
+		summaryContent := make(map[string]any)
 		summaryContent["Metric"] = item.metric
 		summaryContent["Count"] = item.count
 

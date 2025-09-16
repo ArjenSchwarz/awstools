@@ -61,7 +61,7 @@ func tgwroutes(_ *cobra.Command, _ []string) {
 	attachedresources, tgwrts := filterGateway(gateways)
 
 	for rt, connectedvpcs := range tgwrts {
-		content := make(map[string]interface{})
+		content := make(map[string]any)
 		content["ID"] = rt
 		content["Name"] = getName(rt)
 		content["Destinations"] = connectedvpcs
@@ -72,7 +72,7 @@ func tgwroutes(_ *cobra.Command, _ []string) {
 		output.AddHolder(holder)
 	}
 	for resourceid, tgw := range attachedresources {
-		content := make(map[string]interface{})
+		content := make(map[string]any)
 		content["ID"] = resourceid
 		content["Name"] = getName(resourceid)
 		if getName(tgw) != tgw && getName(tgw) != "" {
@@ -105,7 +105,7 @@ func simplelistOnly(awsConfig config.AWSConfig) {
 	blackholeroutes := helpers.GetBlackholeRoutesForTransitGatewayRouteTable(tgwresourceid, awsConfig.Ec2Client())
 
 	for _, route := range activeroutes {
-		content := make(map[string]interface{})
+		content := make(map[string]any)
 		content["CIDR"] = route.CIDR
 		content["Target"] = getName(route.Attachment.ResourceID)
 		// content["Target Type"] = getName(route.Attachment.ResourceType)
@@ -116,7 +116,7 @@ func simplelistOnly(awsConfig config.AWSConfig) {
 		output.AddHolder(holder)
 	}
 	for _, route := range blackholeroutes {
-		content := make(map[string]interface{})
+		content := make(map[string]any)
 		content["CIDR"] = route.CIDR
 		content["Target"] = "-"
 		// content["Target Type"] = "-"

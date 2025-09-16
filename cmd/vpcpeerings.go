@@ -82,7 +82,7 @@ func peerings(_ *cobra.Command, _ []string) {
 	}
 	for id, entry := range sorted {
 		peeringIDs := unique(entry)
-		content := make(map[string]interface{})
+		content := make(map[string]any)
 		content["ID"] = id
 		content["Name"] = getName(id)
 		if len(entry) > 0 {

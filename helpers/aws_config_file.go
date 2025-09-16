@@ -3,6 +3,7 @@ package helpers
 import (
 	"bufio"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -1991,9 +1992,7 @@ func (cf *AWSConfigFile) AtomicReplaceProfile(oldName, newName string, newProfil
 
 	// Store original state for rollback
 	originalProfiles := make(map[string]Profile)
-	for k, v := range cf.Profiles {
-		originalProfiles[k] = v
-	}
+	maps.Copy(originalProfiles, cf.Profiles)
 
 	// Perform the replacement in memory
 	if err := cf.ReplaceProfile(oldName, newName, newProfile); err != nil {
@@ -2038,9 +2037,7 @@ func (cf *AWSConfigFile) AtomicRemoveProfile(profileName string) error {
 
 	// Store original state for rollback
 	originalProfiles := make(map[string]Profile)
-	for k, v := range cf.Profiles {
-		originalProfiles[k] = v
-	}
+	maps.Copy(originalProfiles, cf.Profiles)
 
 	// Perform the removal in memory
 	if err := cf.RemoveProfile(profileName); err != nil {

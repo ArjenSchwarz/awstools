@@ -30,7 +30,7 @@ func ssoDangling(_ *cobra.Command, _ []string) {
 	output.Settings.Title = resultTitle
 	for _, permissionset := range ssoInstance.PermissionSets {
 		if len(permissionset.Accounts) == 0 {
-			content := make(map[string]interface{})
+			content := make(map[string]any)
 			content["PermissionSet"] = permissionset.Name
 			content["Arn"] = permissionset.Arn
 			content["ManagedPolicies"] = permissionset.GetManagedPolicyNames()

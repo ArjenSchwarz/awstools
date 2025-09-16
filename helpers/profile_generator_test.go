@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -86,7 +87,7 @@ type MockLogger struct {
 	logs []string
 }
 
-func (m *MockLogger) Printf(format string, args ...interface{}) {
+func (m *MockLogger) Printf(format string, args ...any) {
 	m.logs = append(m.logs, fmt.Sprintf(format, args...))
 }
 
@@ -2671,10 +2672,5 @@ func TestProgressReporting(t *testing.T) {
 
 // Helper function for testing
 func contains(slice []string, item string) bool {
-	for _, s := range slice {
-		if s == item {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(slice, item)
 }

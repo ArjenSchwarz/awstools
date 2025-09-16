@@ -1062,7 +1062,7 @@ func BenchmarkFindIPAddressDetails(b *testing.B) {
 		testIP := "10.0.1.100"
 
 		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
+		for b.Loop() {
 			// In real benchmark, would call FindIPAddressDetails
 			// For now, we'll benchmark the structure creation
 			result := IPFinderResult{
@@ -1087,7 +1087,7 @@ func BenchmarkFindIPAddressDetails(b *testing.B) {
 		}
 
 		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
+		for b.Loop() {
 			for _, ip := range testIPs {
 				_ = IsValidIPAddress(ip)
 			}
@@ -1118,7 +1118,7 @@ func BenchmarkFindIPAddressDetails(b *testing.B) {
 		testIP := "10.0.1.101"
 
 		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
+		for b.Loop() {
 			_ = isSecondaryIP(eni, testIP)
 		}
 	})
@@ -1131,7 +1131,7 @@ func BenchmarkENILookupCachePerformance(b *testing.B) {
 	b.Run("cache_lookup_performance", func(b *testing.B) {
 		// Create mock ENIs for cache testing
 		enis := make([]types.NetworkInterface, 100)
-		for i := 0; i < 100; i++ {
+		for i := range 100 {
 			enis[i] = types.NetworkInterface{
 				NetworkInterfaceId: aws.String(fmt.Sprintf("eni-%d", i)),
 				PrivateIpAddress:   aws.String(fmt.Sprintf("10.0.%d.%d", i/255, i%255)),
@@ -1145,7 +1145,7 @@ func BenchmarkENILookupCachePerformance(b *testing.B) {
 		}
 
 		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
+		for b.Loop() {
 			for _, eni := range enis {
 				// Simulate cache lookup
 				_, exists := cache.EndpointsByENI[*eni.NetworkInterfaceId]
@@ -1170,7 +1170,7 @@ func BenchmarkENILookupCachePerformance(b *testing.B) {
 		}
 
 		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
+		for b.Loop() {
 			_, _ = getResourceNameAndID(eni, cache)
 		}
 	})

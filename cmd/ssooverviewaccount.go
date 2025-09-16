@@ -50,7 +50,7 @@ func ssoOverviewByAccount(_ *cobra.Command, _ []string) {
 		for _, account := range ssoInstance.Accounts {
 			if filteredSSOAccount(account) {
 				for _, assignment := range account.AccountAssignments {
-					content := make(map[string]interface{})
+					content := make(map[string]any)
 					content["AccountID"] = getName(account.AccountID)
 					content[permissionSetColumn] = assignment.PermissionSet.Name
 					content["Principal"] = getName(assignment.PrincipalID)
@@ -91,7 +91,7 @@ func createSSOAccountsDrawIOHeader() drawio.Header {
 func createSSOAccountDrawIOContents(instance helpers.SSOInstance, output *format.OutputArray) {
 	output.Keys = []string{"Name", "DrawIOID", "Type", "Children", "Image"}
 
-	content := make(map[string]interface{})
+	content := make(map[string]any)
 	content["Name"] = getName(instance.Arn)
 	content["DrawIOID"] = getName(instance.Arn)
 	content["Type"] = "SSO"
@@ -105,7 +105,7 @@ func createSSOAccountDrawIOContents(instance helpers.SSOInstance, output *format
 			continue
 		}
 		accountchildren := []string{}
-		content := make(map[string]interface{})
+		content := make(map[string]any)
 		content["Name"] = getName(account.AccountID)
 		content["DrawIOID"] = account.AccountID
 		content["Type"] = "Account"
@@ -119,7 +119,7 @@ func createSSOAccountDrawIOContents(instance helpers.SSOInstance, output *format
 		for _, assignment := range account.AccountAssignments {
 			if !contains(uniquefilter, assignment.PermissionSet.Name+account.AccountID) {
 				uniquefilter = append(uniquefilter, assignment.PermissionSet.Name+account.AccountID)
-				content := make(map[string]interface{})
+				content := make(map[string]any)
 				content["Name"] = getName(assignment.PermissionSet.Name)
 				content["DrawIOID"] = getName(assignment.PermissionSet.Name + account.AccountID)
 				content["Type"] = permissionSetColumn
@@ -130,7 +130,7 @@ func createSSOAccountDrawIOContents(instance helpers.SSOInstance, output *format
 			}
 			if !contains(uniquefilter, assignment.PrincipalID) {
 				uniquefilter = append(uniquefilter, assignment.PrincipalID)
-				content := make(map[string]interface{})
+				content := make(map[string]any)
 				content["Name"] = getName(assignment.PrincipalID)
 				content["DrawIOID"] = assignment.PrincipalID
 				content["Type"] = assignment.PrincipalType

@@ -55,7 +55,7 @@ func detailUsers(_ *cobra.Command, _ []string) {
 	}
 	policylist := make(map[string]helpers.AttachedIAMPolicy)
 	for _, object := range objectlist {
-		content := make(map[string]interface{})
+		content := make(map[string]any)
 		content[nameColumn] = object.GetName()
 		content["Type"] = object.GetObjectType()
 		if user, ok := object.(helpers.IAMUser); ok {
@@ -101,7 +101,7 @@ func detailUsers(_ *cobra.Command, _ []string) {
 	}
 	// This will only happen when verbose is set
 	for _, policy := range policylist {
-		content := make(map[string]interface{})
+		content := make(map[string]any)
 		content[nameColumn] = policy.Name
 		content["Type"] = "Policy"
 		if settings.IsDrawIO() {

@@ -37,8 +37,8 @@ func s3List(_ *cobra.Command, _ []string) {
 	buckets := helpers.GetBucketDetails(awsConfig.S3Client())
 	keys := []string{"Name", "AccountID", "AccountName", "Region", "Is Private", "Policy is locked down", "ACLs are locked down", "Public Access Block", "Logs to", "Encryption", "Replication", "Versioning", "Versioning MFA delete"}
 	if includeTags != "" {
-		taglist := strings.Split(includeTags, ",")
-		for _, tag := range taglist {
+		taglist := strings.SplitSeq(includeTags, ",")
+		for tag := range taglist {
 			keys = append(keys, fmt.Sprintf("Tag: %s", tag))
 		}
 	}
@@ -54,7 +54,7 @@ func s3List(_ *cobra.Command, _ []string) {
 		if unencryptedBucketsOnly && bucket.HasEncryption {
 			continue
 		}
-		content := make(map[string]interface{})
+		content := make(map[string]any)
 		content["Name"] = bucket.Name
 		content["AccountID"] = awsConfig.AccountID
 		content["AccountName"] = getName(awsConfig.AccountID)
@@ -76,8 +76,8 @@ func s3List(_ *cobra.Command, _ []string) {
 			content["Logs to"] = false
 		}
 		if includeTags != "" {
-			taglist := strings.Split(includeTags, ",")
-			for _, tag := range taglist {
+			taglist := strings.SplitSeq(includeTags, ",")
+			for tag := range taglist {
 				content[fmt.Sprintf("Tag: %s", tag)] = bucket.Tags[tag]
 			}
 		}

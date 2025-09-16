@@ -27,7 +27,7 @@ type CachedToken struct {
 	StartURL              string    `json:"startUrl"`
 	ClientID              string    `json:"clientId,omitempty"`
 	ClientSecret          string    `json:"clientSecret,omitempty"`
-	RegistrationExpiresAt time.Time `json:"registrationExpiresAt,omitempty"`
+	RegistrationExpiresAt time.Time `json:"registrationExpiresAt"`
 	RefreshToken          string    `json:"refreshToken,omitempty"`
 }
 
@@ -211,8 +211,8 @@ func (stc *SSOTokenCache) CleanExpiredTokens() (int, error) {
 }
 
 // GetCacheInfo returns information about the SSO token cache
-func (stc *SSOTokenCache) GetCacheInfo() (map[string]interface{}, error) {
-	info := make(map[string]interface{})
+func (stc *SSOTokenCache) GetCacheInfo() (map[string]any, error) {
+	info := make(map[string]any)
 	info["cache_dir"] = stc.cacheDir
 
 	tokens, err := stc.GetAllCachedTokens()

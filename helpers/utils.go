@@ -2,18 +2,15 @@ package helpers
 
 import (
 	"encoding/json"
+	"maps"
 	"os"
+	"slices"
 	"strings"
 )
 
 // stringInSlice checks if a string exists in a slice
 func stringInSlice(a string, list []string) bool {
-	for _, b := range list {
-		if b == a {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(list, a)
 }
 
 // GetStringMapFromJSONFile parses a JSON file and returns it as a string map
@@ -35,9 +32,7 @@ func GetStringMapFromJSONFile(filename string) map[string]string {
 func FlattenStringMaps(stringmaps []map[string]string) map[string]string {
 	result := make(map[string]string)
 	for _, stringmap := range stringmaps {
-		for key, value := range stringmap {
-			result[key] = value
-		}
+		maps.Copy(result, stringmap)
 	}
 	return result
 }

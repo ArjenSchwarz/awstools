@@ -52,7 +52,7 @@ func iamrolelist(_ *cobra.Command, _ []string) {
 		output.Settings.AddFromToColumns(nameColumn, "Policies")
 	}
 	for _, role := range roles {
-		content := make(map[string]interface{})
+		content := make(map[string]any)
 		content[nameColumn] = role.Name
 		content["AssumedFrom"] = role.CanBeAssumedFrom()
 		content["Type"] = role.Type
@@ -65,7 +65,7 @@ func iamrolelist(_ *cobra.Command, _ []string) {
 		output.AddHolder(holder)
 	}
 	for policyname, policy := range policies {
-		content := make(map[string]interface{})
+		content := make(map[string]any)
 		content[nameColumn] = policyname
 		if settings.IsDrawIO() {
 			content["DrawioID"] = policyname

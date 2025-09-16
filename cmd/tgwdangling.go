@@ -46,7 +46,7 @@ func tgwdangling(_ *cobra.Command, _ []string) {
 	for vpcid, targets := range vpcs {
 		for _, target := range targets {
 			if !contains(vpcs[target], vpcid) {
-				content := make(map[string]interface{})
+				content := make(map[string]any)
 				content["VPC"] = vpcid
 				content["VPCName"] = getName(vpcid)
 				content["DestinationVPC"] = target

@@ -28,7 +28,7 @@ func danglingnodes(_ *cobra.Command, _ []string) {
 	output := format.OutputArray{Keys: keys, Settings: settings.NewOutputSettings()}
 	output.Settings.Title = resultTitle
 	for _, node := range unserviced {
-		content := make(map[string]interface{})
+		content := make(map[string]any)
 		content["Virtual Node"] = node
 		holder := format.OutputHolder{Contents: content}
 		output.AddHolder(holder)

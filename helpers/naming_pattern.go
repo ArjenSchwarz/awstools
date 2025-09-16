@@ -3,6 +3,7 @@ package helpers
 import (
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 )
 
@@ -72,13 +73,7 @@ func (np *NamingPattern) Validate() error {
 	// Validate each placeholder
 	supportedPlaceholders := GetSupportedPlaceholders()
 	for _, placeholder := range placeholders {
-		supported := false
-		for _, supportedPlaceholder := range supportedPlaceholders {
-			if placeholder == supportedPlaceholder {
-				supported = true
-				break
-			}
-		}
+		supported := slices.Contains(supportedPlaceholders, placeholder)
 		if !supported {
 			return NewValidationError("unsupported placeholder in naming pattern", nil).
 				WithContext("placeholder", placeholder).

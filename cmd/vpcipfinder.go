@@ -95,7 +95,7 @@ func formatIPFinderOutput(result helpers.IPFinderResult) {
 		subnetDisplay = result.Subnet.ID
 	}
 
-	outputData := []map[string]interface{}{
+	outputData := []map[string]any{
 		{"Field": "IP Address", "Value": result.IPAddress},
 		{"Field": "ENI ID", "Value": *result.ENI.NetworkInterfaceId},
 		{"Field": "Resource Type", "Value": result.ResourceType},
@@ -116,7 +116,7 @@ func formatIPFinderOutput(result helpers.IPFinderResult) {
 				sgList = append(sgList, sg.ID)
 			}
 		}
-		outputData = append(outputData, map[string]interface{}{
+		outputData = append(outputData, map[string]any{
 			"Field": "Security Groups",
 			"Value": sgList,
 		})
@@ -124,14 +124,14 @@ func formatIPFinderOutput(result helpers.IPFinderResult) {
 
 	// Add route table information if present
 	if result.RouteTable.ID != "" {
-		outputData = append(outputData, map[string]interface{}{
+		outputData = append(outputData, map[string]any{
 			"Field": "Route Table",
 			"Value": result.RouteTable.Name,
 		})
 
 		// Add routes if present
 		if len(result.RouteTable.Routes) > 0 {
-			outputData = append(outputData, map[string]interface{}{
+			outputData = append(outputData, map[string]any{
 				"Field": "Routes",
 				"Value": result.RouteTable.Routes,
 			})

@@ -35,7 +35,7 @@ func ssoListPermissionSets(_ *cobra.Command, _ []string) {
 
 	for _, permissionset := range ssoInstance.PermissionSets {
 		permchildren := []string{}
-		content := make(map[string]interface{})
+		content := make(map[string]any)
 		content[permissionSetColumn] = permissionset.Name
 		content["Arn"] = permissionset.Arn
 		if settings.IsVerbose() {

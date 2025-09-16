@@ -33,7 +33,7 @@ func meshroute(_ *cobra.Command, _ []string) {
 	output.Settings.Title = resultTitle
 	for _, route := range routes {
 		for _, path := range route.VirtualServiceRoutes {
-			content := make(map[string]interface{})
+			content := make(map[string]any)
 			content["Service"] = route.VirtualServiceName
 			content["Path"] = path.Path
 			content["Node"] = path.DestinationNode

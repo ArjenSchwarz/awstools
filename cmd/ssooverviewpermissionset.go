@@ -52,7 +52,7 @@ func ssoOverviewByPermissionSet(_ *cobra.Command, _ []string) {
 			}
 			for _, account := range permissionset.Accounts {
 				for _, assignment := range account.AccountAssignments {
-					content := make(map[string]interface{})
+					content := make(map[string]any)
 					content["PermissionSet"] = assignment.PermissionSet.Name
 					content["AccountID"] = getName(account.AccountID)
 					content["Principal"] = getName(assignment.PrincipalID)
@@ -93,7 +93,7 @@ func createSSOPermissionsetsDrawIOHeader() drawio.Header {
 func createSSOPermissionsetsDrawIOContents(instance helpers.SSOInstance, output *format.OutputArray) {
 	output.Keys = []string{"Name", "DrawIOID", "Type", "Children", "Image"}
 
-	content := make(map[string]interface{})
+	content := make(map[string]any)
 	content["Name"] = getName(instance.Arn)
 	content["DrawIOID"] = getName(instance.Arn)
 	content["Type"] = "SSO"
@@ -107,7 +107,7 @@ func createSSOPermissionsetsDrawIOContents(instance helpers.SSOInstance, output 
 			continue
 		}
 		permchildren := []string{}
-		content := make(map[string]interface{})
+		content := make(map[string]any)
 		content["Name"] = getName(permissionset.Name)
 		content["DrawIOID"] = getName(permissionset.Name)
 		content["Type"] = "PermissionSet"
@@ -119,7 +119,7 @@ func createSSOPermissionsetsDrawIOContents(instance helpers.SSOInstance, output 
 		holder := format.OutputHolder{Contents: content}
 		output.AddHolder(holder)
 		for _, account := range permissionset.Accounts {
-			content := make(map[string]interface{})
+			content := make(map[string]any)
 			content["Name"] = getName(account.AccountID)
 			content["DrawIOID"] = account.AccountID + permissionset.Name
 			content["Type"] = "Account"
@@ -131,7 +131,7 @@ func createSSOPermissionsetsDrawIOContents(instance helpers.SSOInstance, output 
 				if assignment.PermissionSet.Name == permissionset.Name {
 					if !contains(uniquefilter, assignment.PrincipalID) {
 						uniquefilter = append(uniquefilter, assignment.PrincipalID)
-						content := make(map[string]interface{})
+						content := make(map[string]any)
 						content["Name"] = getName(assignment.PrincipalID)
 						content["DrawIOID"] = assignment.PrincipalID
 						content["Type"] = assignment.PrincipalType

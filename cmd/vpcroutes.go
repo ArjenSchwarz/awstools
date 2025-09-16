@@ -29,7 +29,7 @@ func routes(_ *cobra.Command, _ []string) {
 	output := format.OutputArray{Keys: keys, Settings: settings.NewOutputSettings()}
 	output.Settings.Title = resultTitle
 	for _, routetable := range routes {
-		content := make(map[string]interface{})
+		content := make(map[string]any)
 		content["ID"] = routetable.ID
 		content["Name"] = getName(routetable.ID)
 		content["VPC"] = routetable.Vpc.ID

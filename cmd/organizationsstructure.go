@@ -53,7 +53,7 @@ func traverseOrgStructureEntry(entry helpers.OrganizationEntry, output *format.O
 		"ORGANIZATIONAL_UNIT": drawio.AWSShape("Management Governance", "Organizational Unit"),
 		"ACCOUNT":             drawio.AWSShape("Management Governance", "Account"),
 	}
-	content := make(map[string]interface{})
+	content := make(map[string]any)
 	content["Name"] = entry.String()
 	content["Type"] = entry.Type
 	content[childrenColumn] = entry.String()

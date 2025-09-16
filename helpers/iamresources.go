@@ -3,6 +3,7 @@ package helpers
 import (
 	"context"
 	"fmt"
+	"maps"
 	"sort"
 	"time"
 
@@ -124,9 +125,9 @@ func (policy *IAMPolicyDocument) GetRoleNames() []string {
 type IAMPolicyDocumentStatement struct {
 	Effect    string
 	Principal map[string]string
-	Action    interface{}
-	Condition interface{}
-	Resource  interface{}
+	Action    any
+	Condition any
+	Resource  any
 }
 
 // IAMUser contains information about IAM Users
@@ -164,24 +165,16 @@ func (user IAMUser) GetObjectType() string {
 // GetDirectPolicies retrieves all directly attached policies for the user
 func (user IAMUser) GetDirectPolicies() map[string]string {
 	result := make(map[string]string)
-	for k, v := range user.InlinePolicies {
-		result[k] = v
-	}
-	for k, v := range user.AttachedPolicies {
-		result[k] = v
-	}
+	maps.Copy(result, user.InlinePolicies)
+	maps.Copy(result, user.AttachedPolicies)
 	return result
 }
 
 // GetInheritedPolicies retrieves all inherited policies for the user
 func (user IAMUser) GetInheritedPolicies() map[string]string {
 	result := make(map[string]string)
-	for k, v := range user.InlineGroupPolicies {
-		result[k] = v
-	}
-	for k, v := range user.AttachedGroupPolicies {
-		result[k] = v
-	}
+	maps.Copy(result, user.InlineGroupPolicies)
+	maps.Copy(result, user.AttachedGroupPolicies)
 	return result
 }
 
@@ -274,12 +267,8 @@ func (group IAMGroup) GetObjectType() string {
 // GetDirectPolicies retrieves all directly attached policies for the group
 func (group IAMGroup) GetDirectPolicies() map[string]string {
 	result := make(map[string]string)
-	for k, v := range group.InlinePolicies {
-		result[k] = v
-	}
-	for k, v := range group.AttachedPolicies {
-		result[k] = v
-	}
+	maps.Copy(result, group.InlinePolicies)
+	maps.Copy(result, group.AttachedPolicies)
 	return result
 }
 

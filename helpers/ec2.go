@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"slices"
 	"sort"
 	"strings"
 
@@ -567,10 +568,8 @@ func GetTransitGatewayFromNetworkInterface(netinterface types.NetworkInterface, 
 		panic(err)
 	}
 	if len(resp.TransitGatewayVpcAttachments) > 0 {
-		for _, subnetID := range resp.TransitGatewayVpcAttachments[0].SubnetIds {
-			if subnetID == *netinterface.SubnetId {
-				return *resp.TransitGatewayVpcAttachments[0].TransitGatewayAttachmentId
-			}
+		if slices.Contains(resp.TransitGatewayVpcAttachments[0].SubnetIds, *netinterface.SubnetId) {
+			return *resp.TransitGatewayVpcAttachments[0].TransitGatewayAttachmentId
 		}
 	}
 	return ""
@@ -593,10 +592,8 @@ func GetVPCEndpointFromNetworkInterface(netinterface types.NetworkInterface, svc
 	}
 	if len(resp.VpcEndpoints) > 0 {
 		for _, endpoint := range resp.VpcEndpoints {
-			for _, eniID := range endpoint.NetworkInterfaceIds {
-				if eniID == *netinterface.NetworkInterfaceId {
-					return &endpoint
-				}
+			if slices.Contains(endpoint.NetworkInterfaceIds, *netinterface.NetworkInterfaceId) {
+				return &endpoint
 			}
 		}
 	}
@@ -922,10 +919,7 @@ func calculateSubnetStats(cidr string) (int, int, error) {
 	totalIPs := 1 << uint(bits-ones)
 
 	// AWS reserves first 4 and last IP in each subnet
-	availableIPs := totalIPs - 5
-	if availableIPs < 0 {
-		availableIPs = 0
-	}
+	availableIPs := max(totalIPs-5, 0)
 
 	return totalIPs, availableIPs, nil
 }
@@ -945,7 +939,7 @@ func compareIPs(ip1, ip2 net.IP) int {
 		return 0
 	}
 
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		if ip1[i] < ip2[i] {
 			return -1
 		}
@@ -1350,10 +1344,7 @@ func (cache *ENILookupCache) batchFetchInstanceNames(svc *ec2.Client, instanceID
 	// Fetch all instances in batches (DescribeInstances has a limit)
 	const batchSize = 100 // AWS limit for DescribeInstances
 	for i := 0; i < len(instanceIDList); i += batchSize {
-		end := i + batchSize
-		if end > len(instanceIDList) {
-			end = len(instanceIDList)
-		}
+		end := min(i+batchSize, len(instanceIDList))
 
 		params := &ec2.DescribeInstancesInput{
 			InstanceIds: instanceIDList[i:end],

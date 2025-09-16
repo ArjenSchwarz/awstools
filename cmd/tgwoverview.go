@@ -54,7 +54,7 @@ func tgwoverview(_ *cobra.Command, _ []string) {
 					if !includeBlackhole && route.State == "blackhole" {
 						continue
 					}
-					content := make(map[string]interface{})
+					content := make(map[string]any)
 					content["Transit Gateway Account"] = getNameWithID(gateway.AccountID)
 					content["Transit Gateway"] = getNameWithID(gateway.ID)
 					content["Route Table"] = getNameWithID(routetable.ID)
@@ -139,7 +139,7 @@ func createTgwOverviewDrawIO(output *format.OutputArray, gateways []helpers.Tran
 		}
 	}
 	for _, mapping := range targetTgwMapping {
-		content := make(map[string]interface{})
+		content := make(map[string]any)
 		content["ID"] = mapping.ID
 		content["Name"] = mapping.Name
 		content["Destinations"] = mapping.Destinations

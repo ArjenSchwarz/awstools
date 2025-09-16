@@ -60,7 +60,7 @@ func printENIs(interfaces []types.NetworkInterface, names map[string]string, res
 	}
 
 	for _, netinterface := range interfaces {
-		content := make(map[string]interface{})
+		content := make(map[string]any)
 		iparray := make([]string, 0)
 		if netinterface.Association != nil {
 			iparray = append(iparray, *netinterface.Association.PublicIp)

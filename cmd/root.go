@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"slices"
 
 	"github.com/ArjenSchwarz/awstools/config"
 	homedir "github.com/mitchellh/go-homedir"
@@ -131,10 +132,5 @@ func getNameWithID(id string) string {
 }
 
 func contains(s []string, e string) bool {
-	for _, a := range s {
-		if a == e {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(s, e)
 }

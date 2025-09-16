@@ -54,7 +54,7 @@ func listResources(_ *cobra.Command, _ []string) {
 			c <- resourceStruct
 		}(unparsedResource)
 	}
-	for i := 0; i < len(unparsedResources); i++ {
+	for i := range unparsedResources {
 		resources[i] = <-c
 	}
 	keys := []string{"ResourceID", "Type", "Stack", "Name"}
@@ -65,7 +65,7 @@ func listResources(_ *cobra.Command, _ []string) {
 	output := format.OutputArray{Keys: keys, Settings: settings.NewOutputSettings()}
 	output.Settings.Title = resultTitle
 	for _, resource := range resources {
-		content := make(map[string]interface{})
+		content := make(map[string]any)
 		content["ResourceID"] = resource.ResourceID
 		content["Type"] = resource.Type
 		content["Stack"] = resource.Stack
