@@ -31,7 +31,7 @@ func names(_ *cobra.Command, _ []string) {
 	if settings.ShouldCombineAndAppend() {
 		names = append(names, helpers.GetStringMapFromJSONFile(settings.GetString("output.file")))
 	}
-	names = append(names, helpers.GetAllEC2ResourceNames(awsConfig.Ec2Client()))
+	names = append(names, helpers.GetAllEC2ResourceNames(awsConfig.Ec2Client(), awsConfig.DirectConnectClient()))
 	names = append(names, helpers.GetAllRdsResourceNames(awsConfig.RdsClient()))
 	names = append(names, helpers.GetAccountAlias(awsConfig.IamClient(), awsConfig.StsClient()))
 	allNames := helpers.FlattenStringMaps(names)

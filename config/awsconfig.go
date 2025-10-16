@@ -8,6 +8,7 @@ import (
 	external "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/appmesh"
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
+	"github.com/aws/aws-sdk-go-v2/service/directconnect"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	"github.com/aws/aws-sdk-go-v2/service/iam"
 	"github.com/aws/aws-sdk-go-v2/service/organizations"
@@ -143,4 +144,9 @@ func (config *AWSConfig) SsoClient() *ssoadmin.Client {
 // S3Client returns an S3 Client
 func (config *AWSConfig) S3Client() *s3.Client {
 	return s3.NewFromConfig(config.Config)
+}
+
+// DirectConnectClient returns a DirectConnect Client
+func (config *AWSConfig) DirectConnectClient() *directconnect.Client {
+	return directconnect.NewFromConfig(config.Config)
 }

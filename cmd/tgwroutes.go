@@ -29,6 +29,12 @@ var tgwroutetablesCmd = &cobra.Command{
 var tgwresourceid string
 var simplelist bool
 
+// attachedResourceInfo holds information about a resource attached to a TGW route table
+type attachedResourceInfo struct {
+	RouteTableID string
+	ResourceType string
+}
+
 func init() {
 	tgwCmd.AddCommand(tgwroutetablesCmd)
 	tgwroutetablesCmd.Flags().StringVarP(&tgwresourceid, "resource-id", "r", "", "The id of the resource you want to limit to")
@@ -70,18 +76,30 @@ func tgwroutes(_ *cobra.Command, _ []string) {
 		holder := format.OutputHolder{Contents: content}
 		output.AddHolder(holder)
 	}
-	for resourceid, tgw := range attachedresources {
+	for resourceid, resourceInfo := range attachedresources {
 		content := make(map[string]any)
 		content["ID"] = resourceid
 		content["Name"] = getName(resourceid)
-		if getName(tgw) != tgw && getName(tgw) != "" {
-			content["TargetGateway"] = getNameWithID(tgw)
+		if settings.IsDrawIO() {
+			// Use raw ID for DrawIO to enable proper connection matching
+			content["TargetGateway"] = resourceInfo.RouteTableID
 		} else {
-			content["TargetGateway"] = tgw
+			// Use composite name for other output formats
+			if getName(resourceInfo.RouteTableID) != resourceInfo.RouteTableID && getName(resourceInfo.RouteTableID) != "" {
+				content["TargetGateway"] = getNameWithID(resourceInfo.RouteTableID)
+			} else {
+				content["TargetGateway"] = resourceInfo.RouteTableID
+			}
 		}
 
 		if settings.IsDrawIO() {
-			switch helpers.TypeByResourceID(resourceid) {
+			// Use actual ResourceType from AWS API when available
+			resourceType := resourceInfo.ResourceType
+			if resourceType == "" {
+				// Fallback to deducing type from resource ID
+				resourceType = helpers.TypeByResourceID(resourceid)
+			}
+			switch resourceType {
 			case vpcResourceType:
 				content["Image"] = drawio.AWSShape("Network Content Delivery", "VPC")
 			case "vpn":
@@ -90,6 +108,16 @@ func tgwroutes(_ *cobra.Command, _ []string) {
 				content["Image"] = drawio.AWSShape("Network Content Delivery", "Direct Connect Gateway")
 			case tgwResourceType:
 				content["Image"] = drawio.AWSShape("Network Content Delivery", "Transit Gateway")
+			case "peering":
+				content["Image"] = drawio.AWSShape("Network Content Delivery", "Transit Gateway")
+			case "tgw-peering":
+				content["Image"] = drawio.AWSShape("Network Content Delivery", "Transit Gateway")
+			case "direct-connect-gateway":
+				content["Image"] = drawio.AWSShape("Network Content Delivery", "Direct Connect")
+			case "connect":
+				content["Image"] = drawio.AWSShape("Network Content Delivery", "Transit Gateway")
+			default:
+				content["Image"] = drawio.AWSShape("General Resources", "General")
 			}
 		}
 		holder := format.OutputHolder{Contents: content}
@@ -132,9 +160,9 @@ func simplelistOnly(awsConfig config.AWSConfig) {
 	output.Write()
 }
 
-func filterGateway(gateways []helpers.TransitGateway) (map[string]string, map[string][]string) {
+func filterGateway(gateways []helpers.TransitGateway) (map[string]attachedResourceInfo, map[string][]string) {
 	limitertype := helpers.TypeByResourceID(tgwresourceid)
-	attachedresources := make(map[string]string)
+	attachedresources := make(map[string]attachedResourceInfo)
 	tgwrts := make(map[string][]string)
 
 	for _, gateway := range gateways {
@@ -149,13 +177,22 @@ func filterGateway(gateways []helpers.TransitGateway) (map[string]string, map[st
 			}
 			tgwrts[routetable.ID] = []string{}
 			for _, route := range routetable.Routes {
+				// Skip routes without attachments (e.g., blackhole routes)
+				if route.Attachment.ResourceID == "" {
+					continue
+				}
 				tgwrts[routetable.ID] = append(tgwrts[routetable.ID], route.Attachment.ResourceID)
 				if _, ok := attachedresources[route.Attachment.ResourceID]; !ok {
-					attachedresources[route.Attachment.ResourceID] = ""
+					attachedresources[route.Attachment.ResourceID] = attachedResourceInfo{
+						ResourceType: route.Attachment.ResourceType,
+					}
 				}
 			}
 			for _, sourceattachment := range routetable.SourceAttachments {
-				attachedresources[sourceattachment.ResourceID] = routetable.ID
+				attachedresources[sourceattachment.ResourceID] = attachedResourceInfo{
+					RouteTableID: routetable.ID,
+					ResourceType: sourceattachment.ResourceType,
+				}
 			}
 		}
 	}
@@ -163,7 +200,7 @@ func filterGateway(gateways []helpers.TransitGateway) (map[string]string, map[st
 	if limitertype == vpcResourceType {
 		attachedtgwrts := []string{}
 		for tgwid, destinationvpcs := range tgwrts {
-			if !contains(destinationvpcs, tgwresourceid) && tgwid != attachedresources[tgwresourceid] {
+			if !contains(destinationvpcs, tgwresourceid) && tgwid != attachedresources[tgwresourceid].RouteTableID {
 				delete(tgwrts, tgwid)
 			}
 			if contains(destinationvpcs, tgwresourceid) {
@@ -171,8 +208,8 @@ func filterGateway(gateways []helpers.TransitGateway) (map[string]string, map[st
 				attachedtgwrts = append(attachedtgwrts, tgwid)
 			}
 		}
-		for resourceid, tgwrt := range attachedresources {
-			if resourceid != tgwresourceid && !contains(attachedtgwrts, tgwrt) {
+		for resourceid, resourceInfo := range attachedresources {
+			if resourceid != tgwresourceid && !contains(attachedtgwrts, resourceInfo.RouteTableID) {
 				delete(attachedresources, resourceid)
 			}
 		}

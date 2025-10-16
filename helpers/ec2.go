@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/directconnect"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	"github.com/aws/smithy-go"
@@ -97,7 +98,7 @@ func GetAllEc2Instances(svc *ec2.Client) []types.Reservation {
 }
 
 // GetAllEC2ResourceNames retrieves the names of EC2 related objects
-func GetAllEC2ResourceNames(svc *ec2.Client) map[string]string {
+func GetAllEC2ResourceNames(svc *ec2.Client, dxSvc *directconnect.Client) map[string]string {
 	result := make(map[string]string)
 	result = addAllVPCNames(svc, result)
 	result = addAllPeerNames(svc, result)
@@ -105,6 +106,7 @@ func GetAllEC2ResourceNames(svc *ec2.Client) map[string]string {
 	result = addAllRouteTableNames(svc, result)
 	result = addAllTransitGatewayNames(svc, result)
 	result = addAllVpnNames(svc, result)
+	result = addAllDirectConnectGatewayNames(dxSvc, result)
 	return result
 }
 
@@ -222,6 +224,21 @@ func addAllVpnNames(svc ec2.DescribeVpnConnectionsAPIClient, result map[string]s
 		result[vpnID] = vpnID
 		if name := getNameFromTags(vpn.Tags); name != "" {
 			result[vpnID] = name
+		}
+	}
+	return result
+}
+
+// addAllDirectConnectGatewayNames returns the names of all Direct Connect Gateways in a map
+func addAllDirectConnectGatewayNames(svc *directconnect.Client, result map[string]string) map[string]string {
+	resp, err := svc.DescribeDirectConnectGateways(context.TODO(), &directconnect.DescribeDirectConnectGatewaysInput{})
+	if err != nil {
+		panic(err)
+	}
+	for _, gateway := range resp.DirectConnectGateways {
+		result[*gateway.DirectConnectGatewayId] = *gateway.DirectConnectGatewayId
+		if gateway.DirectConnectGatewayName != nil && *gateway.DirectConnectGatewayName != "" {
+			result[*gateway.DirectConnectGatewayId] = *gateway.DirectConnectGatewayName
 		}
 	}
 	return result
@@ -656,8 +673,9 @@ func parseActiveRoute(route types.TransitGatewayRoute) TransitGatewayRoute {
 			resourceid = strings.Split(resourceid, "(")[0]
 		}
 		tgwroute.Attachment = TransitGatewayAttachment{
-			ID:         aws.ToString(attachment.TransitGatewayAttachmentId),
-			ResourceID: resourceid,
+			ID:           aws.ToString(attachment.TransitGatewayAttachmentId),
+			ResourceID:   resourceid,
+			ResourceType: string(attachment.ResourceType),
 		}
 	}
 	return tgwroute

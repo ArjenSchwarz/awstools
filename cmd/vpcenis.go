@@ -34,7 +34,7 @@ func init() {
 func enis(_ *cobra.Command, _ []string) {
 	awsConfig := config.DefaultAwsConfig(*settings)
 	ec2Client := awsConfig.Ec2Client()
-	names := helpers.GetAllEC2ResourceNames(ec2Client)
+	names := helpers.GetAllEC2ResourceNames(ec2Client, awsConfig.DirectConnectClient())
 	resultTitle := "VPC ENIs for account " + getName(helpers.GetAccountID(awsConfig.StsClient()))
 	interfaces := helpers.GetNetworkInterfaces(ec2Client)
 	output := format.OutputArray{Settings: settings.NewOutputSettings()}

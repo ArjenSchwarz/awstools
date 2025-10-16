@@ -7,10 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Fixed
-
-- Profile generator now reads from `--output-file` for conflict detection, template validation, and profile generation instead of always reading the default AWS config file (T-538)
-
 ### Added
 
 - Makefile targets for code quality: `fmt`, `vet`, `modernize`, `check`, `security-scan`
@@ -18,17 +14,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Makefile targets for dependency management: `deps-tidy`, `deps-update`
 - Makefile target `install` for installing the application
 - Organized help output with categorized sections
-
-### Fixed
-
-- Role discovery account alias lookup now uses SSO-provided account names instead of IAM ListAccountAliases, which incorrectly returned the template profile's alias for all accounts (T-481)
-- ENI cache pointer reuse in `batchFetchVPCEndpoints` and `batchFetchNATGateways` — use index-based iteration to store pointers to slice elements instead of loop variables (T-456)
-
+- Direct Connect Gateway support for name resolution in EC2 resources
+- Support for additional Transit Gateway attachment types in DrawIO output (peering, direct-connect-gateway, connect)
 
 ### Changed
 
 - `clean` target now also removes coverage artifacts
 - Formatting fix in `helpers/organizations_test.go`
+- Enhanced Transit Gateway route table visualization to use actual resource types from AWS API
+- Updated DrawIO output to use raw resource IDs for proper connection matching in Transit Gateway diagrams
+- Updated AWS SDK dependencies to latest versions (v1.39.2)
+
+### Fixed
+
+- Profile generator now reads from `--output-file` for conflict detection, template validation, and profile generation instead of always reading the default AWS config file (T-538)
+- Role discovery account alias lookup now uses SSO-provided account names instead of IAM ListAccountAliases, which incorrectly returned the template profile's alias for all accounts (T-481)
+- ENI cache pointer reuse in `batchFetchVPCEndpoints` and `batchFetchNATGateways` — use index-based iteration to store pointers to slice elements instead of loop variables (T-456)
+- Transit Gateway route processing now skips blackhole routes without attachments
+
 
 ## [1.2.0] - 2025-01-16
 
