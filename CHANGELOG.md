@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Organized help output with categorized sections
 - Direct Connect Gateway support for name resolution in EC2 resources
 - Support for additional Transit Gateway attachment types in DrawIO output (peering, direct-connect-gateway, connect)
+- Support for multiple comma-separated resource IDs in `tgw routetables --resource-id` flag
 
 ### Changed
 
@@ -31,7 +32,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Role discovery account alias lookup now uses SSO-provided account names instead of IAM ListAccountAliases, which incorrectly returned the template profile's alias for all accounts (T-481)
 - ENI cache pointer reuse in `batchFetchVPCEndpoints` and `batchFetchNATGateways` — use index-based iteration to store pointers to slice elements instead of loop variables (T-456)
 - Transit Gateway route processing now skips blackhole routes without attachments
-
+- Fixed duplicate destinations in Transit Gateway route tables output
+- Fixed Transit Gateway and route table name resolution to use ID as fallback when Name tag is missing
 
 ## [1.2.0] - 2025-01-16
 

@@ -198,9 +198,15 @@ func addAllRouteTableNames(svc *ec2.Client, result map[string]string) map[string
 func addAllTransitGatewayNames(svc *ec2.Client, result map[string]string) map[string]string {
 	tgws := GetAllTransitGateways(svc)
 	for _, tgw := range tgws {
-		result[tgw.ID] = tgw.Name
+		result[tgw.ID] = tgw.ID
+		if tgw.Name != "" {
+			result[tgw.ID] = tgw.Name
+		}
 		for _, rt := range tgw.RouteTables {
-			result[rt.ID] = rt.Name
+			result[rt.ID] = rt.ID
+			if rt.Name != "" {
+				result[rt.ID] = rt.Name
+			}
 		}
 	}
 	return result

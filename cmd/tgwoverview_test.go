@@ -65,7 +65,7 @@ func TestFilterGateway_IncludesNonVPCAttachments(t *testing.T) {
 	assert.Contains(t, attachedresources, "dxgw-00000001", "DX gateway should be in attached resources")
 
 	// DX gateway (source attachment only) should have its route table set
-	assert.Equal(t, "tgw-rtb-00000001", attachedresources["dxgw-00000001"])
+	assert.Equal(t, "tgw-rtb-00000001", attachedresources["dxgw-00000001"].RouteTableID)
 }
 
 // TestFilterGateway_NonVPCSourceAttachmentNotDuplicated verifies that a
@@ -106,5 +106,5 @@ func TestFilterGateway_NonVPCSourceAttachmentNotDuplicated(t *testing.T) {
 	attachedresources, _ := filterGateway(gateways)
 
 	// VPN appears in both routes and source attachments — should have route table set
-	assert.Equal(t, "tgw-rtb-00000001", attachedresources["vpn-00000001"])
+	assert.Equal(t, "tgw-rtb-00000001", attachedresources["vpn-00000001"].RouteTableID)
 }

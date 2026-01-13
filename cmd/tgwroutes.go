@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"fmt"
+	"slices"
+	"strings"
 
 	"github.com/ArjenSchwarz/awstools/config"
 	"github.com/ArjenSchwarz/awstools/helpers"
@@ -17,7 +19,8 @@ var tgwroutetablesCmd = &cobra.Command{
 	Short: "Get an overview of connections between Transit Gateway Route Tables and attached resources",
 	Long: `Get an overview of connections between Transit Gateway Route Tables and attached resources
 
-	Using the --resource-id (-r) flag, you can limit the output to the provided resource.
+	Using the --resource-id (-r) flag, you can limit the output to the provided resource(s).
+	Multiple resource IDs can be provided as comma-separated values (e.g., -r vpc-123,vpc-456).
 	For a route table that means all the resources it connects to,
 	while for a VPC that means all the route tables it connects
 	to and through them what other resources can reach it or it can reach.
@@ -37,7 +40,7 @@ type attachedResourceInfo struct {
 
 func init() {
 	tgwCmd.AddCommand(tgwroutetablesCmd)
-	tgwroutetablesCmd.Flags().StringVarP(&tgwresourceid, "resource-id", "r", "", "The id of the resource you want to limit to")
+	tgwroutetablesCmd.Flags().StringVarP(&tgwresourceid, "resource-id", "r", "", "The id(s) of the resource you want to limit to (comma-separated for multiple)")
 	tgwroutetablesCmd.Flags().BoolVarP(&simplelist, "list", "l", false, "Only show a simple list of routes")
 }
 
@@ -69,7 +72,7 @@ func tgwroutes(_ *cobra.Command, _ []string) {
 		content := make(map[string]any)
 		content["ID"] = rt
 		content["Name"] = getName(rt)
-		content["Destinations"] = connectedvpcs
+		content["Destinations"] = unique(connectedvpcs)
 		if settings.IsDrawIO() {
 			content["Image"] = drawio.AWSShape("Network Content Delivery", "Route Table")
 		}
@@ -161,18 +164,33 @@ func simplelistOnly(awsConfig config.AWSConfig) {
 }
 
 func filterGateway(gateways []helpers.TransitGateway) (map[string]attachedResourceInfo, map[string][]string) {
-	limitertype := helpers.TypeByResourceID(tgwresourceid)
+	// Parse comma-separated resource IDs
+	var resourceIDs []string
+	if tgwresourceid != "" {
+		for _, id := range strings.Split(tgwresourceid, ",") {
+			if trimmed := strings.TrimSpace(id); trimmed != "" {
+				resourceIDs = append(resourceIDs, trimmed)
+			}
+		}
+	}
+
+	// Determine limiter type from first resource ID (all should be same type)
+	limitertype := ""
+	if len(resourceIDs) > 0 {
+		limitertype = helpers.TypeByResourceID(resourceIDs[0])
+	}
+
 	attachedresources := make(map[string]attachedResourceInfo)
 	tgwrts := make(map[string][]string)
 
 	for _, gateway := range gateways {
 		// only add relevant gateway if filtered by gateway
-		if limitertype == tgwResourceType && gateway.ID != tgwresourceid {
+		if limitertype == tgwResourceType && !slices.Contains(resourceIDs, gateway.ID) {
 			continue
 		}
 		for _, routetable := range gateway.RouteTables {
 			// only add relevant route tables if filtered by route table
-			if limitertype == "tgw-rtb" && routetable.ID != tgwresourceid {
+			if limitertype == "tgw-rtb" && !slices.Contains(resourceIDs, routetable.ID) {
 				continue
 			}
 			tgwrts[routetable.ID] = []string{}
@@ -200,16 +218,32 @@ func filterGateway(gateways []helpers.TransitGateway) (map[string]attachedResour
 	if limitertype == vpcResourceType {
 		attachedtgwrts := []string{}
 		for tgwid, destinationvpcs := range tgwrts {
-			if !contains(destinationvpcs, tgwresourceid) && tgwid != attachedresources[tgwresourceid].RouteTableID {
-				delete(tgwrts, tgwid)
+			// Check if any of the resource IDs match
+			hasMatch := false
+			for _, resourceID := range resourceIDs {
+				if contains(destinationvpcs, resourceID) || tgwid == attachedresources[resourceID].RouteTableID {
+					hasMatch = true
+					break
+				}
 			}
-			if contains(destinationvpcs, tgwresourceid) {
-				tgwrts[tgwid] = []string{tgwresourceid}
-				attachedtgwrts = append(attachedtgwrts, tgwid)
+			if !hasMatch {
+				delete(tgwrts, tgwid)
+				continue
+			}
+			// Filter destinations to only include the requested VPCs
+			var matchingVPCs []string
+			for _, resourceID := range resourceIDs {
+				if contains(destinationvpcs, resourceID) {
+					matchingVPCs = append(matchingVPCs, resourceID)
+					attachedtgwrts = append(attachedtgwrts, tgwid)
+				}
+			}
+			if len(matchingVPCs) > 0 {
+				tgwrts[tgwid] = matchingVPCs
 			}
 		}
 		for resourceid, resourceInfo := range attachedresources {
-			if resourceid != tgwresourceid && !contains(attachedtgwrts, resourceInfo.RouteTableID) {
+			if !slices.Contains(resourceIDs, resourceid) && !slices.Contains(attachedtgwrts, resourceInfo.RouteTableID) {
 				delete(attachedresources, resourceid)
 			}
 		}
