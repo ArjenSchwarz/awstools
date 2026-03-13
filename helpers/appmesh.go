@@ -123,27 +123,57 @@ func getAllAppMeshVirtualServices(meshName *string, svc AppMeshAPI) []*types.Vir
 }
 
 // buildRoutesHolder processes route data and builds a map of router name to routes.
+// Handles HTTP, HTTP/2, gRPC, and TCP route types.
 func buildRoutesHolder(routes []*types.RouteData) map[string][]AppMeshVirtualServiceRoute {
 	routesholder := make(map[string][]AppMeshVirtualServiceRoute)
 	for _, route := range routes {
-		for _, action := range route.Spec.HttpRoute.Action.WeightedTargets {
+		var targets []types.WeightedTarget
+		var path string
+
+		switch {
+		case route.Spec.HttpRoute != nil:
+			targets = route.Spec.HttpRoute.Action.WeightedTargets
+			path = aws.ToString(route.Spec.HttpRoute.Match.Prefix)
+		case route.Spec.Http2Route != nil:
+			targets = route.Spec.Http2Route.Action.WeightedTargets
+			path = aws.ToString(route.Spec.Http2Route.Match.Prefix)
+		case route.Spec.GrpcRoute != nil:
+			targets = route.Spec.GrpcRoute.Action.WeightedTargets
+			path = grpcMatchPath(route.Spec.GrpcRoute.Match)
+		case route.Spec.TcpRoute != nil:
+			targets = route.Spec.TcpRoute.Action.WeightedTargets
+		default:
+			continue
+		}
+
+		routerName := aws.ToString(route.VirtualRouterName)
+		for _, action := range targets {
 			target := AppMeshVirtualServiceRoute{
-				Router:          aws.ToString(route.VirtualRouterName),
-				Path:            aws.ToString(route.Spec.HttpRoute.Match.Prefix),
+				Router:          routerName,
+				Path:            path,
 				DestinationNode: aws.ToString(action.VirtualNode),
 				Weight:          action.Weight,
 			}
-			routerName := aws.ToString(route.VirtualRouterName)
-			if targets, ok := routesholder[routerName]; ok {
-				routesholder[routerName] = append(targets, target)
-			} else {
-				values := []AppMeshVirtualServiceRoute{target}
-				routesholder[routerName] = values
-			}
-
+			routesholder[routerName] = append(routesholder[routerName], target)
 		}
 	}
 	return routesholder
+}
+
+// grpcMatchPath builds a path string from a gRPC route match.
+func grpcMatchPath(match *types.GrpcRouteMatch) string {
+	if match == nil {
+		return ""
+	}
+	serviceName := aws.ToString(match.ServiceName)
+	methodName := aws.ToString(match.MethodName)
+	if serviceName != "" && methodName != "" {
+		return serviceName + "/" + methodName
+	}
+	if serviceName != "" {
+		return serviceName
+	}
+	return methodName
 }
 
 // GetAllAppMeshPaths retrieves all the connections in the mesh

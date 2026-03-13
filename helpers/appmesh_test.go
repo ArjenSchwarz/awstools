@@ -336,7 +336,6 @@ func TestBuildRoutesHolder_NilRouteSpec_NoPanic(t *testing.T) {
 		t.Errorf("Expected 0 routes for empty-router, got %d", len(result["empty-router"]))
 	}
 }
-}
 
 func TestGetAllAppMeshRoutes_ListRoutesError_NoPanic(t *testing.T) {
 	mock := &mockAppMeshClient{
