@@ -34,7 +34,7 @@ func orgstructure(_ *cobra.Command, _ []string) {
 	resultTitle := "AWS Organization Structure"
 	organization, err := helpers.GetFullOrganization(awsConfig.OrganizationsClient())
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal(err.Error())
 	}
 	keys := []string{"Name", "Type", childrenColumn}
 	if settings.IsDrawIO() {

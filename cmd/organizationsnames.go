@@ -30,7 +30,7 @@ func orgnames(_ *cobra.Command, _ []string) {
 	awsConfig := config.DefaultAwsConfig(*settings)
 	organization, err := helpers.GetFullOrganization(awsConfig.OrganizationsClient())
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal(err.Error())
 	}
 	result := make(map[string]string)
 	result = traverseOrgStructureEntryForNames(organization, result)

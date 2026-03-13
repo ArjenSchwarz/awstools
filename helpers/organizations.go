@@ -9,12 +9,15 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/organizations/types"
 )
 
-// organizationsListRootsAPI is the interface for the ListRoots AWS Organizations API call.
-type organizationsListRootsAPI interface {
+// OrganizationsAPI defines the subset of the Organizations client used by this package.
+type OrganizationsAPI interface {
 	ListRoots(ctx context.Context, params *organizations.ListRootsInput, optFns ...func(*organizations.Options)) (*organizations.ListRootsOutput, error)
+	ListChildren(ctx context.Context, params *organizations.ListChildrenInput, optFns ...func(*organizations.Options)) (*organizations.ListChildrenOutput, error)
+	DescribeOrganizationalUnit(ctx context.Context, params *organizations.DescribeOrganizationalUnitInput, optFns ...func(*organizations.Options)) (*organizations.DescribeOrganizationalUnitOutput, error)
+	DescribeAccount(ctx context.Context, params *organizations.DescribeAccountInput, optFns ...func(*organizations.Options)) (*organizations.DescribeAccountOutput, error)
 }
 
-func getOrganizationRoot(svc organizationsListRootsAPI) (OrganizationEntry, error) {
+func getOrganizationRoot(svc OrganizationsAPI) (OrganizationEntry, error) {
 	root, err := svc.ListRoots(context.TODO(), &organizations.ListRootsInput{})
 	if err != nil {
 		return OrganizationEntry{}, fmt.Errorf("failed to list organization roots: %w", err)
@@ -33,12 +36,16 @@ func getOrganizationRoot(svc organizationsListRootsAPI) (OrganizationEntry, erro
 }
 
 // GetFullOrganization returns the root entry of the organization with all children fleshed out
-func GetFullOrganization(svc *organizations.Client) (OrganizationEntry, error) {
+func GetFullOrganization(svc OrganizationsAPI) (OrganizationEntry, error) {
 	root, err := getOrganizationRoot(svc)
 	if err != nil {
 		return OrganizationEntry{}, err
 	}
-	root.Children = root.findChildren(svc)
+	children, err := root.findChildren(svc)
+	if err != nil {
+		return OrganizationEntry{}, err
+	}
+	root.Children = children
 	return root, nil
 }
 
@@ -51,7 +58,7 @@ type OrganizationEntry struct {
 	Children []OrganizationEntry
 }
 
-func (entry *OrganizationEntry) findChildren(svc *organizations.Client) []OrganizationEntry {
+func (entry *OrganizationEntry) findChildren(svc OrganizationsAPI) ([]OrganizationEntry, error) {
 	children := []OrganizationEntry{}
 	ouinput := &organizations.ListChildrenInput{
 		ParentId:  aws.String(entry.ID),
@@ -59,38 +66,50 @@ func (entry *OrganizationEntry) findChildren(svc *organizations.Client) []Organi
 	}
 	ouchildren, err := svc.ListChildren(context.TODO(), ouinput)
 	if err != nil {
-		fmt.Println(err)
+		return nil, fmt.Errorf("failed to list OU children of %s: %w", entry.ID, err)
 	}
 	for _, child := range ouchildren.Children {
-		ouchild := formatChild(child, svc)
-		ouchild.Children = ouchild.findChildren(svc)
+		ouchild, err := formatChild(child, svc)
+		if err != nil {
+			return nil, err
+		}
+		ouchildChildren, err := ouchild.findChildren(svc)
+		if err != nil {
+			return nil, err
+		}
+		ouchild.Children = ouchildChildren
 		children = append(children, ouchild)
 	}
 	accountinput := &organizations.ListChildrenInput{
 		ParentId:  aws.String(entry.ID),
 		ChildType: types.ChildType(types.TargetTypeAccount),
 	}
-	accountchildren, _ := svc.ListChildren(context.TODO(), accountinput)
-
+	accountchildren, err := svc.ListChildren(context.TODO(), accountinput)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list account children of %s: %w", entry.ID, err)
+	}
 	for _, child := range accountchildren.Children {
-		accountchild := formatChild(child, svc)
+		accountchild, err := formatChild(child, svc)
+		if err != nil {
+			return nil, err
+		}
 		children = append(children, accountchild)
 	}
-	return children
+	return children, nil
 }
 
 func (entry *OrganizationEntry) String() string {
 	return entry.Name + " (" + entry.ID + ")"
 }
 
-func formatChild(raw types.Child, svc *organizations.Client) OrganizationEntry {
+func formatChild(raw types.Child, svc OrganizationsAPI) (OrganizationEntry, error) {
 	if raw.Type == types.ChildType(types.TargetTypeOrganizationalUnit) {
 		input := &organizations.DescribeOrganizationalUnitInput{
 			OrganizationalUnitId: raw.Id,
 		}
 		details, err := svc.DescribeOrganizationalUnit(context.TODO(), input)
 		if err != nil {
-			fmt.Println(err)
+			return OrganizationEntry{}, fmt.Errorf("failed to describe OU %s: %w", *raw.Id, err)
 		}
 		return OrganizationEntry{
 			Name:     *details.OrganizationalUnit.Name,
@@ -98,14 +117,14 @@ func formatChild(raw types.Child, svc *organizations.Client) OrganizationEntry {
 			Type:     string(raw.Type),
 			Arn:      *details.OrganizationalUnit.Arn,
 			Children: []OrganizationEntry{},
-		}
+		}, nil
 	}
 	input := &organizations.DescribeAccountInput{
 		AccountId: raw.Id,
 	}
 	details, err := svc.DescribeAccount(context.TODO(), input)
 	if err != nil {
-		fmt.Println(err)
+		return OrganizationEntry{}, fmt.Errorf("failed to describe account %s: %w", *raw.Id, err)
 	}
 	return OrganizationEntry{
 		Name:     *details.Account.Name,
@@ -113,5 +132,5 @@ func formatChild(raw types.Child, svc *organizations.Client) OrganizationEntry {
 		Type:     string(raw.Type),
 		Arn:      *details.Account.Arn,
 		Children: []OrganizationEntry{},
-	}
+	}, nil
 }
