@@ -514,6 +514,101 @@ func TestTransitGatewayRoute_Struct(t *testing.T) {
 	}
 }
 
+// TestParseActiveRoute_NoAttachments verifies that parseActiveRoute handles routes
+// with no attachments (e.g. local/propagated routes) without panicking. (T-398)
+func TestParseActiveRoute_NoAttachments(t *testing.T) {
+	route := types.TransitGatewayRoute{
+		DestinationCidrBlock:      aws.String("10.0.0.0/16"),
+		State:                     types.TransitGatewayRouteStateActive,
+		Type:                      types.TransitGatewayRouteTypePropagated,
+		TransitGatewayAttachments: []types.TransitGatewayRouteAttachment{},
+	}
+	result := parseActiveRoute(route)
+
+	if result.CIDR != "10.0.0.0/16" {
+		t.Errorf("Expected CIDR '10.0.0.0/16', got %s", result.CIDR)
+	}
+	if result.State != "active" {
+		t.Errorf("Expected State 'active', got %s", result.State)
+	}
+	if result.RouteType != "propagated" {
+		t.Errorf("Expected RouteType 'propagated', got %s", result.RouteType)
+	}
+	if result.Attachment.ID != "" {
+		t.Errorf("Expected empty Attachment.ID, got %s", result.Attachment.ID)
+	}
+	if result.Attachment.ResourceID != "" {
+		t.Errorf("Expected empty Attachment.ResourceID, got %s", result.Attachment.ResourceID)
+	}
+}
+
+// TestParseActiveRoute_NilAttachments verifies that parseActiveRoute handles routes
+// with a nil attachments slice without panicking. (T-398)
+func TestParseActiveRoute_NilAttachments(t *testing.T) {
+	route := types.TransitGatewayRoute{
+		DestinationCidrBlock:      aws.String("172.16.0.0/12"),
+		State:                     types.TransitGatewayRouteStateActive,
+		Type:                      types.TransitGatewayRouteTypeStatic,
+		TransitGatewayAttachments: nil,
+	}
+	result := parseActiveRoute(route)
+
+	if result.CIDR != "172.16.0.0/12" {
+		t.Errorf("Expected CIDR '172.16.0.0/12', got %s", result.CIDR)
+	}
+	if result.Attachment.ID != "" {
+		t.Errorf("Expected empty Attachment.ID, got %s", result.Attachment.ID)
+	}
+}
+
+// TestParseActiveRoute_WithAttachment verifies the normal case with an attachment present.
+func TestParseActiveRoute_WithAttachment(t *testing.T) {
+	route := types.TransitGatewayRoute{
+		DestinationCidrBlock: aws.String("10.1.0.0/16"),
+		State:                types.TransitGatewayRouteStateActive,
+		Type:                 types.TransitGatewayRouteTypeStatic,
+		TransitGatewayAttachments: []types.TransitGatewayRouteAttachment{
+			{
+				ResourceId:                 aws.String("vpc-abc123"),
+				TransitGatewayAttachmentId: aws.String("tgw-attach-abc123"),
+				ResourceType:               types.TransitGatewayAttachmentResourceTypeVpc,
+			},
+		},
+	}
+	result := parseActiveRoute(route)
+
+	if result.CIDR != "10.1.0.0/16" {
+		t.Errorf("Expected CIDR '10.1.0.0/16', got %s", result.CIDR)
+	}
+	if result.Attachment.ID != "tgw-attach-abc123" {
+		t.Errorf("Expected Attachment.ID 'tgw-attach-abc123', got %s", result.Attachment.ID)
+	}
+	if result.Attachment.ResourceID != "vpc-abc123" {
+		t.Errorf("Expected Attachment.ResourceID 'vpc-abc123', got %s", result.Attachment.ResourceID)
+	}
+}
+
+// TestParseActiveRoute_VPNStripsPublicIP verifies VPN routes have public IP stripped.
+func TestParseActiveRoute_VPNStripsPublicIP(t *testing.T) {
+	route := types.TransitGatewayRoute{
+		DestinationCidrBlock: aws.String("10.2.0.0/16"),
+		State:                types.TransitGatewayRouteStateActive,
+		Type:                 types.TransitGatewayRouteTypeStatic,
+		TransitGatewayAttachments: []types.TransitGatewayRouteAttachment{
+			{
+				ResourceId:                 aws.String("vpn-abc123(1.2.3.4)"),
+				TransitGatewayAttachmentId: aws.String("tgw-attach-vpn123"),
+				ResourceType:               types.TransitGatewayAttachmentResourceTypeVpn,
+			},
+		},
+	}
+	result := parseActiveRoute(route)
+
+	if result.Attachment.ResourceID != "vpn-abc123" {
+		t.Errorf("Expected ResourceID 'vpn-abc123' (public IP stripped), got %s", result.Attachment.ResourceID)
+	}
+}
+
 func TestIsValidIPAddress(t *testing.T) {
 	tests := []struct {
 		name     string

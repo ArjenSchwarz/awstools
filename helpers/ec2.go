@@ -443,23 +443,30 @@ func GetActiveRoutesForTransitGatewayRouteTable(routetableID string, svc *ec2.Cl
 		panic(err)
 	}
 	for _, route := range resp.Routes {
+		result = append(result, parseActiveRoute(route))
+	}
+	return result
+}
+
+// parseActiveRoute converts an AWS SDK TransitGatewayRoute into our TransitGatewayRoute type.
+func parseActiveRoute(route types.TransitGatewayRoute) TransitGatewayRoute {
+	tgwroute := TransitGatewayRoute{
+		State:     string(route.State),
+		CIDR:      *route.DestinationCidrBlock,
+		RouteType: string(route.Type),
+	}
+	if len(route.TransitGatewayAttachments) > 0 {
 		resourceid := *route.TransitGatewayAttachments[0].ResourceId
 		// We don't care about the public IPs of the routes, so strip those off
 		if route.TransitGatewayAttachments[0].ResourceType == types.TransitGatewayAttachmentResourceTypeVpn {
 			resourceid = strings.Split(resourceid, "(")[0]
 		}
-		tgwroute := TransitGatewayRoute{
-			State: string(route.State),
-			CIDR:  *route.DestinationCidrBlock,
-			Attachment: TransitGatewayAttachment{
-				ID:         *route.TransitGatewayAttachments[0].TransitGatewayAttachmentId,
-				ResourceID: resourceid,
-			},
-			RouteType: string(route.Type),
+		tgwroute.Attachment = TransitGatewayAttachment{
+			ID:         *route.TransitGatewayAttachments[0].TransitGatewayAttachmentId,
+			ResourceID: resourceid,
 		}
-		result = append(result, tgwroute)
 	}
-	return result
+	return tgwroute
 }
 
 // GetBlackholeRoutesForTransitGatewayRouteTable returns all routes that are currently active for a Transit Gateway route table
