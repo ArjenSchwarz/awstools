@@ -1,10 +1,82 @@
 package helpers
 
 import (
+	"context"
+	"errors"
 	"testing"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/organizations"
 	"github.com/aws/aws-sdk-go-v2/service/organizations/types"
 )
+
+// mockListRootsClient is a mock for the organizationsListRootsAPI interface.
+type mockListRootsClient struct {
+	output *organizations.ListRootsOutput
+	err    error
+}
+
+func (m *mockListRootsClient) ListRoots(_ context.Context, _ *organizations.ListRootsInput, _ ...func(*organizations.Options)) (*organizations.ListRootsOutput, error) {
+	return m.output, m.err
+}
+
+func TestGetOrganizationRoot_ReturnsErrorOnAPIFailure(t *testing.T) {
+	mock := &mockListRootsClient{
+		output: nil,
+		err:    errors.New("AccessDeniedException: not authorized"),
+	}
+
+	_, err := getOrganizationRoot(mock)
+	if err == nil {
+		t.Fatal("Expected error when ListRoots fails, got nil")
+	}
+	if !errors.Is(err, mock.err) {
+		t.Errorf("Expected wrapped error containing %q, got %q", mock.err, err)
+	}
+}
+
+func TestGetOrganizationRoot_ReturnsErrorOnEmptyRoots(t *testing.T) {
+	mock := &mockListRootsClient{
+		output: &organizations.ListRootsOutput{
+			Roots: []types.Root{},
+		},
+		err: nil,
+	}
+
+	_, err := getOrganizationRoot(mock)
+	if err == nil {
+		t.Fatal("Expected error when ListRoots returns empty roots, got nil")
+	}
+}
+
+func TestGetOrganizationRoot_Success(t *testing.T) {
+	mock := &mockListRootsClient{
+		output: &organizations.ListRootsOutput{
+			Roots: []types.Root{
+				{
+					Id:   aws.String("r-ab12"),
+					Arn:  aws.String("arn:aws:organizations::123456789012:root/o-abc123/r-ab12"),
+					Name: aws.String("Root"),
+				},
+			},
+		},
+		err: nil,
+	}
+
+	entry, err := getOrganizationRoot(mock)
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+	if entry.ID != "r-ab12" {
+		t.Errorf("Expected ID 'r-ab12', got %q", entry.ID)
+	}
+	if entry.Name != "Root" {
+		t.Errorf("Expected Name 'Root', got %q", entry.Name)
+	}
+	if entry.Type != string(types.TargetTypeRoot) {
+		t.Errorf("Expected Type %q, got %q", string(types.TargetTypeRoot), entry.Type)
+	}
+}
 
 func TestOrganizationEntry_Struct(t *testing.T) {
 	entry := OrganizationEntry{

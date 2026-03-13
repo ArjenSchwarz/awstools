@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"log"
+
 	"github.com/ArjenSchwarz/awstools/config"
 	"github.com/ArjenSchwarz/awstools/helpers"
 	format "github.com/ArjenSchwarz/go-output"
@@ -30,7 +32,10 @@ func init() {
 func orgstructure(_ *cobra.Command, _ []string) {
 	awsConfig := config.DefaultAwsConfig(*settings)
 	resultTitle := "AWS Organization Structure"
-	organization := helpers.GetFullOrganization(awsConfig.OrganizationsClient())
+	organization, err := helpers.GetFullOrganization(awsConfig.OrganizationsClient())
+	if err != nil {
+		log.Fatal(err)
+	}
 	keys := []string{"Name", "Type", childrenColumn}
 	if settings.IsDrawIO() {
 		keys = append(keys, "Image")

@@ -9,10 +9,18 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/organizations/types"
 )
 
-func getOrganizationRoot(svc *organizations.Client) OrganizationEntry {
+// organizationsListRootsAPI is the interface for the ListRoots AWS Organizations API call.
+type organizationsListRootsAPI interface {
+	ListRoots(ctx context.Context, params *organizations.ListRootsInput, optFns ...func(*organizations.Options)) (*organizations.ListRootsOutput, error)
+}
+
+func getOrganizationRoot(svc organizationsListRootsAPI) (OrganizationEntry, error) {
 	root, err := svc.ListRoots(context.TODO(), &organizations.ListRootsInput{})
 	if err != nil {
-		fmt.Print(err)
+		return OrganizationEntry{}, fmt.Errorf("failed to list organization roots: %w", err)
+	}
+	if len(root.Roots) == 0 {
+		return OrganizationEntry{}, fmt.Errorf("no organization roots found")
 	}
 	rootentry := root.Roots[0]
 	entry := OrganizationEntry{
@@ -21,14 +29,17 @@ func getOrganizationRoot(svc *organizations.Client) OrganizationEntry {
 		Name: *rootentry.Name,
 		Type: string(types.TargetTypeRoot),
 	}
-	return entry
+	return entry, nil
 }
 
 // GetFullOrganization returns the root entry of the organization with all children fleshed out
-func GetFullOrganization(svc *organizations.Client) OrganizationEntry {
-	root := getOrganizationRoot(svc)
+func GetFullOrganization(svc *organizations.Client) (OrganizationEntry, error) {
+	root, err := getOrganizationRoot(svc)
+	if err != nil {
+		return OrganizationEntry{}, err
+	}
 	root.Children = root.findChildren(svc)
-	return root
+	return root, nil
 }
 
 // OrganizationEntry is a helper struct for Organization resources
