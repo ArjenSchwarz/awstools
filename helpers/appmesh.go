@@ -11,8 +11,19 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/appmesh/types"
 )
 
+// AppMeshAPI defines the subset of the App Mesh client used by helpers.
+type AppMeshAPI interface {
+	ListVirtualRouters(ctx context.Context, params *appmesh.ListVirtualRoutersInput, optFns ...func(*appmesh.Options)) (*appmesh.ListVirtualRoutersOutput, error)
+	ListRoutes(ctx context.Context, params *appmesh.ListRoutesInput, optFns ...func(*appmesh.Options)) (*appmesh.ListRoutesOutput, error)
+	DescribeRoute(ctx context.Context, params *appmesh.DescribeRouteInput, optFns ...func(*appmesh.Options)) (*appmesh.DescribeRouteOutput, error)
+	ListVirtualNodes(ctx context.Context, params *appmesh.ListVirtualNodesInput, optFns ...func(*appmesh.Options)) (*appmesh.ListVirtualNodesOutput, error)
+	DescribeVirtualNode(ctx context.Context, params *appmesh.DescribeVirtualNodeInput, optFns ...func(*appmesh.Options)) (*appmesh.DescribeVirtualNodeOutput, error)
+	ListVirtualServices(ctx context.Context, params *appmesh.ListVirtualServicesInput, optFns ...func(*appmesh.Options)) (*appmesh.ListVirtualServicesOutput, error)
+	DescribeVirtualService(ctx context.Context, params *appmesh.DescribeVirtualServiceInput, optFns ...func(*appmesh.Options)) (*appmesh.DescribeVirtualServiceOutput, error)
+}
+
 // getAllAppMeshRoutes retrieves all of the routes in the mesh
-func getAllAppMeshRoutes(meshName *string, svc *appmesh.Client) []types.RouteRef {
+func getAllAppMeshRoutes(meshName *string, svc AppMeshAPI) []types.RouteRef {
 	routersInput := &appmesh.ListVirtualRoutersInput{
 		MeshName: meshName,
 	}
@@ -20,6 +31,7 @@ func getAllAppMeshRoutes(meshName *string, svc *appmesh.Client) []types.RouteRef
 	routers, err := svc.ListVirtualRouters(context.TODO(), routersInput)
 	if err != nil {
 		fmt.Print(err)
+		return nil
 	}
 	var routeslist = []types.RouteRef{}
 	for _, routers := range routers.VirtualRouters {
@@ -30,6 +42,7 @@ func getAllAppMeshRoutes(meshName *string, svc *appmesh.Client) []types.RouteRef
 		routes, err := svc.ListRoutes(context.TODO(), routesInput)
 		if err != nil {
 			fmt.Print(err)
+			continue
 		}
 		routeslist = append(routeslist, routes.Routes...)
 	}
@@ -38,7 +51,7 @@ func getAllAppMeshRoutes(meshName *string, svc *appmesh.Client) []types.RouteRef
 }
 
 // getAppMeshRouteDescriptions retrieves the details for all of the routes in the mesh
-func getAppMeshRouteDescriptions(meshName *string, svc *appmesh.Client) []*types.RouteData {
+func getAppMeshRouteDescriptions(meshName *string, svc AppMeshAPI) []*types.RouteData {
 	routes := getAllAppMeshRoutes(meshName, svc)
 	var routedetails = []*types.RouteData{}
 	for _, route := range routes {
@@ -50,6 +63,7 @@ func getAppMeshRouteDescriptions(meshName *string, svc *appmesh.Client) []*types
 		output, err := svc.DescribeRoute(context.TODO(), input)
 		if err != nil {
 			fmt.Print(err)
+			continue
 		}
 		routedetails = append(routedetails, output.Route)
 	}
@@ -57,13 +71,14 @@ func getAppMeshRouteDescriptions(meshName *string, svc *appmesh.Client) []*types
 }
 
 // getAllAppMeshNodes retrieves all of the VirtualNodes in the mesh
-func getAllAppMeshNodes(meshName *string, svc *appmesh.Client) []*types.VirtualNodeData {
+func getAllAppMeshNodes(meshName *string, svc AppMeshAPI) []*types.VirtualNodeData {
 	nodesInput := &appmesh.ListVirtualNodesInput{
 		MeshName: meshName,
 	}
 	nodes, err := svc.ListVirtualNodes(context.TODO(), nodesInput)
 	if err != nil {
 		fmt.Print(err)
+		return nil
 	}
 	var nodelist = []*types.VirtualNodeData{}
 	for _, node := range nodes.VirtualNodes {
@@ -74,6 +89,7 @@ func getAllAppMeshNodes(meshName *string, svc *appmesh.Client) []*types.VirtualN
 		nodetails, err := svc.DescribeVirtualNode(context.TODO(), input)
 		if err != nil {
 			fmt.Print(err)
+			continue
 		}
 		nodelist = append(nodelist, nodetails.VirtualNode)
 	}
@@ -81,13 +97,14 @@ func getAllAppMeshNodes(meshName *string, svc *appmesh.Client) []*types.VirtualN
 }
 
 // getAllAppMeshVirtualServices retrieves all of the VirtualServices in the mesh
-func getAllAppMeshVirtualServices(meshName *string, svc *appmesh.Client) []*types.VirtualServiceData {
+func getAllAppMeshVirtualServices(meshName *string, svc AppMeshAPI) []*types.VirtualServiceData {
 	servicesInput := &appmesh.ListVirtualServicesInput{
 		MeshName: meshName,
 	}
 	services, err := svc.ListVirtualServices(context.TODO(), servicesInput)
 	if err != nil {
 		fmt.Print(err)
+		return nil
 	}
 	var servicelist = []*types.VirtualServiceData{}
 	for _, service := range services.VirtualServices {
@@ -98,6 +115,7 @@ func getAllAppMeshVirtualServices(meshName *string, svc *appmesh.Client) []*type
 		servicedetails, err := svc.DescribeVirtualService(context.TODO(), input)
 		if err != nil {
 			fmt.Print(err)
+			continue
 		}
 		servicelist = append(servicelist, servicedetails.VirtualService)
 	}
@@ -105,7 +123,7 @@ func getAllAppMeshVirtualServices(meshName *string, svc *appmesh.Client) []*type
 }
 
 // GetAllAppMeshPaths retrieves all the connections in the mesh
-func GetAllAppMeshPaths(meshName *string, svc *appmesh.Client) []AppMeshVirtualService {
+func GetAllAppMeshPaths(meshName *string, svc AppMeshAPI) []AppMeshVirtualService {
 	var result []AppMeshVirtualService
 	routesholder := make(map[string][]AppMeshVirtualServiceRoute)
 	services := getAllAppMeshVirtualServices(meshName, svc)
@@ -144,7 +162,7 @@ func GetAllAppMeshPaths(meshName *string, svc *appmesh.Client) []AppMeshVirtualS
 }
 
 // GetAllUnservicedAppMeshNodes returns a slice of nodes that don't serve as the backend for any service
-func GetAllUnservicedAppMeshNodes(meshname *string, svc *appmesh.Client) []string {
+func GetAllUnservicedAppMeshNodes(meshname *string, svc AppMeshAPI) []string {
 	routes := GetAllAppMeshPaths(meshname, svc)
 	nodes := getAllAppMeshNodes(meshname, svc)
 	var nodelist []string
@@ -167,7 +185,7 @@ func GetAllUnservicedAppMeshNodes(meshname *string, svc *appmesh.Client) []strin
 }
 
 // GetAllAppMeshNodeConnections retrieves all nodes and which services/nodes they connect to
-func GetAllAppMeshNodeConnections(meshname *string, svc *appmesh.Client) []AppMeshVirtualNode {
+func GetAllAppMeshNodeConnections(meshname *string, svc AppMeshAPI) []AppMeshVirtualNode {
 	services := GetAllAppMeshPaths(meshname, svc)
 	var nodelist []AppMeshVirtualNode
 	servicelist := make(map[string]AppMeshVirtualService)
@@ -213,7 +231,7 @@ func GetAllAppMeshNodeConnections(meshname *string, svc *appmesh.Client) []AppMe
 }
 
 // getAppMeshVirtualNodeBackendServices2 retrieves a list of all the backend services for a node
-func getAppMeshVirtualNodeBackendServices2(meshname *string, nodename *string, svc *appmesh.Client) []string {
+func getAppMeshVirtualNodeBackendServices2(meshname *string, nodename *string, svc AppMeshAPI) []string {
 	var backendlists []string
 	input := &appmesh.DescribeVirtualNodeInput{
 		MeshName:        meshname,
@@ -222,6 +240,7 @@ func getAppMeshVirtualNodeBackendServices2(meshname *string, nodename *string, s
 	nodetails, err := svc.DescribeVirtualNode(context.TODO(), input)
 	if err != nil {
 		fmt.Print(err)
+		return nil
 	}
 	for _, backend := range nodetails.VirtualNode.Spec.Backends {
 		switch v := backend.(type) {
