@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Makefile targets for code quality: `fmt`, `vet`, `modernize`, `check`, `security-scan`
+- Makefile targets for testing: `test-verbose`, `test-coverage`
+- Makefile targets for dependency management: `deps-tidy`, `deps-update`
+- Makefile target `install` for installing the application
+- Organized help output with categorized sections
+
+### Changed
+
+- `clean` target now also removes coverage artifacts
+- Formatting fix in `helpers/organizations_test.go`
+
 ## [1.2.0] - 2025-01-16
 
 ### Added

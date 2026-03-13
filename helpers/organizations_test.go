@@ -36,7 +36,6 @@ func (m *mockOrganizationsClient) DescribeAccount(ctx context.Context, params *o
 	return m.DescribeAccountFunc(ctx, params, optFns...)
 }
 
-
 func TestOrganizationEntry_Struct(t *testing.T) {
 	entry := OrganizationEntry{
 		ID:       "r-1234567890",
