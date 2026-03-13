@@ -128,6 +128,215 @@ func TestGetAllAppMeshRoutes_ListVirtualRoutersError_NoPanic(t *testing.T) {
 	}
 }
 
+// Test that buildRoutesHolder correctly processes HTTP routes
+func TestBuildRoutesHolder_HttpRoute(t *testing.T) {
+	routes := []*types.RouteData{
+		{
+			VirtualRouterName: aws.String("http-router"),
+			Spec: &types.RouteSpec{
+				HttpRoute: &types.HttpRoute{
+					Action: &types.HttpRouteAction{
+						WeightedTargets: []types.WeightedTarget{
+							{VirtualNode: aws.String("node-a"), Weight: 100},
+						},
+					},
+					Match: &types.HttpRouteMatch{
+						Prefix: aws.String("/api"),
+					},
+				},
+			},
+		},
+	}
+
+	result := buildRoutesHolder(routes)
+
+	if len(result["http-router"]) != 1 {
+		t.Fatalf("Expected 1 route for http-router, got %d", len(result["http-router"]))
+	}
+	r := result["http-router"][0]
+	if r.Path != "/api" {
+		t.Errorf("Expected Path '/api', got '%s'", r.Path)
+	}
+	if r.DestinationNode != "node-a" {
+		t.Errorf("Expected DestinationNode 'node-a', got '%s'", r.DestinationNode)
+	}
+	if r.Weight != 100 {
+		t.Errorf("Expected Weight 100, got %d", r.Weight)
+	}
+}
+
+// Regression test: GRPC routes must not panic (bug T-345)
+func TestBuildRoutesHolder_GrpcRoute_NoPanic(t *testing.T) {
+	routes := []*types.RouteData{
+		{
+			VirtualRouterName: aws.String("grpc-router"),
+			Spec: &types.RouteSpec{
+				GrpcRoute: &types.GrpcRoute{
+					Action: &types.GrpcRouteAction{
+						WeightedTargets: []types.WeightedTarget{
+							{VirtualNode: aws.String("grpc-node"), Weight: 50},
+						},
+					},
+					Match: &types.GrpcRouteMatch{
+						ServiceName: aws.String("my.grpc.Service"),
+						MethodName:  aws.String("DoStuff"),
+					},
+				},
+			},
+		},
+	}
+
+	result := buildRoutesHolder(routes)
+
+	if len(result["grpc-router"]) != 1 {
+		t.Fatalf("Expected 1 route for grpc-router, got %d", len(result["grpc-router"]))
+	}
+	r := result["grpc-router"][0]
+	if r.DestinationNode != "grpc-node" {
+		t.Errorf("Expected DestinationNode 'grpc-node', got '%s'", r.DestinationNode)
+	}
+	if r.Weight != 50 {
+		t.Errorf("Expected Weight 50, got %d", r.Weight)
+	}
+	if r.Path != "my.grpc.Service/DoStuff" {
+		t.Errorf("Expected Path 'my.grpc.Service/DoStuff', got '%s'", r.Path)
+	}
+}
+
+// Regression test: TCP routes must not panic (bug T-345)
+func TestBuildRoutesHolder_TcpRoute_NoPanic(t *testing.T) {
+	routes := []*types.RouteData{
+		{
+			VirtualRouterName: aws.String("tcp-router"),
+			Spec: &types.RouteSpec{
+				TcpRoute: &types.TcpRoute{
+					Action: &types.TcpRouteAction{
+						WeightedTargets: []types.WeightedTarget{
+							{VirtualNode: aws.String("tcp-node"), Weight: 100},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	result := buildRoutesHolder(routes)
+
+	if len(result["tcp-router"]) != 1 {
+		t.Fatalf("Expected 1 route for tcp-router, got %d", len(result["tcp-router"]))
+	}
+	r := result["tcp-router"][0]
+	if r.DestinationNode != "tcp-node" {
+		t.Errorf("Expected DestinationNode 'tcp-node', got '%s'", r.DestinationNode)
+	}
+}
+
+// Regression test: HTTP2 routes must not panic (bug T-345)
+func TestBuildRoutesHolder_Http2Route_NoPanic(t *testing.T) {
+	routes := []*types.RouteData{
+		{
+			VirtualRouterName: aws.String("http2-router"),
+			Spec: &types.RouteSpec{
+				Http2Route: &types.HttpRoute{
+					Action: &types.HttpRouteAction{
+						WeightedTargets: []types.WeightedTarget{
+							{VirtualNode: aws.String("http2-node"), Weight: 75},
+						},
+					},
+					Match: &types.HttpRouteMatch{
+						Prefix: aws.String("/v2"),
+					},
+				},
+			},
+		},
+	}
+
+	result := buildRoutesHolder(routes)
+
+	if len(result["http2-router"]) != 1 {
+		t.Fatalf("Expected 1 route for http2-router, got %d", len(result["http2-router"]))
+	}
+	r := result["http2-router"][0]
+	if r.Path != "/v2" {
+		t.Errorf("Expected Path '/v2', got '%s'", r.Path)
+	}
+}
+
+// Regression test: mixed route types must all be processed (bug T-345)
+func TestBuildRoutesHolder_MixedRouteTypes(t *testing.T) {
+	routes := []*types.RouteData{
+		{
+			VirtualRouterName: aws.String("router-1"),
+			Spec: &types.RouteSpec{
+				HttpRoute: &types.HttpRoute{
+					Action: &types.HttpRouteAction{
+						WeightedTargets: []types.WeightedTarget{
+							{VirtualNode: aws.String("http-node"), Weight: 100},
+						},
+					},
+					Match: &types.HttpRouteMatch{Prefix: aws.String("/http")},
+				},
+			},
+		},
+		{
+			VirtualRouterName: aws.String("router-2"),
+			Spec: &types.RouteSpec{
+				GrpcRoute: &types.GrpcRoute{
+					Action: &types.GrpcRouteAction{
+						WeightedTargets: []types.WeightedTarget{
+							{VirtualNode: aws.String("grpc-node"), Weight: 100},
+						},
+					},
+					Match: &types.GrpcRouteMatch{ServiceName: aws.String("svc")},
+				},
+			},
+		},
+		{
+			VirtualRouterName: aws.String("router-3"),
+			Spec: &types.RouteSpec{
+				TcpRoute: &types.TcpRoute{
+					Action: &types.TcpRouteAction{
+						WeightedTargets: []types.WeightedTarget{
+							{VirtualNode: aws.String("tcp-node"), Weight: 100},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	result := buildRoutesHolder(routes)
+
+	if len(result) != 3 {
+		t.Errorf("Expected 3 routers in result, got %d", len(result))
+	}
+	if len(result["router-1"]) != 1 {
+		t.Errorf("Expected 1 route for router-1, got %d", len(result["router-1"]))
+	}
+	if len(result["router-2"]) != 1 {
+		t.Errorf("Expected 1 route for router-2, got %d", len(result["router-2"]))
+	}
+	if len(result["router-3"]) != 1 {
+		t.Errorf("Expected 1 route for router-3, got %d", len(result["router-3"]))
+	}
+}
+
+// Regression test: route with nil spec fields must not panic (bug T-345)
+func TestBuildRoutesHolder_NilRouteSpec_NoPanic(t *testing.T) {
+	routes := []*types.RouteData{
+		{
+			VirtualRouterName: aws.String("empty-router"),
+			Spec:              &types.RouteSpec{},
+		},
+	}
+
+	result := buildRoutesHolder(routes)
+
+	if len(result["empty-router"]) != 0 {
+		t.Errorf("Expected 0 routes for empty-router, got %d", len(result["empty-router"]))
+	}
+}
+
 func TestGetAllAppMeshRoutes_ListRoutesError_NoPanic(t *testing.T) {
 	mock := &mockAppMeshClient{
 		listVirtualRoutersFunc: func(_ context.Context, _ *appmesh.ListVirtualRoutersInput, _ ...func(*appmesh.Options)) (*appmesh.ListVirtualRoutersOutput, error) {
