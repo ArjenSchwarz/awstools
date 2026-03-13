@@ -678,7 +678,9 @@ func (cf *AWSConfigFile) GenerateProfileText(profiles []GeneratedProfile) string
 	return result.String()
 }
 
-// AppendProfiles appends multiple profiles to the config file
+// AppendProfiles appends multiple profiles to the config file.
+// For profiles that already exist, it uses ReplaceProfile to preserve
+// custom properties (Output, OtherProperties) from the existing profile.
 func (cf *AWSConfigFile) AppendProfiles(profiles []GeneratedProfile) error {
 	for _, genProfile := range profiles {
 		profile := Profile{
@@ -692,12 +694,18 @@ func (cf *AWSConfigFile) AppendProfiles(profiles []GeneratedProfile) error {
 			OtherProperties: make(map[string]string),
 		}
 
-		if err := cf.AddProfile(genProfile.Name, profile); err != nil {
-			return err
+		if cf.HasProfile(genProfile.Name) {
+			if err := cf.ReplaceProfile(genProfile.Name, genProfile.Name, profile); err != nil {
+				return err
+			}
+		} else {
+			if err := cf.AddProfile(genProfile.Name, profile); err != nil {
+				return err
+			}
 		}
 	}
 
-	return cf.AppendToFile(profiles)
+	return cf.WriteToFile()
 }
 
 // ToConfigString converts a Profile to AWS config file format

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -2728,4 +2729,157 @@ func TestTransaction_ErrorHandling(t *testing.T) {
 		err = tx.Rollback()
 		assert.NoError(t, err)
 	})
+}
+
+// TestAppendProfiles_ReplaceDoesNotDuplicate verifies that AppendProfiles
+// does not leave duplicate profile sections when overwriting existing profiles.
+// This is a regression test for T-444.
+func TestAppendProfiles_ReplaceDoesNotDuplicate(t *testing.T) {
+	// Set up a temp config file with an existing profile
+	tempDir := t.TempDir()
+	configPath := filepath.Join(tempDir, "config")
+
+	existingContent := `[profile my-account-AdminAccess]
+region = us-east-1
+sso_start_url = https://example.awsapps.com/start
+sso_region = us-east-1
+sso_account_id = 111111111111
+sso_role_name = AdminAccess
+sso_session = my-session
+output = json
+
+[profile other-profile]
+region = us-west-2
+sso_start_url = https://example.awsapps.com/start
+sso_region = us-east-1
+sso_account_id = 222222222222
+sso_role_name = ReadOnly
+sso_session = my-session
+`
+	err := os.WriteFile(configPath, []byte(existingContent), 0600)
+	require.NoError(t, err)
+
+	// Load the config file
+	cf, err := LoadAWSConfigFile(configPath)
+	require.NoError(t, err)
+	require.True(t, cf.HasProfile("my-account-AdminAccess"), "existing profile should be loaded")
+
+	// Append a profile with the same name (simulating a replace)
+	replacementProfiles := []GeneratedProfile{
+		{
+			Name:         "my-account-AdminAccess",
+			AccountID:    "111111111111",
+			AccountName:  "my-account",
+			RoleName:     "AdminAccess",
+			Region:       "us-east-1",
+			SSOStartURL:  "https://example.awsapps.com/start",
+			SSORegion:    "us-east-1",
+			SSOSession:   "my-session",
+			SSOAccountID: "111111111111",
+			SSORoleName:  "AdminAccess",
+		},
+	}
+
+	err = cf.AppendProfiles(replacementProfiles)
+	require.NoError(t, err)
+
+	// Read the file and count occurrences of the profile header
+	content, err := os.ReadFile(configPath)
+	require.NoError(t, err)
+
+	profileHeader := "[profile my-account-AdminAccess]"
+	count := strings.Count(string(content), profileHeader)
+	assert.Equal(t, 1, count,
+		"profile section %q should appear exactly once, but found %d occurrences.\nFile content:\n%s",
+		profileHeader, count, string(content))
+
+	// The other profile should still be present
+	assert.Contains(t, string(content), "[profile other-profile]",
+		"non-conflicting profile should be preserved")
+
+	// Custom properties (output) should be preserved during replacement
+	assert.Contains(t, string(content), "output = json",
+		"custom output property should be preserved when replacing an existing profile")
+}
+
+// TestAppendToConfig_ReplaceConflictsNoDuplicates verifies the end-to-end
+// workflow: when AppendToConfig encounters conflicting profiles with auto-approve,
+// the resulting file must not contain duplicate profile sections.
+// Regression test for T-444.
+func TestAppendToConfig_ReplaceConflictsNoDuplicates(t *testing.T) {
+	tempDir := t.TempDir()
+	awsDir := filepath.Join(tempDir, ".aws")
+	err := os.MkdirAll(awsDir, 0700)
+	require.NoError(t, err)
+
+	configPath := filepath.Join(awsDir, "config")
+	existingContent := `[profile test-account-PowerUserAccess]
+region = us-east-1
+sso_start_url = https://example.awsapps.com/start
+sso_region = us-east-1
+sso_account_id = 123456789012
+sso_role_name = PowerUserAccess
+sso_session = test-session
+
+[profile unrelated-profile]
+region = eu-west-1
+output = json
+`
+	err = os.WriteFile(configPath, []byte(existingContent), 0600)
+	require.NoError(t, err)
+
+	// Override HOME so AppendToConfig finds our temp config
+	oldHome := os.Getenv("HOME")
+	os.Setenv("HOME", tempDir)
+	defer func() {
+		if oldHome != "" {
+			os.Setenv("HOME", oldHome)
+		} else {
+			os.Unsetenv("HOME")
+		}
+	}()
+
+	// Create a profile generator with auto-approve
+	pg, err := NewProfileGenerator(
+		"test-profile",
+		"{account_name}-{role_name}",
+		true, // autoApprove
+		"",   // use default path
+		ConflictReplace,
+		aws.Config{},
+	)
+	require.NoError(t, err)
+
+	// Append a profile that conflicts with existing
+	profiles := []GeneratedProfile{
+		{
+			Name:         "test-account-PowerUserAccess",
+			AccountID:    "123456789012",
+			AccountName:  "test-account",
+			RoleName:     "PowerUserAccess",
+			Region:       "us-east-1",
+			SSOStartURL:  "https://example.awsapps.com/start",
+			SSORegion:    "us-east-1",
+			SSOSession:   "test-session",
+			SSOAccountID: "123456789012",
+			SSORoleName:  "PowerUserAccess",
+		},
+	}
+
+	err = pg.AppendToConfig(profiles)
+	require.NoError(t, err)
+
+	// Read file and verify no duplicates
+	content, err := os.ReadFile(configPath)
+	require.NoError(t, err)
+
+	header := "[profile test-account-PowerUserAccess]"
+	count := strings.Count(string(content), header)
+	assert.Equal(t, 1, count,
+		"profile section %q should appear exactly once after replace, but found %d.\nFile content:\n%s",
+		header, count, string(content))
+
+	// Unrelated profile must survive
+	assert.Contains(t, string(content), "[profile unrelated-profile]",
+		"unrelated profile should not be removed")
 }
