@@ -697,7 +697,7 @@ func (cf *AWSConfigFile) AppendProfiles(profiles []GeneratedProfile) error {
 		}
 	}
 
-	return cf.AppendToFile(profiles)
+	return cf.WriteToFile()
 }
 
 // ToConfigString converts a Profile to AWS config file format
