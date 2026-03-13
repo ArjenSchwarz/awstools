@@ -234,6 +234,17 @@ func TestConfig_NewOutputSettings(t *testing.T) {
 		viper.Reset()
 	})
 
+	t.Run("preserves case of output file path", func(t *testing.T) {
+		// Regression test for T-406: GetLCString lowercased file paths,
+		// breaking paths with uppercase characters on case-sensitive filesystems.
+		viper.Set("output.file", "/tmp/MyProject/Output.json")
+
+		settings := config.NewOutputSettings()
+
+		assert.Equal(t, "/tmp/MyProject/Output.json", settings.OutputFile)
+		viper.Reset()
+	})
+
 	t.Run("creates output settings with defaults when not set", func(t *testing.T) {
 		viper.Reset()
 

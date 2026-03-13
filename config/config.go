@@ -88,7 +88,7 @@ func (config *Config) NewOutputSettings() *format.OutputSettings {
 	settings := format.NewOutputSettings()
 	settings.UseEmoji = config.GetBool("output.use-emoji")
 	settings.SetOutputFormat(config.GetLCString("output.format"))
-	settings.OutputFile = config.GetLCString("output.file")
+	settings.OutputFile = config.GetString("output.file")
 	settings.ShouldAppend = config.GetBool("output.append")
 	settings.TableStyle = format.TableStyles[config.GetString("output.table.style")]
 	settings.TableMaxColumnWidth = config.GetInt("output.table.max-column-width")
