@@ -381,6 +381,91 @@ func TestVPCRouteTable_Struct(t *testing.T) {
 	}
 }
 
+func TestMatchTransitGatewayAttachment(t *testing.T) {
+	tests := []struct {
+		name        string
+		attachments []types.TransitGatewayVpcAttachment
+		subnetID    string
+		expected    string
+	}{
+		{
+			name:        "no attachments returns empty",
+			attachments: nil,
+			subnetID:    "subnet-aaa",
+			expected:    "",
+		},
+		{
+			name: "subnet on first attachment",
+			attachments: []types.TransitGatewayVpcAttachment{
+				{
+					TransitGatewayAttachmentId: aws.String("tgw-attach-111"),
+					SubnetIds:                  []string{"subnet-aaa", "subnet-bbb"},
+				},
+			},
+			subnetID: "subnet-aaa",
+			expected: "tgw-attach-111",
+		},
+		{
+			name: "subnet on second attachment (regression: previously only checked first)",
+			attachments: []types.TransitGatewayVpcAttachment{
+				{
+					TransitGatewayAttachmentId: aws.String("tgw-attach-111"),
+					SubnetIds:                  []string{"subnet-aaa"},
+				},
+				{
+					TransitGatewayAttachmentId: aws.String("tgw-attach-222"),
+					SubnetIds:                  []string{"subnet-bbb", "subnet-ccc"},
+				},
+			},
+			subnetID: "subnet-bbb",
+			expected: "tgw-attach-222",
+		},
+		{
+			name: "subnet on third attachment",
+			attachments: []types.TransitGatewayVpcAttachment{
+				{
+					TransitGatewayAttachmentId: aws.String("tgw-attach-111"),
+					SubnetIds:                  []string{"subnet-aaa"},
+				},
+				{
+					TransitGatewayAttachmentId: aws.String("tgw-attach-222"),
+					SubnetIds:                  []string{"subnet-bbb"},
+				},
+				{
+					TransitGatewayAttachmentId: aws.String("tgw-attach-333"),
+					SubnetIds:                  []string{"subnet-ccc", "subnet-ddd"},
+				},
+			},
+			subnetID: "subnet-ddd",
+			expected: "tgw-attach-333",
+		},
+		{
+			name: "subnet not found in any attachment",
+			attachments: []types.TransitGatewayVpcAttachment{
+				{
+					TransitGatewayAttachmentId: aws.String("tgw-attach-111"),
+					SubnetIds:                  []string{"subnet-aaa"},
+				},
+				{
+					TransitGatewayAttachmentId: aws.String("tgw-attach-222"),
+					SubnetIds:                  []string{"subnet-bbb"},
+				},
+			},
+			subnetID: "subnet-zzz",
+			expected: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := matchTransitGatewayAttachment(tt.attachments, tt.subnetID)
+			if result != tt.expected {
+				t.Errorf("matchTransitGatewayAttachment() = %q, want %q", result, tt.expected)
+			}
+		})
+	}
+}
+
 func TestTransitGateway_Struct(t *testing.T) {
 	tgw := TransitGateway{
 		ID:        "tgw-12345678",
