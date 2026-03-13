@@ -24,9 +24,9 @@ func getOrganizationRoot(svc organizationsListRootsAPI) (OrganizationEntry, erro
 	}
 	rootentry := root.Roots[0]
 	entry := OrganizationEntry{
-		ID:   *rootentry.Id,
-		Arn:  *rootentry.Arn,
-		Name: *rootentry.Name,
+		ID:   aws.ToString(rootentry.Id),
+		Arn:  aws.ToString(rootentry.Arn),
+		Name: aws.ToString(rootentry.Name),
 		Type: string(types.TargetTypeRoot),
 	}
 	return entry, nil
