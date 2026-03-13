@@ -2746,6 +2746,7 @@ sso_region = us-east-1
 sso_account_id = 111111111111
 sso_role_name = AdminAccess
 sso_session = my-session
+output = json
 
 [profile other-profile]
 region = us-west-2
@@ -2795,6 +2796,10 @@ sso_session = my-session
 	// The other profile should still be present
 	assert.Contains(t, string(content), "[profile other-profile]",
 		"non-conflicting profile should be preserved")
+
+	// Custom properties (output) should be preserved during replacement
+	assert.Contains(t, string(content), "output = json",
+		"custom output property should be preserved when replacing an existing profile")
 }
 
 // TestAppendToConfig_ReplaceConflictsNoDuplicates verifies the end-to-end
