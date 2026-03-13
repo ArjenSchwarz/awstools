@@ -32,6 +32,18 @@ type S3Bucket struct {
 	VersioningMFAEnabled           bool
 }
 
+// resolveOwnerName safely extracts a display name from an S3 Owner,
+// falling back to the Owner ID or empty string when fields are nil.
+func resolveOwnerName(owner *types.Owner) string {
+	if owner == nil {
+		return ""
+	}
+	if name := aws.ToString(owner.DisplayName); name != "" {
+		return name
+	}
+	return aws.ToString(owner.ID)
+}
+
 // GetAllBuckets returns an overview of all buckets
 // GetAllBuckets retrieves all S3 buckets and returns them along with the owner name
 func GetAllBuckets(svc *s3.Client) ([]types.Bucket, string) {
@@ -42,8 +54,7 @@ func GetAllBuckets(svc *s3.Client) ([]types.Bucket, string) {
 		panic(err)
 	}
 
-	// Pretty-print the response data.
-	return resp.Buckets, *resp.Owner.DisplayName
+	return resp.Buckets, resolveOwnerName(resp.Owner)
 }
 
 // GetBucketDetails retrieves detailed information for all S3 buckets including encryption, versioning, and policies

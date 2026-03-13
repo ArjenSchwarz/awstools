@@ -336,6 +336,56 @@ func TestS3Bucket_EncryptionRules(t *testing.T) {
 	}
 }
 
+// Regression test for T-354: GetAllBuckets panics when Owner or DisplayName is nil.
+// ListBuckets can omit Owner/DisplayName depending on permissions.
+func TestResolveOwnerName(t *testing.T) {
+	tests := []struct {
+		name     string
+		owner    *types.Owner
+		expected string
+	}{
+		{
+			name:     "nil owner returns empty string",
+			owner:    nil,
+			expected: "",
+		},
+		{
+			name:     "owner with nil DisplayName and nil ID returns empty string",
+			owner:    &types.Owner{},
+			expected: "",
+		},
+		{
+			name:     "owner with nil DisplayName falls back to ID",
+			owner:    &types.Owner{ID: aws.String("123456789012")},
+			expected: "123456789012",
+		},
+		{
+			name:     "owner with empty DisplayName falls back to ID",
+			owner:    &types.Owner{DisplayName: aws.String(""), ID: aws.String("123456789012")},
+			expected: "123456789012",
+		},
+		{
+			name:     "owner with DisplayName returns DisplayName",
+			owner:    &types.Owner{DisplayName: aws.String("my-account"), ID: aws.String("123456789012")},
+			expected: "my-account",
+		},
+		{
+			name:     "owner with DisplayName and nil ID returns DisplayName",
+			owner:    &types.Owner{DisplayName: aws.String("my-account")},
+			expected: "my-account",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := resolveOwnerName(tt.owner)
+			if result != tt.expected {
+				t.Errorf("resolveOwnerName() = %q, want %q", result, tt.expected)
+			}
+		})
+	}
+}
+
 func TestS3Bucket_PublicAccessBlockConfiguration(t *testing.T) {
 	bucket := S3Bucket{
 		PublicAccessBlockConfiguration: types.PublicAccessBlockConfiguration{
