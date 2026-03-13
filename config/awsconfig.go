@@ -27,12 +27,18 @@ type AWSConfig struct {
 	UserID       string
 }
 
+// resolveProfile returns the AWS profile name from configuration, or empty if none is set.
+func resolveProfile(config Config) string {
+	return config.GetLCString("aws.profile")
+}
+
 // DefaultAwsConfig loads default AWS Config
 func DefaultAwsConfig(config Config) AWSConfig {
 	awsConfig := AWSConfig{}
-	if config.GetLCString("aws.profile") != "" {
-		awsConfig.ProfileName = config.GetLCString("aws.profile")
-		cfg, err := external.LoadDefaultConfig(context.TODO(), external.WithSharedConfigProfile(config.GetLCString("profile")))
+	profile := resolveProfile(config)
+	if profile != "" {
+		awsConfig.ProfileName = profile
+		cfg, err := external.LoadDefaultConfig(context.TODO(), external.WithSharedConfigProfile(profile))
 		if err != nil {
 			panic(err)
 		}

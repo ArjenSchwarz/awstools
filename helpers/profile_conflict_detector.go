@@ -355,21 +355,21 @@ func (pcd *ProfileConflictDetector) GenerateConflictSummary(conflicts []ProfileC
 	var summary strings.Builder
 	summary.Grow(estimatedSize)
 
-	summary.WriteString(fmt.Sprintf("Profile Conflicts Detected: %d\n", len(conflicts)))
+	fmt.Fprintf(&summary, "Profile Conflicts Detected: %d\n", len(conflicts))
 	summary.WriteString("=====================================\n\n")
 
 	for i, conflict := range conflicts {
-		summary.WriteString(fmt.Sprintf("Conflict %d:\n", i+1))
-		summary.WriteString(fmt.Sprintf("  Proposed Profile: %s\n", conflict.ProposedName))
-		summary.WriteString(fmt.Sprintf("  Account: %s (%s)\n", conflict.DiscoveredRole.AccountName, conflict.DiscoveredRole.AccountID))
-		summary.WriteString(fmt.Sprintf("  Role: %s\n", conflict.DiscoveredRole.RoleName))
-		summary.WriteString(fmt.Sprintf("  Conflict Type: %s\n", conflict.ConflictType.String()))
+		fmt.Fprintf(&summary, "Conflict %d:\n", i+1)
+		fmt.Fprintf(&summary, "  Proposed Profile: %s\n", conflict.ProposedName)
+		fmt.Fprintf(&summary, "  Account: %s (%s)\n", conflict.DiscoveredRole.AccountName, conflict.DiscoveredRole.AccountID)
+		fmt.Fprintf(&summary, "  Role: %s\n", conflict.DiscoveredRole.RoleName)
+		fmt.Fprintf(&summary, "  Conflict Type: %s\n", conflict.ConflictType.String())
 		summary.WriteString("  Existing Profiles:\n")
 
 		for _, existingProfile := range conflict.ExistingProfiles {
-			summary.WriteString(fmt.Sprintf("    - %s", existingProfile.Name))
+			fmt.Fprintf(&summary, "    - %s", existingProfile.Name)
 			if existingProfile.SSOAccountID != "" && existingProfile.SSORoleName != "" {
-				summary.WriteString(fmt.Sprintf(" (Account: %s, Role: %s)", existingProfile.SSOAccountID, existingProfile.SSORoleName))
+				fmt.Fprintf(&summary, " (Account: %s, Role: %s)", existingProfile.SSOAccountID, existingProfile.SSORoleName)
 			}
 			summary.WriteString("\n")
 		}
