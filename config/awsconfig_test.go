@@ -117,6 +117,47 @@ func TestDefaultAwsConfig_ProfileHandling(t *testing.T) {
 	})
 }
 
+// Regression test for T-405: aws.profile was checked but not passed to WithSharedConfigProfile.
+// The bug was that GetLCString("profile") was used instead of GetLCString("aws.profile"),
+// meaning the profile value was always empty and the default profile was loaded.
+func TestDefaultAwsConfig_ProfileKeyConsistency(t *testing.T) {
+	config := Config{}
+	viper.Reset()
+	viper.Set("aws.profile", "my-test-profile")
+	defer viper.Reset()
+
+	// "aws.profile" is the key set by the --profile flag and config file
+	assert.Equal(t, "my-test-profile", config.GetLCString("aws.profile"),
+		"aws.profile should return the configured profile name")
+
+	// "profile" (without aws. prefix) is never set — using it was the bug
+	assert.Empty(t, config.GetLCString("profile"),
+		"profile (without aws. prefix) should be empty; using this key loses the profile value")
+}
+
+func TestDefaultAwsConfig_ProfilePassedToLoader(t *testing.T) {
+	config := Config{}
+	viper.Reset()
+	viper.Set("aws.profile", "custom-profile")
+	defer viper.Reset()
+
+	// Verify that resolveProfile returns the correct value that will be
+	// passed to WithSharedConfigProfile
+	profile := resolveProfile(config)
+	assert.Equal(t, "custom-profile", profile,
+		"resolveProfile should return the aws.profile value")
+}
+
+func TestDefaultAwsConfig_NoProfileReturnsEmpty(t *testing.T) {
+	config := Config{}
+	viper.Reset()
+	defer viper.Reset()
+
+	profile := resolveProfile(config)
+	assert.Empty(t, profile,
+		"resolveProfile should return empty when no profile is configured")
+}
+
 func TestDefaultAwsConfig_RegionHandling(t *testing.T) {
 	config := Config{}
 	viper.Set("aws.region", "us-west-2")
