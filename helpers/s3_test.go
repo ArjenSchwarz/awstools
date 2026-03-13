@@ -386,6 +386,114 @@ func TestResolveOwnerName(t *testing.T) {
 	}
 }
 
+// TestHasOpenACLs_NilGranteeURI is a regression test for T-338.
+// Grants with a nil URI (e.g. TypeAmazonCustomerByEmail) must not panic.
+func TestHasOpenACLs_NilGranteeURI(t *testing.T) {
+	tests := []struct {
+		name     string
+		acls     []types.Grant
+		expected bool
+	}{
+		{
+			name:     "empty grants",
+			acls:     []types.Grant{},
+			expected: false,
+		},
+		{
+			name: "canonical user only",
+			acls: []types.Grant{
+				{
+					Grantee: &types.Grantee{
+						Type: types.TypeCanonicalUser,
+						ID:   aws.String("owner-id"),
+					},
+					Permission: types.PermissionFullControl,
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "log delivery group (not open)",
+			acls: []types.Grant{
+				{
+					Grantee: &types.Grantee{
+						Type: types.TypeGroup,
+						URI:  aws.String("http://acs.amazonaws.com/groups/s3/LogDelivery"),
+					},
+					Permission: types.PermissionWrite,
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "public all-users group (open)",
+			acls: []types.Grant{
+				{
+					Grantee: &types.Grantee{
+						Type: types.TypeGroup,
+						URI:  aws.String("http://acs.amazonaws.com/groups/global/AllUsers"),
+					},
+					Permission: types.PermissionRead,
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "email grantee with nil URI must not panic (T-338)",
+			acls: []types.Grant{
+				{
+					Grantee: &types.Grantee{
+						Type:         types.TypeAmazonCustomerByEmail,
+						EmailAddress: aws.String("user@example.com"),
+						// URI is nil — this caused the original panic
+					},
+					Permission: types.PermissionRead,
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "nil Grantee pointer must not panic",
+			acls: []types.Grant{
+				{
+					Grantee:    nil,
+					Permission: types.PermissionRead,
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "mixed grants with nil URI among others",
+			acls: []types.Grant{
+				{
+					Grantee: &types.Grantee{
+						Type: types.TypeCanonicalUser,
+						ID:   aws.String("owner-id"),
+					},
+					Permission: types.PermissionFullControl,
+				},
+				{
+					Grantee: &types.Grantee{
+						Type:         types.TypeAmazonCustomerByEmail,
+						EmailAddress: aws.String("user@example.com"),
+					},
+					Permission: types.PermissionRead,
+				},
+			},
+			expected: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := hasOpenACLs(tt.acls)
+			if result != tt.expected {
+				t.Errorf("hasOpenACLs() = %v, want %v", result, tt.expected)
+			}
+		})
+	}
+}
+
 func TestS3Bucket_PublicAccessBlockConfiguration(t *testing.T) {
 	bucket := S3Bucket{
 		PublicAccessBlockConfiguration: types.PublicAccessBlockConfiguration{

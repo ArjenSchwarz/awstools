@@ -75,13 +75,9 @@ func GetBucketDetails(svc *s3.Client) []S3Bucket {
 		if aclresp != nil {
 			acls = aclresp.Grants
 		}
-		openacls := false
-		for _, acl := range acls {
-			if acl.Grantee != nil && acl.Grantee.Type != types.TypeCanonicalUser &&
-				*acl.Grantee.URI != "http://acs.amazonaws.com/groups/s3/LogDelivery" {
-				openacls = true
-				isPublic = true
-			}
+		openacls := hasOpenACLs(acls)
+		if openacls {
+			isPublic = true
 		}
 		// PublicAccessBlock overrides other public making settings
 		publicresp, _ := svc.GetPublicAccessBlock(context.TODO(), &s3.GetPublicAccessBlockInput{Bucket: bucket.Name})
@@ -162,6 +158,23 @@ func GetBucketDetails(svc *s3.Client) []S3Bucket {
 
 	}
 	return result
+}
+
+// hasOpenACLs checks whether any grant in the list represents an open (public) ACL.
+// A grant is considered open if it targets a non-canonical-user grantee whose URI
+// is not the S3 LogDelivery group. Grants with a nil URI (e.g. email-based grants)
+// are also treated as open because they indicate a non-owner grant.
+func hasOpenACLs(acls []types.Grant) bool {
+	for _, acl := range acls {
+		if acl.Grantee == nil || acl.Grantee.Type == types.TypeCanonicalUser {
+			continue
+		}
+		uri := aws.ToString(acl.Grantee.URI)
+		if uri != "http://acs.amazonaws.com/groups/s3/LogDelivery" {
+			return true
+		}
+	}
+	return false
 }
 
 // GetReplicationStrings returns a slice of string representations of the bucket's replication rules
