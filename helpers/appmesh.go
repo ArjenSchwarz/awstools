@@ -122,12 +122,9 @@ func getAllAppMeshVirtualServices(meshName *string, svc AppMeshAPI) []*types.Vir
 	return servicelist
 }
 
-// GetAllAppMeshPaths retrieves all the connections in the mesh
-func GetAllAppMeshPaths(meshName *string, svc AppMeshAPI) []AppMeshVirtualService {
-	var result []AppMeshVirtualService
+// buildRoutesHolder processes route data and builds a map of router name to routes.
+func buildRoutesHolder(routes []*types.RouteData) map[string][]AppMeshVirtualServiceRoute {
 	routesholder := make(map[string][]AppMeshVirtualServiceRoute)
-	services := getAllAppMeshVirtualServices(meshName, svc)
-	routes := getAppMeshRouteDescriptions(meshName, svc)
 	for _, route := range routes {
 		for _, action := range route.Spec.HttpRoute.Action.WeightedTargets {
 			target := AppMeshVirtualServiceRoute{
@@ -146,6 +143,15 @@ func GetAllAppMeshPaths(meshName *string, svc AppMeshAPI) []AppMeshVirtualServic
 
 		}
 	}
+	return routesholder
+}
+
+// GetAllAppMeshPaths retrieves all the connections in the mesh
+func GetAllAppMeshPaths(meshName *string, svc AppMeshAPI) []AppMeshVirtualService {
+	var result []AppMeshVirtualService
+	services := getAllAppMeshVirtualServices(meshName, svc)
+	routes := getAppMeshRouteDescriptions(meshName, svc)
+	routesholder := buildRoutesHolder(routes)
 	for _, service := range services {
 		switch v := service.Spec.Provider.(type) {
 		case *types.VirtualServiceProviderMemberVirtualRouter:
