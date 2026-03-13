@@ -567,9 +567,14 @@ func GetTransitGatewayFromNetworkInterface(netinterface types.NetworkInterface, 
 	if err != nil {
 		panic(err)
 	}
-	if len(resp.TransitGatewayVpcAttachments) > 0 {
-		if slices.Contains(resp.TransitGatewayVpcAttachments[0].SubnetIds, *netinterface.SubnetId) {
-			return *resp.TransitGatewayVpcAttachments[0].TransitGatewayAttachmentId
+	return matchTransitGatewayAttachment(resp.TransitGatewayVpcAttachments, *netinterface.SubnetId)
+}
+
+// matchTransitGatewayAttachment finds the attachment whose SubnetIds contain the given subnet.
+func matchTransitGatewayAttachment(attachments []types.TransitGatewayVpcAttachment, subnetID string) string {
+	for _, attachment := range attachments {
+		if slices.Contains(attachment.SubnetIds, subnetID) {
+			return *attachment.TransitGatewayAttachmentId
 		}
 	}
 	return ""
