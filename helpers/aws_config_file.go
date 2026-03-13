@@ -707,40 +707,40 @@ func (p *Profile) ToConfigString() string {
 	if p.Name == "default" {
 		config.WriteString("[default]\n")
 	} else {
-		config.WriteString(fmt.Sprintf("[profile %s]\n", p.Name))
+		fmt.Fprintf(&config, "[profile %s]\n", p.Name)
 	}
 
 	if p.Region != "" {
-		config.WriteString(fmt.Sprintf("region = %s\n", p.Region))
+		fmt.Fprintf(&config, "region = %s\n", p.Region)
 	}
 
 	if p.SSOStartURL != "" {
-		config.WriteString(fmt.Sprintf("sso_start_url = %s\n", p.SSOStartURL))
+		fmt.Fprintf(&config, "sso_start_url = %s\n", p.SSOStartURL)
 	}
 
 	if p.SSORegion != "" {
-		config.WriteString(fmt.Sprintf("sso_region = %s\n", p.SSORegion))
+		fmt.Fprintf(&config, "sso_region = %s\n", p.SSORegion)
 	}
 
 	if p.SSOSession != "" {
-		config.WriteString(fmt.Sprintf("sso_session = %s\n", p.SSOSession))
+		fmt.Fprintf(&config, "sso_session = %s\n", p.SSOSession)
 	} else {
 		// Legacy format
 		if p.SSOAccountID != "" {
-			config.WriteString(fmt.Sprintf("sso_account_id = %s\n", p.SSOAccountID))
+			fmt.Fprintf(&config, "sso_account_id = %s\n", p.SSOAccountID)
 		}
 		if p.SSORoleName != "" {
-			config.WriteString(fmt.Sprintf("sso_role_name = %s\n", p.SSORoleName))
+			fmt.Fprintf(&config, "sso_role_name = %s\n", p.SSORoleName)
 		}
 	}
 
 	if p.Output != "" {
-		config.WriteString(fmt.Sprintf("output = %s\n", p.Output))
+		fmt.Fprintf(&config, "output = %s\n", p.Output)
 	}
 
 	// Add other properties
 	for key, value := range p.OtherProperties {
-		config.WriteString(fmt.Sprintf("%s = %s\n", key, value))
+		fmt.Fprintf(&config, "%s = %s\n", key, value)
 	}
 
 	config.WriteString("\n")
@@ -1685,10 +1685,10 @@ func (tx *Transaction) GetOperationSummary() string {
 	}
 
 	var summary strings.Builder
-	summary.WriteString(fmt.Sprintf("Transaction with %d operations:\n", len(tx.operations)))
+	fmt.Fprintf(&summary, "Transaction with %d operations:\n", len(tx.operations))
 
 	for i, op := range tx.operations {
-		summary.WriteString(fmt.Sprintf("  %d. %s\n", i+1, op.Description))
+		fmt.Fprintf(&summary, "  %d. %s\n", i+1, op.Description)
 	}
 
 	switch {

@@ -198,16 +198,16 @@ func (gp *GeneratedProfile) ToConfigString() string {
 		len(gp.SSORegion) + len(gp.SSOAccountID) + len(gp.SSORoleName) +
 		len(gp.SSOSession) + 100 // 100 bytes for formatting and field names
 	config.Grow(estimatedSize)
-	config.WriteString(fmt.Sprintf("[profile %s]\n", gp.Name))
-	config.WriteString(fmt.Sprintf("region = %s\n", gp.Region))
-	config.WriteString(fmt.Sprintf("sso_start_url = %s\n", gp.SSOStartURL))
-	config.WriteString(fmt.Sprintf("sso_region = %s\n", gp.SSORegion))
+	fmt.Fprintf(&config, "[profile %s]\n", gp.Name)
+	fmt.Fprintf(&config, "region = %s\n", gp.Region)
+	fmt.Fprintf(&config, "sso_start_url = %s\n", gp.SSOStartURL)
+	fmt.Fprintf(&config, "sso_region = %s\n", gp.SSORegion)
 
 	if gp.IsLegacy {
-		config.WriteString(fmt.Sprintf("sso_account_id = %s\n", gp.SSOAccountID))
-		config.WriteString(fmt.Sprintf("sso_role_name = %s\n", gp.SSORoleName))
+		fmt.Fprintf(&config, "sso_account_id = %s\n", gp.SSOAccountID)
+		fmt.Fprintf(&config, "sso_role_name = %s\n", gp.SSORoleName)
 	} else {
-		config.WriteString(fmt.Sprintf("sso_session = %s\n", gp.SSOSession))
+		fmt.Fprintf(&config, "sso_session = %s\n", gp.SSOSession)
 	}
 
 	return config.String()
@@ -349,18 +349,18 @@ func (pgr *ProfileGenerationResult) Summary() string {
 	var summary strings.Builder
 	// Estimate size: enhanced summary with conflict information (~300-400 chars)
 	summary.Grow(400)
-	summary.WriteString(fmt.Sprintf("Template Profile: %s\n", pgr.TemplateProfile.Name))
-	summary.WriteString(fmt.Sprintf("Discovered Roles: %d\n", len(pgr.DiscoveredRoles)))
-	summary.WriteString(fmt.Sprintf("Generated Profiles: %d\n", len(pgr.GeneratedProfiles)))
-	summary.WriteString(fmt.Sprintf("Successful Profiles: %d\n", len(pgr.SuccessfulProfiles)))
-	summary.WriteString(fmt.Sprintf("Conflicting Profiles: %d\n", len(pgr.ConflictingProfiles)))
-	summary.WriteString(fmt.Sprintf("Detected Conflicts: %d\n", len(pgr.DetectedConflicts)))
-	summary.WriteString(fmt.Sprintf("Resolution Actions: %d\n", len(pgr.ResolutionActions)))
-	summary.WriteString(fmt.Sprintf("Replaced Profiles: %d\n", len(pgr.ReplacedProfiles)))
-	summary.WriteString(fmt.Sprintf("Skipped Roles: %d\n", len(pgr.SkippedRoles)))
-	summary.WriteString(fmt.Sprintf("Errors: %d\n", len(pgr.Errors)))
+	fmt.Fprintf(&summary, "Template Profile: %s\n", pgr.TemplateProfile.Name)
+	fmt.Fprintf(&summary, "Discovered Roles: %d\n", len(pgr.DiscoveredRoles))
+	fmt.Fprintf(&summary, "Generated Profiles: %d\n", len(pgr.GeneratedProfiles))
+	fmt.Fprintf(&summary, "Successful Profiles: %d\n", len(pgr.SuccessfulProfiles))
+	fmt.Fprintf(&summary, "Conflicting Profiles: %d\n", len(pgr.ConflictingProfiles))
+	fmt.Fprintf(&summary, "Detected Conflicts: %d\n", len(pgr.DetectedConflicts))
+	fmt.Fprintf(&summary, "Resolution Actions: %d\n", len(pgr.ResolutionActions))
+	fmt.Fprintf(&summary, "Replaced Profiles: %d\n", len(pgr.ReplacedProfiles))
+	fmt.Fprintf(&summary, "Skipped Roles: %d\n", len(pgr.SkippedRoles))
+	fmt.Fprintf(&summary, "Errors: %d\n", len(pgr.Errors))
 	if pgr.BackupPath != "" {
-		summary.WriteString(fmt.Sprintf("Backup Path: %s\n", pgr.BackupPath))
+		fmt.Fprintf(&summary, "Backup Path: %s\n", pgr.BackupPath)
 	}
 	return summary.String()
 }
@@ -371,22 +371,22 @@ func (pgr *ProfileGenerationResult) GenerateConflictReport() string {
 
 	report.WriteString("Profile Generation Conflict Report\n")
 	report.WriteString("===================================\n")
-	report.WriteString(fmt.Sprintf("Template Profile: %s\n", pgr.TemplateProfile.Name))
-	report.WriteString(fmt.Sprintf("Total Discovered Roles: %d\n", len(pgr.DiscoveredRoles)))
-	report.WriteString(fmt.Sprintf("Conflicts Detected: %d\n", len(pgr.DetectedConflicts)))
+	fmt.Fprintf(&report, "Template Profile: %s\n", pgr.TemplateProfile.Name)
+	fmt.Fprintf(&report, "Total Discovered Roles: %d\n", len(pgr.DiscoveredRoles))
+	fmt.Fprintf(&report, "Conflicts Detected: %d\n", len(pgr.DetectedConflicts))
 	report.WriteString("\n")
 
 	if len(pgr.DetectedConflicts) > 0 {
 		report.WriteString("Conflict Details:\n")
 		for i, conflict := range pgr.DetectedConflicts {
-			report.WriteString(fmt.Sprintf("  %d. Role: %s in %s (%s)\n",
+			fmt.Fprintf(&report, "  %d. Role: %s in %s (%s)\n",
 				i+1,
 				conflict.DiscoveredRole.PermissionSetName,
 				conflict.DiscoveredRole.AccountName,
-				conflict.DiscoveredRole.AccountID))
-			report.WriteString(fmt.Sprintf("     Proposed Name: %s\n", conflict.ProposedName))
-			report.WriteString(fmt.Sprintf("     Conflict Type: %s\n", conflict.ConflictType.String()))
-			report.WriteString(fmt.Sprintf("     Existing Profiles: %d\n", len(conflict.ExistingProfiles)))
+				conflict.DiscoveredRole.AccountID)
+			fmt.Fprintf(&report, "     Proposed Name: %s\n", conflict.ProposedName)
+			fmt.Fprintf(&report, "     Conflict Type: %s\n", conflict.ConflictType.String())
+			fmt.Fprintf(&report, "     Existing Profiles: %d\n", len(conflict.ExistingProfiles))
 		}
 		report.WriteString("\n")
 	}
@@ -408,16 +408,16 @@ func (pgr *ProfileGenerationResult) GenerateConflictReport() string {
 			}
 		}
 
-		report.WriteString(fmt.Sprintf("  Profiles Replaced: %d\n", replaceCount))
-		report.WriteString(fmt.Sprintf("  Roles Skipped: %d\n", skipCount))
-		report.WriteString(fmt.Sprintf("  New Profiles Created: %d\n", createCount))
+		fmt.Fprintf(&report, "  Profiles Replaced: %d\n", replaceCount)
+		fmt.Fprintf(&report, "  Roles Skipped: %d\n", skipCount)
+		fmt.Fprintf(&report, "  New Profiles Created: %d\n", createCount)
 		report.WriteString("\n")
 
 		if replaceCount > 0 {
 			report.WriteString("Replaced Profiles:\n")
 			for _, action := range pgr.ResolutionActions {
 				if action.Action == ActionReplace {
-					report.WriteString(fmt.Sprintf("  %s -> %s\n", action.OldName, action.NewName))
+					fmt.Fprintf(&report, "  %s -> %s\n", action.OldName, action.NewName)
 				}
 			}
 			report.WriteString("\n")
@@ -427,9 +427,9 @@ func (pgr *ProfileGenerationResult) GenerateConflictReport() string {
 			report.WriteString("Skipped Roles:\n")
 			for _, action := range pgr.ResolutionActions {
 				if action.Action == ActionSkip {
-					report.WriteString(fmt.Sprintf("  %s in %s\n",
+					fmt.Fprintf(&report, "  %s in %s\n",
 						action.Conflict.DiscoveredRole.PermissionSetName,
-						action.Conflict.DiscoveredRole.AccountName))
+						action.Conflict.DiscoveredRole.AccountName)
 				}
 			}
 			report.WriteString("\n")
@@ -437,12 +437,12 @@ func (pgr *ProfileGenerationResult) GenerateConflictReport() string {
 	}
 
 	report.WriteString("Final Results:\n")
-	report.WriteString(fmt.Sprintf("  Generated Profiles: %d\n", len(pgr.GeneratedProfiles)))
-	report.WriteString(fmt.Sprintf("  Successful Profiles: %d\n", len(pgr.SuccessfulProfiles)))
-	report.WriteString(fmt.Sprintf("  Errors: %d\n", len(pgr.Errors)))
+	fmt.Fprintf(&report, "  Generated Profiles: %d\n", len(pgr.GeneratedProfiles))
+	fmt.Fprintf(&report, "  Successful Profiles: %d\n", len(pgr.SuccessfulProfiles))
+	fmt.Fprintf(&report, "  Errors: %d\n", len(pgr.Errors))
 
 	if pgr.BackupPath != "" {
-		report.WriteString(fmt.Sprintf("  Configuration Backup: %s\n", pgr.BackupPath))
+		fmt.Fprintf(&report, "  Configuration Backup: %s\n", pgr.BackupPath)
 	}
 
 	return report.String()
