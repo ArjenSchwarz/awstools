@@ -28,11 +28,14 @@ func init() {
 
 func orgnames(_ *cobra.Command, _ []string) {
 	awsConfig := config.DefaultAwsConfig(*settings)
-	organization := helpers.GetFullOrganization(awsConfig.OrganizationsClient())
+	organization, err := helpers.GetFullOrganization(awsConfig.OrganizationsClient())
+	if err != nil {
+		log.Fatal(err)
+	}
 	result := make(map[string]string)
 	result = traverseOrgStructureEntryForNames(organization, result)
 	jsonString, _ := json.Marshal(result)
-	err := format.PrintByteSlice(jsonString, settings.GetString("output.file"), format.NewOutputSettings().S3Bucket)
+	err = format.PrintByteSlice(jsonString, settings.GetString("output.file"), format.NewOutputSettings().S3Bucket)
 	if err != nil {
 		log.Fatal(err.Error())
 	}
