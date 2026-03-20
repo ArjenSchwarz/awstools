@@ -75,9 +75,9 @@ The fallback branch in `GetSubnetRouteTable` (lines 808-815) iterates all route 
 ## Verification
 
 **Automated:**
-- [ ] Regression test passes
-- [ ] Full test suite passes
-- [ ] Linters/validators pass
+- [x] Regression test passes
+- [x] Full test suite passes
+- [x] Linters/validators pass
 
 ## Prevention
 
