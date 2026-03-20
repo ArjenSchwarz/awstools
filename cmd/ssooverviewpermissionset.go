@@ -30,7 +30,10 @@ func init() {
 func ssoOverviewByPermissionSet(_ *cobra.Command, _ []string) {
 	awsConfig := config.DefaultAwsConfig(*settings)
 	resultTitle := "SSO Overview per permission set"
-	ssoInstance := helpers.GetSSOAccountInstance(awsConfig.SsoClient())
+	ssoInstance, err := helpers.GetSSOAccountInstance(awsConfig.SsoClient())
+	if err != nil {
+		panic(err)
+	}
 	keys := []string{"PermissionSet", "AccountID", "Principal"}
 	if settings.IsVerbose() {
 		keys = append(keys, "ManagedPolicies", "InlinePolicy")

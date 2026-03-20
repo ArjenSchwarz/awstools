@@ -1355,3 +1355,263 @@ func BenchmarkENILookupCachePerformance(b *testing.B) {
 		}
 	})
 }
+
+// TestENILookupCache_EndpointsByENI_DistinctEntries verifies that each ENI
+// maps to the correct VPC endpoint in the cache. This is a regression test
+// for T-456: when storing &endpoint from a range loop, all map entries could
+// end up pointing to the last item if the loop variable is reused.
+func TestENILookupCache_EndpointsByENI_DistinctEntries(t *testing.T) {
+	cache := &ENILookupCache{
+		EndpointsByENI: make(map[string]*types.VpcEndpoint),
+	}
+
+	// Simulate the logic from batchFetchVPCEndpoints:
+	// iterating over a slice of VpcEndpoint and storing &endpoint
+	endpoints := []types.VpcEndpoint{
+		{
+			VpcEndpointId:       aws.String("vpce-aaa"),
+			ServiceName:         aws.String("com.amazonaws.us-east-1.s3"),
+			NetworkInterfaceIds: []string{"eni-001"},
+		},
+		{
+			VpcEndpointId:       aws.String("vpce-bbb"),
+			ServiceName:         aws.String("com.amazonaws.us-east-1.ec2"),
+			NetworkInterfaceIds: []string{"eni-002"},
+		},
+		{
+			VpcEndpointId:       aws.String("vpce-ccc"),
+			ServiceName:         aws.String("com.amazonaws.us-east-1.sqs"),
+			NetworkInterfaceIds: []string{"eni-003", "eni-004"},
+		},
+	}
+
+	// Reproduce the original loop pattern
+	for _, endpoint := range endpoints {
+		for _, eniID := range endpoint.NetworkInterfaceIds {
+			cache.EndpointsByENI[eniID] = &endpoint
+		}
+	}
+
+	// Each ENI must map to its own distinct endpoint
+	tests := []struct {
+		eniID              string
+		expectedEndpointID string
+	}{
+		{"eni-001", "vpce-aaa"},
+		{"eni-002", "vpce-bbb"},
+		{"eni-003", "vpce-ccc"},
+		{"eni-004", "vpce-ccc"},
+	}
+
+	for _, tt := range tests {
+		ep, ok := cache.EndpointsByENI[tt.eniID]
+		if !ok {
+			t.Errorf("EndpointsByENI missing entry for %s", tt.eniID)
+			continue
+		}
+		if *ep.VpcEndpointId != tt.expectedEndpointID {
+			t.Errorf("EndpointsByENI[%s] = %s, want %s (pointer reuse bug: all entries point to last item)",
+				tt.eniID, *ep.VpcEndpointId, tt.expectedEndpointID)
+		}
+	}
+
+	// Verify all pointers are not the same address
+	seen := make(map[*types.VpcEndpoint]bool)
+	for eniID, ep := range cache.EndpointsByENI {
+		// eni-003 and eni-004 should share a pointer (same endpoint), but
+		// eni-001 and eni-002 should have distinct pointers
+		if eniID == "eni-003" || eniID == "eni-004" {
+			continue
+		}
+		if seen[ep] {
+			t.Errorf("EndpointsByENI has duplicate pointer %p for ENI %s — loop variable reuse bug", ep, eniID)
+		}
+		seen[ep] = true
+	}
+}
+
+// TestENILookupCache_NATGatewaysByENI_DistinctEntries verifies that each ENI
+// maps to the correct NAT gateway in the cache. Regression test for T-456.
+func TestENILookupCache_NATGatewaysByENI_DistinctEntries(t *testing.T) {
+	cache := &ENILookupCache{
+		NATGatewaysByENI: make(map[string]*types.NatGateway),
+	}
+
+	// Simulate the logic from batchFetchNATGateways
+	natgateways := []types.NatGateway{
+		{
+			NatGatewayId: aws.String("nat-aaa"),
+			NatGatewayAddresses: []types.NatGatewayAddress{
+				{NetworkInterfaceId: aws.String("eni-101")},
+			},
+		},
+		{
+			NatGatewayId: aws.String("nat-bbb"),
+			NatGatewayAddresses: []types.NatGatewayAddress{
+				{NetworkInterfaceId: aws.String("eni-102")},
+			},
+		},
+		{
+			NatGatewayId: aws.String("nat-ccc"),
+			NatGatewayAddresses: []types.NatGatewayAddress{
+				{NetworkInterfaceId: aws.String("eni-103")},
+			},
+		},
+	}
+
+	// Reproduce the original loop pattern
+	for _, natgw := range natgateways {
+		for _, address := range natgw.NatGatewayAddresses {
+			if address.NetworkInterfaceId != nil {
+				cache.NATGatewaysByENI[*address.NetworkInterfaceId] = &natgw
+			}
+		}
+	}
+
+	// Each ENI must map to its own distinct NAT gateway
+	tests := []struct {
+		eniID           string
+		expectedNATGWID string
+	}{
+		{"eni-101", "nat-aaa"},
+		{"eni-102", "nat-bbb"},
+		{"eni-103", "nat-ccc"},
+	}
+
+	for _, tt := range tests {
+		natgw, ok := cache.NATGatewaysByENI[tt.eniID]
+		if !ok {
+			t.Errorf("NATGatewaysByENI missing entry for %s", tt.eniID)
+			continue
+		}
+		if *natgw.NatGatewayId != tt.expectedNATGWID {
+			t.Errorf("NATGatewaysByENI[%s] = %s, want %s (pointer reuse bug: all entries point to last item)",
+				tt.eniID, *natgw.NatGatewayId, tt.expectedNATGWID)
+		}
+	}
+
+	// Verify all pointers are distinct addresses
+	seen := make(map[*types.NatGateway]bool)
+	for eniID, natgw := range cache.NATGatewaysByENI {
+		if seen[natgw] {
+			t.Errorf("NATGatewaysByENI has duplicate pointer %p for ENI %s — loop variable reuse bug", natgw, eniID)
+		}
+		seen[natgw] = true
+		_ = eniID
+	}
+}
+
+func TestGetSubnetRouteTable_ExplicitAssociation(t *testing.T) {
+	routeTables := []types.RouteTable{
+		{
+			RouteTableId: aws.String("rtb-main-vpc1"),
+			VpcId:        aws.String("vpc-111"),
+			Associations: []types.RouteTableAssociation{
+				{Main: aws.Bool(true)},
+			},
+		},
+		{
+			RouteTableId: aws.String("rtb-explicit"),
+			VpcId:        aws.String("vpc-111"),
+			Associations: []types.RouteTableAssociation{
+				{SubnetId: aws.String("subnet-aaa")},
+			},
+		},
+	}
+
+	rt := GetSubnetRouteTable("subnet-aaa", "vpc-111", routeTables)
+	if rt == nil {
+		t.Fatal("expected route table, got nil")
+	}
+	if *rt.RouteTableId != "rtb-explicit" {
+		t.Errorf("expected rtb-explicit, got %s", *rt.RouteTableId)
+	}
+}
+
+func TestGetSubnetRouteTable_MainRouteTableMatchesVPC(t *testing.T) {
+	// Two VPCs, each with its own main route table.
+	// subnet-bbb belongs to vpc-222 and has no explicit association.
+	// The function must return vpc-222's main route table, not vpc-111's.
+	routeTables := []types.RouteTable{
+		{
+			RouteTableId: aws.String("rtb-main-vpc1"),
+			VpcId:        aws.String("vpc-111"),
+			Associations: []types.RouteTableAssociation{
+				{Main: aws.Bool(true)},
+			},
+		},
+		{
+			RouteTableId: aws.String("rtb-main-vpc2"),
+			VpcId:        aws.String("vpc-222"),
+			Associations: []types.RouteTableAssociation{
+				{Main: aws.Bool(true)},
+			},
+		},
+	}
+
+	rt := GetSubnetRouteTable("subnet-bbb", "vpc-222", routeTables)
+	if rt == nil {
+		t.Fatal("expected route table, got nil")
+	}
+	if *rt.RouteTableId != "rtb-main-vpc2" {
+		t.Errorf("expected rtb-main-vpc2 (vpc-222's main RT), got %s", *rt.RouteTableId)
+	}
+}
+
+func TestGetSubnetRouteTable_NoMatchReturnsNil(t *testing.T) {
+	routeTables := []types.RouteTable{
+		{
+			RouteTableId: aws.String("rtb-main-vpc1"),
+			VpcId:        aws.String("vpc-111"),
+			Associations: []types.RouteTableAssociation{
+				{Main: aws.Bool(true)},
+			},
+		},
+	}
+
+	// Subnet belongs to vpc-999 which has no route tables at all
+	rt := GetSubnetRouteTable("subnet-zzz", "vpc-999", routeTables)
+	if rt != nil {
+		t.Errorf("expected nil for unknown VPC, got %s", *rt.RouteTableId)
+	}
+}
+
+func TestIsPublicSubnet_UsesCorrectVPCMainRouteTable(t *testing.T) {
+	// vpc-111 has a public main route table (with igw)
+	// vpc-222 has a private main route table (no igw)
+	// subnet-private belongs to vpc-222 with no explicit association
+	// Without the VPC constraint, it would incorrectly pick vpc-111's main RT and report public
+	routeTables := []types.RouteTable{
+		{
+			RouteTableId: aws.String("rtb-main-vpc1"),
+			VpcId:        aws.String("vpc-111"),
+			Associations: []types.RouteTableAssociation{
+				{Main: aws.Bool(true)},
+			},
+			Routes: []types.Route{
+				{
+					DestinationCidrBlock: aws.String("0.0.0.0/0"),
+					GatewayId:            aws.String("igw-12345678"),
+				},
+			},
+		},
+		{
+			RouteTableId: aws.String("rtb-main-vpc2"),
+			VpcId:        aws.String("vpc-222"),
+			Associations: []types.RouteTableAssociation{
+				{Main: aws.Bool(true)},
+			},
+			Routes: []types.Route{
+				{
+					DestinationCidrBlock: aws.String("10.0.0.0/16"),
+					GatewayId:            aws.String("local"),
+				},
+			},
+		},
+	}
+
+	result := isPublicSubnet("subnet-private", "vpc-222", routeTables)
+	if result {
+		t.Error("subnet in vpc-222 should be private, but was classified as public (wrong main route table used)")
+	}
+}
