@@ -727,7 +727,7 @@ func GetVPCUsageOverview(svc *ec2.Client) VPCOverview {
 					VPCId:        *subnet.VpcId,
 					VPCName:      vpcInfo.Name,
 					Tags:         subnet.Tags,
-					IsPublic:     isPublicSubnet(*subnet.SubnetId, routeTables),
+					IsPublic:     isPublicSubnet(*subnet.SubnetId, *subnet.VpcId, routeTables),
 					TotalIPs:     totalIPs,
 					AvailableIPs: availableIPs,
 					UsedIPs:      usedIPs,
@@ -794,8 +794,10 @@ func retrieveRouteTables(svc *ec2.Client) []types.RouteTable {
 	return resp.RouteTables
 }
 
-// GetSubnetRouteTable finds the route table associated with a specific subnet
-func GetSubnetRouteTable(subnetID string, routeTables []types.RouteTable) *types.RouteTable {
+// GetSubnetRouteTable finds the route table associated with a specific subnet.
+// The vpcID parameter constrains the main route table fallback to the correct VPC,
+// preventing cross-VPC misassignment when multiple VPCs share the route table list.
+func GetSubnetRouteTable(subnetID string, vpcID string, routeTables []types.RouteTable) *types.RouteTable {
 	// First check for explicit subnet associations
 	for _, routeTable := range routeTables {
 		for _, association := range routeTable.Associations {
@@ -805,8 +807,11 @@ func GetSubnetRouteTable(subnetID string, routeTables []types.RouteTable) *types
 		}
 	}
 
-	// If no explicit association found, use the main route table
+	// If no explicit association found, use the main route table for this VPC
 	for _, routeTable := range routeTables {
+		if routeTable.VpcId == nil || *routeTable.VpcId != vpcID {
+			continue
+		}
 		for _, association := range routeTable.Associations {
 			if association.Main != nil && *association.Main {
 				return &routeTable
@@ -862,8 +867,8 @@ func FormatRouteTableInfo(routeTable *types.RouteTable) (string, []string) {
 }
 
 // isPublicSubnet determines if a subnet is public based on route table analysis
-func isPublicSubnet(subnetID string, routeTables []types.RouteTable) bool {
-	routeTable := GetSubnetRouteTable(subnetID, routeTables)
+func isPublicSubnet(subnetID string, vpcID string, routeTables []types.RouteTable) bool {
+	routeTable := GetSubnetRouteTable(subnetID, vpcID, routeTables)
 	if routeTable == nil {
 		return false
 	}
@@ -1552,7 +1557,7 @@ func FindIPAddressDetails(svc *ec2.Client, ipAddress string) IPFinderResult {
 	result.VPC = getVPCInfo(svc, aws.ToString(eni.VpcId))
 	result.Subnet = getSubnetInfo(svc, aws.ToString(eni.SubnetId))
 	result.SecurityGroups = getSecurityGroupInfo(svc, eni.Groups)
-	result.RouteTable = getRouteTableInfo(svc, aws.ToString(eni.SubnetId))
+	result.RouteTable = getRouteTableInfo(svc, aws.ToString(eni.SubnetId), aws.ToString(eni.VpcId))
 
 	return result
 }
@@ -1712,7 +1717,7 @@ func getSecurityGroupInfo(svc *ec2.Client, groups []types.GroupIdentifier) []Sec
 }
 
 // getRouteTableInfo retrieves route table information for a subnet
-func getRouteTableInfo(svc *ec2.Client, subnetID string) RouteTableInfo {
+func getRouteTableInfo(svc *ec2.Client, subnetID string, vpcID string) RouteTableInfo {
 	if subnetID == "" {
 		return RouteTableInfo{}
 	}
@@ -1721,7 +1726,7 @@ func getRouteTableInfo(svc *ec2.Client, subnetID string) RouteTableInfo {
 	routeTables := retrieveRouteTables(svc)
 
 	// Find the route table associated with this subnet
-	routeTable := GetSubnetRouteTable(subnetID, routeTables)
+	routeTable := GetSubnetRouteTable(subnetID, vpcID, routeTables)
 	if routeTable == nil {
 		return RouteTableInfo{
 			ID:     "No route table",
