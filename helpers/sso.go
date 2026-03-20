@@ -2,17 +2,34 @@ package helpers
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ssoadmin"
 )
 
+// SSOAdminAPI defines the subset of the SSO Admin client used by this package.
+type SSOAdminAPI interface {
+	ListInstances(ctx context.Context, params *ssoadmin.ListInstancesInput, optFns ...func(*ssoadmin.Options)) (*ssoadmin.ListInstancesOutput, error)
+	ListPermissionSets(ctx context.Context, params *ssoadmin.ListPermissionSetsInput, optFns ...func(*ssoadmin.Options)) (*ssoadmin.ListPermissionSetsOutput, error)
+	DescribePermissionSet(ctx context.Context, params *ssoadmin.DescribePermissionSetInput, optFns ...func(*ssoadmin.Options)) (*ssoadmin.DescribePermissionSetOutput, error)
+	ListAccountsForProvisionedPermissionSet(ctx context.Context, params *ssoadmin.ListAccountsForProvisionedPermissionSetInput, optFns ...func(*ssoadmin.Options)) (*ssoadmin.ListAccountsForProvisionedPermissionSetOutput, error)
+	ListAccountAssignments(ctx context.Context, params *ssoadmin.ListAccountAssignmentsInput, optFns ...func(*ssoadmin.Options)) (*ssoadmin.ListAccountAssignmentsOutput, error)
+	ListManagedPoliciesInPermissionSet(ctx context.Context, params *ssoadmin.ListManagedPoliciesInPermissionSetInput, optFns ...func(*ssoadmin.Options)) (*ssoadmin.ListManagedPoliciesInPermissionSetOutput, error)
+	GetInlinePolicyForPermissionSet(ctx context.Context, params *ssoadmin.GetInlinePolicyForPermissionSetInput, optFns ...func(*ssoadmin.Options)) (*ssoadmin.GetInlinePolicyForPermissionSetOutput, error)
+}
+
 // GetSSOAccountInstance retrieves the SSO Account Instance and all its data
-func GetSSOAccountInstance(svc *ssoadmin.Client) SSOInstance {
-	ssoInstance := getSSOInstance(svc)
-	ssoInstance.getPermissionSets(svc)
-	return ssoInstance
+func GetSSOAccountInstance(svc SSOAdminAPI) (SSOInstance, error) {
+	ssoInstance, err := getSSOInstance(svc)
+	if err != nil {
+		return SSOInstance{}, err
+	}
+	if _, err := ssoInstance.getPermissionSets(svc); err != nil {
+		return SSOInstance{}, err
+	}
+	return ssoInstance, nil
 }
 
 // SSOInstance is the top level representation of an SSO Instance
@@ -58,52 +75,67 @@ type SSOAccountAssignment struct {
 	PermissionSet *SSOPermissionSet
 }
 
-func getSSOInstance(svc *ssoadmin.Client) SSOInstance {
+func getSSOInstance(svc SSOAdminAPI) (SSOInstance, error) {
 	instances, err := svc.ListInstances(context.TODO(), &ssoadmin.ListInstancesInput{})
 	if err != nil {
-		panic(err)
+		return SSOInstance{}, fmt.Errorf("failed to list SSO instances: %w", err)
 	}
 	if len(instances.Instances) < 1 {
-		panic("Didn't find any SSO environments")
+		return SSOInstance{}, fmt.Errorf("no SSO instances found")
 	}
 	if len(instances.Instances) > 1 {
-		panic("Found multiple SSO environments. How did you manage that?")
+		return SSOInstance{}, fmt.Errorf("found multiple SSO instances, expected exactly one")
 	}
 	ssoInstance := SSOInstance{
 		IdentityStoreID: *instances.Instances[0].IdentityStoreId,
 		Arn:             *instances.Instances[0].InstanceArn,
 	}
-	return ssoInstance
+	return ssoInstance, nil
 }
 
-func (instance *SSOInstance) getPermissionSets(svc *ssoadmin.Client) []SSOPermissionSet {
+func (instance *SSOInstance) getPermissionSets(svc SSOAdminAPI) ([]SSOPermissionSet, error) {
 	maxresults := int32(100)
 	if instance.PermissionSets == nil {
-		permissions, err := svc.ListPermissionSets(context.TODO(), &ssoadmin.ListPermissionSetsInput{
-			InstanceArn: &instance.Arn,
-			MaxResults:  &maxresults,
-		})
-		if err != nil {
-			panic(err)
+		var allPermissionSetArns []string
+		var nextToken *string
+
+		for {
+			permissions, err := svc.ListPermissionSets(context.TODO(), &ssoadmin.ListPermissionSetsInput{
+				InstanceArn: &instance.Arn,
+				MaxResults:  &maxresults,
+				NextToken:   nextToken,
+			})
+			if err != nil {
+				return nil, fmt.Errorf("failed to list permission sets: %w", err)
+			}
+			allPermissionSetArns = append(allPermissionSetArns, permissions.PermissionSets...)
+			nextToken = permissions.NextToken
+			if nextToken == nil {
+				break
+			}
 		}
+
 		permissionsets := []SSOPermissionSet{}
-		for _, permissionsetarn := range permissions.PermissionSets {
-			permissionset := instance.getPermissionSetDetails(permissionsetarn, svc)
+		for _, permissionsetarn := range allPermissionSetArns {
+			permissionset, err := instance.getPermissionSetDetails(permissionsetarn, svc)
+			if err != nil {
+				return nil, err
+			}
 			permissionsets = append(permissionsets, permissionset)
 		}
 		instance.PermissionSets = permissionsets
 	}
-	return instance.PermissionSets
+	return instance.PermissionSets, nil
 }
 
-func (instance *SSOInstance) getPermissionSetDetails(permissionsetarn string, svc *ssoadmin.Client) SSOPermissionSet {
+func (instance *SSOInstance) getPermissionSetDetails(permissionsetarn string, svc SSOAdminAPI) (SSOPermissionSet, error) {
 	// Get metadata
 	permissionsetdescription, err := svc.DescribePermissionSet(context.TODO(), &ssoadmin.DescribePermissionSetInput{
 		InstanceArn:      &instance.Arn,
 		PermissionSetArn: &permissionsetarn,
 	})
 	if err != nil {
-		panic(err)
+		return SSOPermissionSet{}, fmt.Errorf("failed to describe permission set %s: %w", permissionsetarn, err)
 	}
 	permissionset := SSOPermissionSet{
 		Arn:             permissionsetarn,
@@ -116,71 +148,103 @@ func (instance *SSOInstance) getPermissionSetDetails(permissionsetarn string, sv
 		permissionset.Description = *permissionsetdescription.PermissionSet.Description
 	}
 	// Get accounts
-	permissionset.addAccountInfo(svc)
+	if err := permissionset.addAccountInfo(svc); err != nil {
+		return SSOPermissionSet{}, err
+	}
 	// Get managed policies
-	managedpolicies, err := svc.ListManagedPoliciesInPermissionSet(context.TODO(), &ssoadmin.ListManagedPoliciesInPermissionSetInput{
-		InstanceArn:      &instance.Arn,
-		PermissionSetArn: &permissionsetarn,
-	})
-	if err != nil {
-		panic(err)
-	}
-	policies := []SSOPolicy{}
-	for _, managedpolicy := range managedpolicies.AttachedManagedPolicies {
-		policy := SSOPolicy{
-			Arn:  *managedpolicy.Arn,
-			Name: *managedpolicy.Name,
+	maxresults := int32(100)
+	var allPolicies []SSOPolicy
+	var nextToken *string
+
+	for {
+		managedpolicies, err := svc.ListManagedPoliciesInPermissionSet(context.TODO(), &ssoadmin.ListManagedPoliciesInPermissionSetInput{
+			InstanceArn:      &instance.Arn,
+			PermissionSetArn: &permissionsetarn,
+			MaxResults:       &maxresults,
+			NextToken:        nextToken,
+		})
+		if err != nil {
+			return SSOPermissionSet{}, fmt.Errorf("failed to list managed policies for permission set %s: %w", permissionsetarn, err)
 		}
-		policies = append(policies, policy)
+		for _, managedpolicy := range managedpolicies.AttachedManagedPolicies {
+			policy := SSOPolicy{
+				Arn:  *managedpolicy.Arn,
+				Name: *managedpolicy.Name,
+			}
+			allPolicies = append(allPolicies, policy)
+		}
+		nextToken = managedpolicies.NextToken
+		if nextToken == nil {
+			break
+		}
 	}
-	permissionset.ManagedPolicies = policies
+	permissionset.ManagedPolicies = allPolicies
 	// Get Inline Policy
 	inlinepolicy, err := svc.GetInlinePolicyForPermissionSet(context.TODO(), &ssoadmin.GetInlinePolicyForPermissionSetInput{
 		InstanceArn:      &instance.Arn,
 		PermissionSetArn: &permissionsetarn,
 	})
 	if err != nil {
-		panic(err)
+		return SSOPermissionSet{}, fmt.Errorf("failed to get inline policy for permission set %s: %w", permissionsetarn, err)
 	}
 	permissionset.InlinePolicy = *inlinepolicy.InlinePolicy
-	return permissionset
+	return permissionset, nil
 }
 
-func (permissionset *SSOPermissionSet) addAccountInfo(svc *ssoadmin.Client) []SSOAccount {
+func (permissionset *SSOPermissionSet) addAccountInfo(svc SSOAdminAPI) error {
 	maxresults := int32(100)
-	provisionedaccounts, err := svc.ListAccountsForProvisionedPermissionSet(context.TODO(), &ssoadmin.ListAccountsForProvisionedPermissionSetInput{
-		InstanceArn:      &permissionset.Instance.Arn,
-		PermissionSetArn: &permissionset.Arn,
-		MaxResults:       &maxresults,
-	})
-	if err != nil {
-		panic(err)
+	var allAccountIDs []string
+	var nextToken *string
+
+	for {
+		provisionedaccounts, err := svc.ListAccountsForProvisionedPermissionSet(context.TODO(), &ssoadmin.ListAccountsForProvisionedPermissionSetInput{
+			InstanceArn:      &permissionset.Instance.Arn,
+			PermissionSetArn: &permissionset.Arn,
+			MaxResults:       &maxresults,
+			NextToken:        nextToken,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to list accounts for permission set %s: %w", permissionset.Arn, err)
+		}
+		allAccountIDs = append(allAccountIDs, provisionedaccounts.AccountIds...)
+		nextToken = provisionedaccounts.NextToken
+		if nextToken == nil {
+			break
+		}
 	}
-	accounts := []SSOAccount{}
-	for _, accountnr := range provisionedaccounts.AccountIds {
+
+	for _, accountnr := range allAccountIDs {
 		account := SSOAccount{
 			AccountID: accountnr,
 		}
-		accountassignments, err := svc.ListAccountAssignments(context.TODO(), &ssoadmin.ListAccountAssignmentsInput{
-			InstanceArn:      &permissionset.Instance.Arn,
-			PermissionSetArn: &permissionset.Arn,
-			AccountId:        aws.String(accountnr),
-			MaxResults:       &maxresults,
-		})
-		if err != nil {
-			panic(err)
-		}
-		for _, assignmentraw := range accountassignments.AccountAssignments {
-			assignment := SSOAccountAssignment{
-				PrincipalType: string(assignmentraw.PrincipalType),
-				PrincipalID:   *assignmentraw.PrincipalId,
-				PermissionSet: permissionset,
+		var assignmentNextToken *string
+		for {
+			accountassignments, err := svc.ListAccountAssignments(context.TODO(), &ssoadmin.ListAccountAssignmentsInput{
+				InstanceArn:      &permissionset.Instance.Arn,
+				PermissionSetArn: &permissionset.Arn,
+				AccountId:        aws.String(accountnr),
+				MaxResults:       &maxresults,
+				NextToken:        assignmentNextToken,
+			})
+			if err != nil {
+				return fmt.Errorf("failed to list account assignments for account %s, permission set %s: %w", accountnr, permissionset.Arn, err)
 			}
-			account.addAssignmentToAccount(assignment)
+			for _, assignmentraw := range accountassignments.AccountAssignments {
+				assignment := SSOAccountAssignment{
+					PrincipalType: string(assignmentraw.PrincipalType),
+					PrincipalID:   *assignmentraw.PrincipalId,
+					PermissionSet: permissionset,
+				}
+				account.addAssignmentToAccount(assignment)
+			}
+			assignmentNextToken = accountassignments.NextToken
+			if assignmentNextToken == nil {
+				break
+			}
 		}
 		permissionset.addAccount(account)
 	}
-	return accounts
+	return nil
 }
 
 func (permissionset *SSOPermissionSet) addAccount(account SSOAccount) {

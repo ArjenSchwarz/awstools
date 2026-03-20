@@ -24,7 +24,10 @@ func init() {
 func ssoDangling(_ *cobra.Command, _ []string) {
 	awsConfig := config.DefaultAwsConfig(*settings)
 	resultTitle := "Dangling Permission Sets"
-	ssoInstance := helpers.GetSSOAccountInstance(awsConfig.SsoClient())
+	ssoInstance, err := helpers.GetSSOAccountInstance(awsConfig.SsoClient())
+	if err != nil {
+		panic(err)
+	}
 	keys := []string{"PermissionSet", "Arn", "ManagedPolicies", "InlinePolicy"}
 	output := format.OutputArray{Keys: keys, Settings: settings.NewOutputSettings()}
 	output.Settings.Title = resultTitle

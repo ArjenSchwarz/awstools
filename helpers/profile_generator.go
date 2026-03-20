@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/service/iam"
 	"github.com/aws/aws-sdk-go-v2/service/sso"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 )
@@ -79,7 +78,6 @@ type ProfileGenerator struct {
 	awsConfig        aws.Config                 // AWS SDK configuration for API calls
 	ssoClient        *sso.Client                // AWS SSO client for role discovery
 	stsClient        *sts.Client                // AWS STS client for token validation
-	iamClient        *iam.Client                // AWS IAM client for role information
 	roleDiscovery    *RoleDiscovery             // Role discovery service for enumerating accessible roles
 	conflictDetector *ProfileConflictDetector   // Conflict detection service (initialized lazily)
 	logger           Logger                     // Logger for progress and diagnostic messages
@@ -92,7 +90,7 @@ type ProfileGenerator struct {
 // 1. Validates required parameters (template profile name)
 // 2. Sets default naming pattern if not provided
 // 3. Validates the naming pattern syntax
-// 4. Creates AWS service clients (SSO, STS, IAM)
+// 4. Creates AWS service clients (SSO, STS)
 // 5. Initializes role discovery service
 // 6. Sets up default logger (can be overridden)
 //
@@ -154,10 +152,9 @@ func NewProfileGenerator(templateProfile, namingPattern string, autoApprove bool
 	// Create AWS service clients
 	ssoClient := sso.NewFromConfig(awsConfig)
 	stsClient := sts.NewFromConfig(awsConfig)
-	iamClient := iam.NewFromConfig(awsConfig)
 
 	// Create role discovery
-	roleDiscovery, err := NewRoleDiscovery(ssoClient, stsClient, iamClient)
+	roleDiscovery, err := NewRoleDiscovery(ssoClient, stsClient)
 	if err != nil {
 		return nil, err
 	}
@@ -171,7 +168,6 @@ func NewProfileGenerator(templateProfile, namingPattern string, autoApprove bool
 		awsConfig:        awsConfig,
 		ssoClient:        ssoClient,
 		stsClient:        stsClient,
-		iamClient:        iamClient,
 		roleDiscovery:    roleDiscovery,
 		logger:           &defaultLogger{},
 	}
@@ -191,8 +187,8 @@ func (pg *ProfileGenerator) initializeConflictDetector() error {
 		return nil // Already initialized
 	}
 
-	// Load AWS config file
-	configFile, err := LoadAWSConfigFile("")
+	// Load AWS config file from output file path (falls back to default when empty)
+	configFile, err := LoadAWSConfigFile(pg.outputFile)
 	if err != nil {
 		return NewFileSystemError("failed to load AWS config file", err)
 	}
@@ -211,8 +207,8 @@ func (pg *ProfileGenerator) initializeConflictDetector() error {
 
 // ValidateTemplateProfile validates the template profile configuration
 func (pg *ProfileGenerator) ValidateTemplateProfile() (*TemplateProfile, error) {
-	// Load AWS config file
-	configFile, err := LoadAWSConfigFile("")
+	// Load AWS config file from output file path (falls back to default when empty)
+	configFile, err := LoadAWSConfigFile(pg.outputFile)
 	if err != nil {
 		return nil, NewFileSystemError("failed to load AWS config file", err)
 	}
@@ -276,8 +272,8 @@ func (pg *ProfileGenerator) GenerateProfiles(templateProfile *TemplateProfile, d
 		return nil, err
 	}
 
-	// Load existing profiles to detect conflicts
-	configFile, err := LoadAWSConfigFile("")
+	// Load existing profiles from output file to detect conflicts (falls back to default when empty)
+	configFile, err := LoadAWSConfigFile(pg.outputFile)
 	if err != nil {
 		return nil, NewFileSystemError("failed to load AWS config file", err)
 	}
