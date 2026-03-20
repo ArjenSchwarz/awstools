@@ -27,7 +27,10 @@ func init() {
 func ssoListPermissionSets(_ *cobra.Command, _ []string) {
 	awsConfig := config.DefaultAwsConfig(*settings)
 	resultTitle := "SSO Overview per permission set"
-	ssoInstance := helpers.GetSSOAccountInstance(awsConfig.SsoClient())
+	ssoInstance, err := helpers.GetSSOAccountInstance(awsConfig.SsoClient())
+	if err != nil {
+		panic(err)
+	}
 	keys := []string{permissionSetColumn, "AccountIDs", "Arn", "ManagedPolicies", "InlinePolicy"}
 	output := format.OutputArray{Keys: keys, Settings: settings.NewOutputSettings()}
 	output.Settings.Title = resultTitle
