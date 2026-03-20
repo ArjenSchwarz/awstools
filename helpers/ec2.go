@@ -1339,9 +1339,10 @@ func (cache *ENILookupCache) batchFetchVPCEndpoints(svc *ec2.Client, vpcIDs map[
 	}
 
 	// Index endpoints by ENI ID for fast lookup
-	for _, endpoint := range resp.VpcEndpoints {
-		for _, eniID := range endpoint.NetworkInterfaceIds {
-			cache.EndpointsByENI[eniID] = &endpoint
+	for i := range resp.VpcEndpoints {
+		ep := &resp.VpcEndpoints[i]
+		for _, eniID := range ep.NetworkInterfaceIds {
+			cache.EndpointsByENI[eniID] = ep
 		}
 	}
 }
@@ -1411,10 +1412,11 @@ func (cache *ENILookupCache) batchFetchNATGateways(svc *ec2.Client, vpcIDs map[s
 	}
 
 	// Index NAT gateways by ENI ID for fast lookup
-	for _, natgw := range resp.NatGateways {
-		for _, address := range natgw.NatGatewayAddresses {
+	for i := range resp.NatGateways {
+		gw := &resp.NatGateways[i]
+		for _, address := range gw.NatGatewayAddresses {
 			if address.NetworkInterfaceId != nil {
-				cache.NATGatewaysByENI[*address.NetworkInterfaceId] = &natgw
+				cache.NATGatewaysByENI[*address.NetworkInterfaceId] = gw
 			}
 		}
 	}

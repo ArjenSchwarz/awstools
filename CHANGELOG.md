@@ -15,6 +15,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Makefile target `install` for installing the application
 - Organized help output with categorized sections
 
+### Fixed
+
+- ENI cache pointer reuse in `batchFetchVPCEndpoints` and `batchFetchNATGateways` — use index-based iteration to store pointers to slice elements instead of loop variables (T-456)
+
 ### Changed
 
 - `clean` target now also removes coverage artifacts
