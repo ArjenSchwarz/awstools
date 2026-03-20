@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Profile generator now reads from `--output-file` for conflict detection, template validation, and profile generation instead of always reading the default AWS config file (T-538)
+
 ### Added
 
 - Makefile targets for code quality: `fmt`, `vet`, `modernize`, `check`, `security-scan`
