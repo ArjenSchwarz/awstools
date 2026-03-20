@@ -13,20 +13,48 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 )
 
+// IAMClient defines the subset of IAM client methods used by the helpers
+// package. The concrete *iam.Client satisfies this interface.
+type IAMClient interface {
+	ListUsers(ctx context.Context, params *iam.ListUsersInput, optFns ...func(*iam.Options)) (*iam.ListUsersOutput, error)
+	ListGroups(ctx context.Context, params *iam.ListGroupsInput, optFns ...func(*iam.Options)) (*iam.ListGroupsOutput, error)
+	ListPolicies(ctx context.Context, params *iam.ListPoliciesInput, optFns ...func(*iam.Options)) (*iam.ListPoliciesOutput, error)
+	ListUserPolicies(ctx context.Context, params *iam.ListUserPoliciesInput, optFns ...func(*iam.Options)) (*iam.ListUserPoliciesOutput, error)
+	ListGroupPolicies(ctx context.Context, params *iam.ListGroupPoliciesInput, optFns ...func(*iam.Options)) (*iam.ListGroupPoliciesOutput, error)
+	ListAttachedUserPolicies(ctx context.Context, params *iam.ListAttachedUserPoliciesInput, optFns ...func(*iam.Options)) (*iam.ListAttachedUserPoliciesOutput, error)
+	ListAttachedGroupPolicies(ctx context.Context, params *iam.ListAttachedGroupPoliciesInput, optFns ...func(*iam.Options)) (*iam.ListAttachedGroupPoliciesOutput, error)
+	ListGroupsForUser(ctx context.Context, params *iam.ListGroupsForUserInput, optFns ...func(*iam.Options)) (*iam.ListGroupsForUserOutput, error)
+	ListRoles(ctx context.Context, params *iam.ListRolesInput, optFns ...func(*iam.Options)) (*iam.ListRolesOutput, error)
+	ListRolePolicies(ctx context.Context, params *iam.ListRolePoliciesInput, optFns ...func(*iam.Options)) (*iam.ListRolePoliciesOutput, error)
+	ListAttachedRolePolicies(ctx context.Context, params *iam.ListAttachedRolePoliciesInput, optFns ...func(*iam.Options)) (*iam.ListAttachedRolePoliciesOutput, error)
+	ListAccessKeys(ctx context.Context, params *iam.ListAccessKeysInput, optFns ...func(*iam.Options)) (*iam.ListAccessKeysOutput, error)
+	ListAccountAliases(ctx context.Context, params *iam.ListAccountAliasesInput, optFns ...func(*iam.Options)) (*iam.ListAccountAliasesOutput, error)
+	GetUserPolicy(ctx context.Context, params *iam.GetUserPolicyInput, optFns ...func(*iam.Options)) (*iam.GetUserPolicyOutput, error)
+	GetGroupPolicy(ctx context.Context, params *iam.GetGroupPolicyInput, optFns ...func(*iam.Options)) (*iam.GetGroupPolicyOutput, error)
+	GetGroup(ctx context.Context, params *iam.GetGroupInput, optFns ...func(*iam.Options)) (*iam.GetGroupOutput, error)
+	GetPolicy(ctx context.Context, params *iam.GetPolicyInput, optFns ...func(*iam.Options)) (*iam.GetPolicyOutput, error)
+	GetPolicyVersion(ctx context.Context, params *iam.GetPolicyVersionInput, optFns ...func(*iam.Options)) (*iam.GetPolicyVersionOutput, error)
+	GetRolePolicy(ctx context.Context, params *iam.GetRolePolicyInput, optFns ...func(*iam.Options)) (*iam.GetRolePolicyOutput, error)
+	GetAccountSummary(ctx context.Context, params *iam.GetAccountSummaryInput, optFns ...func(*iam.Options)) (*iam.GetAccountSummaryOutput, error)
+	GetAccessKeyLastUsed(ctx context.Context, params *iam.GetAccessKeyLastUsedInput, optFns ...func(*iam.Options)) (*iam.GetAccessKeyLastUsedOutput, error)
+}
+
 var cachedUsers []types.User
 
 // GetPoliciesMap retrieves a map of policies with the policy name as the key
 // and the actual policy object as the value
-func GetPoliciesMap(svc *iam.Client) map[string]types.Policy {
+func GetPoliciesMap(svc IAMClient) map[string]types.Policy {
 	result := make(map[string]types.Policy)
 
-	params := &iam.ListPoliciesInput{}
-	resp, err := svc.ListPolicies(context.TODO(), params)
-	if err != nil {
-		panic(err)
-	}
-	for _, policy := range resp.Policies {
-		result[*policy.PolicyName] = policy
+	paginator := iam.NewListPoliciesPaginator(svc, &iam.ListPoliciesInput{})
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(context.TODO())
+		if err != nil {
+			panic(err)
+		}
+		for _, policy := range page.Policies {
+			result[*policy.PolicyName] = policy
+		}
 	}
 	return result
 }
@@ -34,17 +62,18 @@ func GetPoliciesMap(svc *iam.Client) map[string]types.Policy {
 // GetUserPoliciesMapForUser retrieves a map of policies for the provided IAM
 // username where the key is the name of the policy and the value is the actual
 // json policy document
-func GetUserPoliciesMapForUser(username *string, svc *iam.Client) map[string]string {
+func GetUserPoliciesMapForUser(username *string, svc IAMClient) map[string]string {
 	result := make(map[string]string)
-	params := &iam.ListUserPoliciesInput{
+
+	paginator := iam.NewListUserPoliciesPaginator(svc, &iam.ListUserPoliciesInput{
 		UserName: username,
-	}
-	resp, err := svc.ListUserPolicies(context.TODO(), params)
-	if err != nil {
-		panic(err)
-	}
-	if len(resp.PolicyNames) > 0 {
-		for _, policyname := range resp.PolicyNames {
+	})
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(context.TODO())
+		if err != nil {
+			panic(err)
+		}
+		for _, policyname := range page.PolicyNames {
 			params := &iam.GetUserPolicyInput{
 				PolicyName: aws.String(policyname),
 				UserName:   username,
@@ -66,17 +95,18 @@ func GetUserPoliciesMapForUser(username *string, svc *iam.Client) map[string]str
 // GetGroupPoliciesMapForGroup retrieves a map of policies for the provided IAM
 // groupname where the key is the name of the policy and the value is the actual
 // json policy document
-func GetGroupPoliciesMapForGroup(groupname *string, svc *iam.Client) map[string]string {
+func GetGroupPoliciesMapForGroup(groupname *string, svc IAMClient) map[string]string {
 	result := make(map[string]string)
-	params := &iam.ListGroupPoliciesInput{
+
+	paginator := iam.NewListGroupPoliciesPaginator(svc, &iam.ListGroupPoliciesInput{
 		GroupName: groupname,
-	}
-	resp, err := svc.ListGroupPolicies(context.TODO(), params)
-	if err != nil {
-		panic(err)
-	}
-	if len(resp.PolicyNames) > 0 {
-		for _, policyname := range resp.PolicyNames {
+	})
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(context.TODO())
+		if err != nil {
+			panic(err)
+		}
+		for _, policyname := range page.PolicyNames {
 			params := &iam.GetGroupPolicyInput{
 				PolicyName: aws.String(policyname),
 				GroupName:  groupname,
@@ -98,7 +128,7 @@ func GetGroupPoliciesMapForGroup(groupname *string, svc *iam.Client) map[string]
 // GetGroupPoliciesMapForGroups retrieves all of the policies for the provided
 // slice of groups, where the key is the name of the policy and the value is the
 // json policy document
-func GetGroupPoliciesMapForGroups(groups []string, svc *iam.Client) map[string]string {
+func GetGroupPoliciesMapForGroups(groups []string, svc IAMClient) map[string]string {
 	result := make(map[string]string)
 	for _, group := range groups {
 		groupmap := GetGroupPoliciesMapForGroup(&group, svc)
@@ -110,17 +140,18 @@ func GetGroupPoliciesMapForGroups(groups []string, svc *iam.Client) map[string]s
 // GetAttachedPoliciesMapForUser retrieves a map of attached policies for the
 // provided IAM username where the key is the name of the policy and the value
 // is the actual json policy document
-func GetAttachedPoliciesMapForUser(username *string, svc *iam.Client) map[string]string {
+func GetAttachedPoliciesMapForUser(username *string, svc IAMClient) map[string]string {
 	result := make(map[string]string)
-	params := &iam.ListAttachedUserPoliciesInput{
+
+	paginator := iam.NewListAttachedUserPoliciesPaginator(svc, &iam.ListAttachedUserPoliciesInput{
 		UserName: username,
-	}
-	resp, err := svc.ListAttachedUserPolicies(context.TODO(), params)
-	if err != nil {
-		panic(err)
-	}
-	if len(resp.AttachedPolicies) > 0 {
-		for _, policy := range resp.AttachedPolicies {
+	})
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(context.TODO())
+		if err != nil {
+			panic(err)
+		}
+		for _, policy := range page.AttachedPolicies {
 			result[*policy.PolicyName] = getAttachedPolicy(policy.PolicyArn, svc)
 		}
 	}
@@ -130,17 +161,18 @@ func GetAttachedPoliciesMapForUser(username *string, svc *iam.Client) map[string
 // GetAttachedPoliciesMapForGroup retrieves a map of attached policies for the
 // provided IAM groupname where the key is the name of the policy and the value
 // is the actual json policy document
-func GetAttachedPoliciesMapForGroup(groupname *string, svc *iam.Client) map[string]string {
+func GetAttachedPoliciesMapForGroup(groupname *string, svc IAMClient) map[string]string {
 	result := make(map[string]string)
-	params := &iam.ListAttachedGroupPoliciesInput{
+
+	paginator := iam.NewListAttachedGroupPoliciesPaginator(svc, &iam.ListAttachedGroupPoliciesInput{
 		GroupName: groupname,
-	}
-	resp, err := svc.ListAttachedGroupPolicies(context.TODO(), params)
-	if err != nil {
-		panic(err)
-	}
-	if len(resp.AttachedPolicies) > 0 {
-		for _, policy := range resp.AttachedPolicies {
+	})
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(context.TODO())
+		if err != nil {
+			panic(err)
+		}
+		for _, policy := range page.AttachedPolicies {
 			result[*policy.PolicyName] = getAttachedPolicy(policy.PolicyArn, svc)
 		}
 	}
@@ -150,7 +182,7 @@ func GetAttachedPoliciesMapForGroup(groupname *string, svc *iam.Client) map[stri
 // GetAttachedPoliciesMapForGroups retrieves a map of attached policies for the
 // slice of IAM groupnames where the key is the name of the policy and the value
 // is the actual json policy document
-func GetAttachedPoliciesMapForGroups(groups []string, svc *iam.Client) map[string]string {
+func GetAttachedPoliciesMapForGroups(groups []string, svc IAMClient) map[string]string {
 	result := make(map[string]string)
 	for _, group := range groups {
 		groupmap := GetAttachedPoliciesMapForGroup(&group, svc)
@@ -161,19 +193,19 @@ func GetAttachedPoliciesMapForGroups(groups []string, svc *iam.Client) map[strin
 
 // GetGroupNameSliceForUser retrieves a slice of all the groups the provided
 // IAM username belongs to
-func GetGroupNameSliceForUser(username *string, svc *iam.Client) []string {
-	params := &iam.ListGroupsForUserInput{
-		UserName: username,
-	}
-	resp, err := svc.ListGroupsForUser(context.TODO(), params)
+func GetGroupNameSliceForUser(username *string, svc IAMClient) []string {
+	var groups []string
 
-	if err != nil {
-		panic(err)
-	}
-	groups := make([]string, len(resp.Groups))
-	if len(resp.Groups) > 0 {
-		for counter, group := range resp.Groups {
-			groups[counter] = *group.GroupName
+	paginator := iam.NewListGroupsForUserPaginator(svc, &iam.ListGroupsForUserInput{
+		UserName: username,
+	})
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(context.TODO())
+		if err != nil {
+			panic(err)
+		}
+		for _, group := range page.Groups {
+			groups = append(groups, *group.GroupName)
 		}
 	}
 	return groups
@@ -181,7 +213,7 @@ func GetGroupNameSliceForUser(username *string, svc *iam.Client) []string {
 
 // GetAccountSummary retrieves the account summary map which contains high level
 // information about the root account
-func GetAccountSummary(svc *iam.Client) (map[string]int32, error) {
+func GetAccountSummary(svc IAMClient) (map[string]int32, error) {
 	input := &iam.GetAccountSummaryInput{}
 
 	result, err := svc.GetAccountSummary(context.TODO(), input)
@@ -195,20 +227,23 @@ func GetAccountSummary(svc *iam.Client) (map[string]int32, error) {
 	return result.SummaryMap, nil
 }
 
-func getUserList(svc *iam.Client) []types.User {
+func getUserList(svc IAMClient) []types.User {
 	if cachedUsers == nil {
-		resp, err := svc.ListUsers(context.TODO(), &iam.ListUsersInput{})
-		if err != nil {
-			panic(err)
+		paginator := iam.NewListUsersPaginator(svc, &iam.ListUsersInput{})
+		for paginator.HasMorePages() {
+			page, err := paginator.NextPage(context.TODO())
+			if err != nil {
+				panic(err)
+			}
+			cachedUsers = append(cachedUsers, page.Users...)
 		}
-		cachedUsers = resp.Users
 	}
 	return cachedUsers
 }
 
 // GetUserDetails collects detailed information about a user, consisting mostly
 // of the groups and policies it follows.
-func GetUserDetails(svc *iam.Client) []IAMUser {
+func GetUserDetails(svc IAMClient) []IAMUser {
 	users := getUserList(svc)
 	c := make(chan IAMUser)
 	userlist := make([]IAMUser, len(users))
@@ -232,31 +267,41 @@ func GetUserDetails(svc *iam.Client) []IAMUser {
 	return userlist
 }
 
-func getAllUsersInGroup(groupname string, svc *iam.Client) []string {
-	input := iam.GetGroupInput{
+func getAllUsersInGroup(groupname string, svc IAMClient) []string {
+	var result []string
+
+	paginator := iam.NewGetGroupPaginator(svc, &iam.GetGroupInput{
 		GroupName: &groupname,
-	}
-	resp, err := svc.GetGroup(context.TODO(), &input)
-	if err != nil {
-		panic(err)
-	}
-	result := []string{}
-	for _, user := range resp.Users {
-		result = append(result, *user.UserName)
+	})
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(context.TODO())
+		if err != nil {
+			panic(err)
+		}
+		for _, user := range page.Users {
+			result = append(result, *user.UserName)
+		}
 	}
 	return result
 }
 
 // GetGroupDetails collects detailed information about a group, consisting mostly
 // of the users and policies it follows.
-func GetGroupDetails(svc *iam.Client) []IAMGroup {
-	resp, err := svc.ListGroups(context.TODO(), &iam.ListGroupsInput{})
-	if err != nil {
-		panic(err)
+func GetGroupDetails(svc IAMClient) []IAMGroup {
+	var allGroups []types.Group
+
+	paginator := iam.NewListGroupsPaginator(svc, &iam.ListGroupsInput{})
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(context.TODO())
+		if err != nil {
+			panic(err)
+		}
+		allGroups = append(allGroups, page.Groups...)
 	}
+
 	c := make(chan IAMGroup)
-	grouplist := make([]IAMGroup, len(resp.Groups))
-	for _, group := range resp.Groups {
+	grouplist := make([]IAMGroup, len(allGroups))
+	for _, group := range allGroups {
 		go func(group types.Group) {
 			groupStruct := IAMGroup{
 				Name:  *group.GroupName,
@@ -268,7 +313,7 @@ func GetGroupDetails(svc *iam.Client) []IAMGroup {
 			c <- groupStruct
 		}(group)
 	}
-	for i := 0; i < len(resp.Groups); i++ {
+	for i := 0; i < len(allGroups); i++ {
 		grouplist[i] = <-c
 	}
 	return grouplist
@@ -301,7 +346,7 @@ func GetAccountAlias(svc *iam.Client, stsSvc *sts.Client) map[string]string {
 	return alias
 }
 
-func getAttachedPolicy(policyArn *string, svc *iam.Client) string {
+func getAttachedPolicy(policyArn *string, svc IAMClient) string {
 	params := &iam.GetPolicyInput{
 		PolicyArn: policyArn,
 	}
