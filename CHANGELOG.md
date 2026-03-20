@@ -15,6 +15,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Makefile target `install` for installing the application
 - Organized help output with categorized sections
 
+### Fixed
+
+- Role discovery account alias lookup now uses SSO-provided account names instead of IAM ListAccountAliases, which incorrectly returned the template profile's alias for all accounts (T-481)
+
 ### Changed
 
 - `clean` target now also removes coverage artifacts

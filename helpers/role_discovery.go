@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/service/iam"
 	"github.com/aws/aws-sdk-go-v2/service/sso"
 	"github.com/aws/aws-sdk-go-v2/service/sso/types"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
@@ -18,7 +17,6 @@ import (
 type RoleDiscovery struct {
 	ssoClient    *sso.Client
 	stsClient    *sts.Client
-	iamClient    *iam.Client
 	tokenCache   *SSOTokenCache
 	logger       Logger
 	accountCache map[string]string
@@ -39,15 +37,12 @@ func (dl *defaultLogger) Printf(format string, args ...any) {
 }
 
 // NewRoleDiscovery creates a new role discovery instance using OIDC tokens
-func NewRoleDiscovery(ssoClient *sso.Client, stsClient *sts.Client, iamClient *iam.Client) (*RoleDiscovery, error) {
+func NewRoleDiscovery(ssoClient *sso.Client, stsClient *sts.Client) (*RoleDiscovery, error) {
 	if ssoClient == nil {
 		return nil, NewValidationError("SSO client cannot be nil", nil)
 	}
 	if stsClient == nil {
 		return nil, NewValidationError("STS client cannot be nil", nil)
-	}
-	if iamClient == nil {
-		return nil, NewValidationError("IAM client cannot be nil", nil)
 	}
 
 	tokenCache, err := NewSSOTokenCache()
@@ -58,7 +53,6 @@ func NewRoleDiscovery(ssoClient *sso.Client, stsClient *sts.Client, iamClient *i
 	rd := &RoleDiscovery{
 		ssoClient:    ssoClient,
 		stsClient:    stsClient,
-		iamClient:    iamClient,
 		tokenCache:   tokenCache,
 		logger:       &defaultLogger{},
 		accountCache: make(map[string]string),
@@ -192,12 +186,16 @@ func (rd *RoleDiscovery) getRolesForAccount(ctx context.Context, token *CachedTo
 				accountName = *account.AccountId // Fallback to account ID
 			}
 
-			// Get account alias with fallback to account ID
-			accountAlias, err := rd.GetAccountAlias(*account.AccountId)
-			if err != nil {
-				rd.logger.Printf("Warning: failed to get account alias for %s: %v", *account.AccountId, err)
-				accountAlias = *account.AccountId // Fallback to account ID
+			// Cache the SSO-provided account name as the alias for this account.
+			// The SSO ListAccounts API provides per-account names, unlike IAM
+			// ListAccountAliases which only returns the current account's alias.
+			rd.cacheMutex.Lock()
+			if _, exists := rd.aliasCache[*account.AccountId]; !exists {
+				rd.aliasCache[*account.AccountId] = accountName
 			}
+			rd.cacheMutex.Unlock()
+
+			accountAlias, _ := rd.GetAccountAlias(*account.AccountId)
 
 			role := DiscoveredRole{
 				AccountID:         *account.AccountId,
@@ -244,9 +242,11 @@ func (rd *RoleDiscovery) GetAccountInfo(accountID string) (string, error) {
 	return accountID, nil
 }
 
-// GetAccountAlias retrieves the account alias for a given account ID
+// GetAccountAlias retrieves the account alias for a given account ID.
+// Aliases are populated from SSO ListAccounts data during role discovery,
+// which provides per-account names. Falls back to the account ID if no
+// alias has been cached.
 func (rd *RoleDiscovery) GetAccountAlias(accountID string) (string, error) {
-	// Check cache first
 	rd.cacheMutex.RLock()
 	if alias, exists := rd.aliasCache[accountID]; exists {
 		rd.cacheMutex.RUnlock()
@@ -254,37 +254,8 @@ func (rd *RoleDiscovery) GetAccountAlias(accountID string) (string, error) {
 	}
 	rd.cacheMutex.RUnlock()
 
-	ctx := context.TODO()
-
-	// Get account aliases from IAM
-	input := &iam.ListAccountAliasesInput{}
-	result, err := rd.iamClient.ListAccountAliases(ctx, input)
-	if err != nil {
-		// Cache the failure and return account ID as fallback
-		rd.cacheMutex.Lock()
-		rd.aliasCache[accountID] = accountID
-		rd.cacheMutex.Unlock()
-
-		return accountID, NewAPIError("failed to retrieve account alias", err).
-			WithContext("account_id", accountID).
-			WithContext("suggestion", "Ensure IAM permissions for ListAccountAliases")
-	}
-
-	// AWS accounts can have at most one alias
-	var alias string
-	if len(result.AccountAliases) > 0 {
-		alias = result.AccountAliases[0]
-	} else {
-		// No alias configured, use account ID
-		alias = accountID
-	}
-
-	// Cache the result
-	rd.cacheMutex.Lock()
-	rd.aliasCache[accountID] = alias
-	rd.cacheMutex.Unlock()
-
-	return alias, nil
+	// No cached alias — fall back to account ID
+	return accountID, nil
 }
 
 // ValidateTokenAccess validates that we can access SSO with the given profile

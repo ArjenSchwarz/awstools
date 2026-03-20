@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/service/iam"
 	"github.com/aws/aws-sdk-go-v2/service/sso"
 	"github.com/aws/aws-sdk-go-v2/service/sso/types"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
@@ -50,16 +49,6 @@ func (m *MockSSOClient) ListAccountRoles(ctx context.Context, params *sso.ListAc
 func (m *MockSSOClient) GetRoleCredentials(ctx context.Context, params *sso.GetRoleCredentialsInput, optFns ...func(*sso.Options)) (*sso.GetRoleCredentialsOutput, error) {
 	args := m.Called(ctx, params, optFns)
 	return args.Get(0).(*sso.GetRoleCredentialsOutput), args.Error(1)
-}
-
-// MockIAMClient is a mock IAM client for testing
-type MockIAMClient struct {
-	mock.Mock
-}
-
-func (m *MockIAMClient) ListAccountAliases(ctx context.Context, params *iam.ListAccountAliasesInput, optFns ...func(*iam.Options)) (*iam.ListAccountAliasesOutput, error) {
-	args := m.Called(ctx, params, optFns)
-	return args.Get(0).(*iam.ListAccountAliasesOutput), args.Error(1)
 }
 
 func (m *MockSSOClient) Logout(ctx context.Context, params *sso.LogoutInput, optFns ...func(*sso.Options)) (*sso.LogoutOutput, error) {
@@ -2668,6 +2657,82 @@ func TestProgressReporting(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestGetAccountAlias_UsesSSO_NotIAM verifies that GetAccountAlias returns
+// per-account aliases from the SSO-populated cache rather than calling IAM
+// (which would return the template profile's account alias for every account).
+// This is a regression test for T-481.
+func TestGetAccountAlias_UsesSSO_NotIAM(t *testing.T) {
+	rd := &RoleDiscovery{
+		logger:       &MockLogger{},
+		accountCache: make(map[string]string),
+		aliasCache:   make(map[string]string),
+	}
+
+	// Pre-populate cache as the SSO-based flow does during role discovery
+	rd.aliasCache["111111111111"] = "dev-account"
+	rd.aliasCache["222222222222"] = "staging-account"
+	rd.aliasCache["333333333333"] = "prod-account"
+
+	// Each account should return its own alias, not a shared one
+	alias1, err := rd.GetAccountAlias("111111111111")
+	assert.NoError(t, err)
+	assert.Equal(t, "dev-account", alias1)
+
+	alias2, err := rd.GetAccountAlias("222222222222")
+	assert.NoError(t, err)
+	assert.Equal(t, "staging-account", alias2)
+
+	alias3, err := rd.GetAccountAlias("333333333333")
+	assert.NoError(t, err)
+	assert.Equal(t, "prod-account", alias3)
+
+	// Uncached account should fall back to account ID
+	alias4, err := rd.GetAccountAlias("444444444444")
+	assert.NoError(t, err)
+	assert.Equal(t, "444444444444", alias4)
+}
+
+// TestGetAccountAlias_CrossAccountNotMislabeled verifies that different accounts
+// get different aliases — the bug was that all accounts received the template
+// profile's account alias because IAM ListAccountAliases always returns the
+// current account's alias. This is a regression test for T-481.
+func TestGetAccountAlias_CrossAccountNotMislabeled(t *testing.T) {
+	rd := &RoleDiscovery{
+		logger:       &MockLogger{},
+		accountCache: make(map[string]string),
+		aliasCache:   make(map[string]string),
+	}
+
+	// Simulate what getRolesForAccount does: populate alias cache from SSO AccountName
+	accounts := map[string]string{
+		"111111111111": "alpha-account",
+		"222222222222": "beta-account",
+		"333333333333": "gamma-account",
+	}
+	for id, name := range accounts {
+		rd.aliasCache[id] = name
+	}
+
+	// Verify each account gets its own distinct alias
+	aliases := make(map[string]string)
+	for id := range accounts {
+		alias, err := rd.GetAccountAlias(id)
+		require.NoError(t, err)
+		aliases[id] = alias
+	}
+
+	// All aliases must be distinct (the bug caused them all to be the same)
+	assert.Equal(t, 3, len(aliases))
+	assert.NotEqual(t, aliases["111111111111"], aliases["222222222222"])
+	assert.NotEqual(t, aliases["222222222222"], aliases["333333333333"])
+	assert.NotEqual(t, aliases["111111111111"], aliases["333333333333"])
+
+	// Each alias must match the SSO-provided account name
+	assert.Equal(t, "alpha-account", aliases["111111111111"])
+	assert.Equal(t, "beta-account", aliases["222222222222"])
+	assert.Equal(t, "gamma-account", aliases["333333333333"])
 }
 
 // Helper function for testing
