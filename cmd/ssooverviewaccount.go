@@ -31,7 +31,10 @@ func init() {
 func ssoOverviewByAccount(_ *cobra.Command, _ []string) {
 	awsConfig := config.DefaultAwsConfig(*settings)
 	resultTitle := "SSO Overview per account"
-	ssoInstance := helpers.GetSSOAccountInstance(awsConfig.SsoClient())
+	ssoInstance, err := helpers.GetSSOAccountInstance(awsConfig.SsoClient())
+	if err != nil {
+		panic(err)
+	}
 	keys := []string{"AccountID", permissionSetColumn, "Principal"}
 	if settings.IsVerbose() {
 		keys = append(keys, "ManagedPolicies", "InlinePolicy")
