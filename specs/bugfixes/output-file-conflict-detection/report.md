@@ -60,9 +60,9 @@ When `--output-file` is specified for the profile generator, three methods (`Val
 ## Verification
 
 **Automated:**
-- [ ] Regression test passes
-- [ ] Full test suite passes
-- [ ] Linters/validators pass
+- [x] Regression test passes
+- [x] Full test suite passes
+- [x] Linters/validators pass
 
 **Manual verification:**
 - Confirmed `AppendToConfig` already uses `pg.outputFile` correctly, establishing the intended pattern
