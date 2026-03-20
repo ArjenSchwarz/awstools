@@ -14,7 +14,7 @@ import (
 var cachedIAMPolicyDocuments = make(map[string]*IAMPolicyDocument)
 
 // GetRolesAndPolicies returns all the roles and and their attached policies
-func GetRolesAndPolicies(verbose bool, svc *iam.Client) ([]IAMRole, map[string]IAMPolicyDocument) {
+func GetRolesAndPolicies(verbose bool, svc IAMClient) ([]IAMRole, map[string]IAMPolicyDocument) {
 	roles := GetRoleDetails(verbose, svc)
 	policies := make(map[string]IAMPolicyDocument)
 	for _, role := range roles {
@@ -30,42 +30,46 @@ func GetRolesAndPolicies(verbose bool, svc *iam.Client) ([]IAMRole, map[string]I
 }
 
 // GetRoleDetails returns the list of roles in the account
-func GetRoleDetails(verbose bool, svc *iam.Client) []IAMRole {
+func GetRoleDetails(verbose bool, svc IAMClient) []IAMRole {
 	result := []IAMRole{}
-	resp, err := svc.ListRoles(context.TODO(), &iam.ListRolesInput{})
-	if err != nil {
-		log.Fatal(err.Error())
-	}
-	for _, role := range resp.Roles {
-		policydocument := IAMPolicyDocument{Type: IAMPolicyTypeAssumeRole}
-		decodeddocument, err := url.QueryUnescape(*role.AssumeRolePolicyDocument)
+
+	paginator := iam.NewListRolesPaginator(svc, &iam.ListRolesInput{})
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(context.TODO())
 		if err != nil {
-			panic(err)
+			log.Fatal(err.Error())
 		}
-		err = json.Unmarshal([]byte(decodeddocument), &policydocument)
-		if err != nil {
-			panic(err)
+		for _, role := range page.Roles {
+			policydocument := IAMPolicyDocument{Type: IAMPolicyTypeAssumeRole}
+			decodeddocument, err := url.QueryUnescape(*role.AssumeRolePolicyDocument)
+			if err != nil {
+				panic(err)
+			}
+			err = json.Unmarshal([]byte(decodeddocument), &policydocument)
+			if err != nil {
+				panic(err)
+			}
+			inlinepolicies := getInlinePoliciesForRole(*role.RoleName, verbose, svc)
+			attachedpolicies := getAttachedPoliciesForRole(*role.RoleName, verbose, svc)
+			rolestruct := IAMRole{
+				Name:             *role.RoleName,
+				ID:               *role.RoleId,
+				AssumeRolePolicy: policydocument,
+				Path:             *role.Path,
+				Role:             &role,
+				InlinePolicies:   inlinepolicies,
+				AttachedPolicies: attachedpolicies,
+				Type:             getRoleType(role),
+				Verbose:          verbose,
+			}
+			for _, policy := range rolestruct.InlinePolicies {
+				policy.AddRole(&rolestruct)
+			}
+			for _, policy := range rolestruct.AttachedPolicies {
+				policy.AddRole(&rolestruct)
+			}
+			result = append(result, rolestruct)
 		}
-		inlinepolicies := getInlinePoliciesForRole(*role.RoleName, verbose, svc)
-		attachedpolicies := getAttachedPoliciesForRole(*role.RoleName, verbose, svc)
-		rolestruct := IAMRole{
-			Name:             *role.RoleName,
-			ID:               *role.RoleId,
-			AssumeRolePolicy: policydocument,
-			Path:             *role.Path,
-			Role:             &role,
-			InlinePolicies:   inlinepolicies,
-			AttachedPolicies: attachedpolicies,
-			Type:             getRoleType(role),
-			Verbose:          verbose,
-		}
-		for _, policy := range rolestruct.InlinePolicies {
-			policy.AddRole(&rolestruct)
-		}
-		for _, policy := range rolestruct.AttachedPolicies {
-			policy.AddRole(&rolestruct)
-		}
-		result = append(result, rolestruct)
 	}
 	return result
 }
@@ -81,75 +85,81 @@ func getRoleType(role types.Role) string {
 	return IAMRoleTypeUserDefined
 }
 
-func getInlinePoliciesForRole(rolename string, verbose bool, svc *iam.Client) map[string]*IAMPolicyDocument {
-	input := &iam.ListRolePoliciesInput{RoleName: &rolename}
-	resp, err := svc.ListRolePolicies(context.TODO(), input)
-	if err != nil {
-		log.Fatal(err.Error())
-	}
+func getInlinePoliciesForRole(rolename string, verbose bool, svc IAMClient) map[string]*IAMPolicyDocument {
 	policies := make(map[string]*IAMPolicyDocument)
-	for _, policy := range resp.PolicyNames {
-		policyname := rolename + policy
-		if _, ok := cachedIAMPolicyDocuments[policyname]; !ok {
-			policydocument := IAMPolicyDocument{
-				Name: policy,
-				Type: IAMPolicyTypeInline,
-			}
-			if verbose {
-				detailinput := &iam.GetRolePolicyInput{
-					RoleName:   &rolename,
-					PolicyName: &policy,
-				}
-				detailresp, err := svc.GetRolePolicy(context.TODO(), detailinput)
-				if err != nil {
-					log.Fatal(err.Error())
-				}
 
-				decodeddocument, err := url.QueryUnescape(*detailresp.PolicyDocument)
-				if err != nil {
-					panic(err)
-				}
-				err = json.Unmarshal([]byte(decodeddocument), &policydocument)
-				if err != nil {
-					panic(err)
-				}
-			}
-			cachedIAMPolicyDocuments[policyname] = &policydocument
+	paginator := iam.NewListRolePoliciesPaginator(svc, &iam.ListRolePoliciesInput{RoleName: &rolename})
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(context.TODO())
+		if err != nil {
+			log.Fatal(err.Error())
 		}
-		policies[policyname] = cachedIAMPolicyDocuments[policyname]
+		for _, policy := range page.PolicyNames {
+			policyname := rolename + policy
+			if _, ok := cachedIAMPolicyDocuments[policyname]; !ok {
+				policydocument := IAMPolicyDocument{
+					Name: policy,
+					Type: IAMPolicyTypeInline,
+				}
+				if verbose {
+					detailinput := &iam.GetRolePolicyInput{
+						RoleName:   &rolename,
+						PolicyName: &policy,
+					}
+					detailresp, err := svc.GetRolePolicy(context.TODO(), detailinput)
+					if err != nil {
+						log.Fatal(err.Error())
+					}
+
+					decodeddocument, err := url.QueryUnescape(*detailresp.PolicyDocument)
+					if err != nil {
+						panic(err)
+					}
+					err = json.Unmarshal([]byte(decodeddocument), &policydocument)
+					if err != nil {
+						panic(err)
+					}
+				}
+				cachedIAMPolicyDocuments[policyname] = &policydocument
+			}
+			policies[policyname] = cachedIAMPolicyDocuments[policyname]
+		}
 	}
 	return policies
 }
 
 // getAttachedPoliciesForRole(rolename string, svc *iam.IAM) map[string]
-func getAttachedPoliciesForRole(rolename string, verbose bool, svc *iam.Client) map[string]*IAMPolicyDocument {
-	input := &iam.ListAttachedRolePoliciesInput{RoleName: &rolename}
-	resp, err := svc.ListAttachedRolePolicies(context.TODO(), input)
-	if err != nil {
-		log.Fatal(err.Error())
-	}
+func getAttachedPoliciesForRole(rolename string, verbose bool, svc IAMClient) map[string]*IAMPolicyDocument {
 	policies := make(map[string]*IAMPolicyDocument)
-	for _, policy := range resp.AttachedPolicies {
-		policyname := *policy.PolicyName
-		if _, ok := cachedIAMPolicyDocuments[policyname]; !ok {
-			policydocument := IAMPolicyDocument{
-				Type: IAMPolicyTypeAttached,
-				Name: policyname,
-			}
-			if verbose {
-				policystring := getAttachedPolicy(policy.PolicyArn, svc)
-				decodeddocument, err := url.QueryUnescape(policystring)
-				if err != nil {
-					panic(err)
-				}
-				err = json.Unmarshal([]byte(decodeddocument), &policydocument)
-				if err != nil {
-					panic(err)
-				}
-			}
-			cachedIAMPolicyDocuments[policyname] = &policydocument
+
+	paginator := iam.NewListAttachedRolePoliciesPaginator(svc, &iam.ListAttachedRolePoliciesInput{RoleName: &rolename})
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(context.TODO())
+		if err != nil {
+			log.Fatal(err.Error())
 		}
-		policies[policyname] = cachedIAMPolicyDocuments[policyname]
+		for _, policy := range page.AttachedPolicies {
+			policyname := *policy.PolicyName
+			if _, ok := cachedIAMPolicyDocuments[policyname]; !ok {
+				policydocument := IAMPolicyDocument{
+					Type: IAMPolicyTypeAttached,
+					Name: policyname,
+				}
+				if verbose {
+					policystring := getAttachedPolicy(policy.PolicyArn, svc)
+					decodeddocument, err := url.QueryUnescape(policystring)
+					if err != nil {
+						panic(err)
+					}
+					err = json.Unmarshal([]byte(decodeddocument), &policydocument)
+					if err != nil {
+						panic(err)
+					}
+				}
+				cachedIAMPolicyDocuments[policyname] = &policydocument
+			}
+			policies[policyname] = cachedIAMPolicyDocuments[policyname]
+		}
 	}
 	return policies
 }

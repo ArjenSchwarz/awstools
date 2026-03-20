@@ -179,7 +179,7 @@ func (user IAMUser) GetInheritedPolicies() map[string]string {
 }
 
 // HasAccessKeys checks if a user has access keys
-func (user IAMUser) HasAccessKeys(svc *iam.Client) bool {
+func (user IAMUser) HasAccessKeys(svc IAMClient) bool {
 	input := &iam.ListAccessKeysInput{
 		UserName: aws.String(user.Name),
 	}
@@ -192,7 +192,7 @@ func (user IAMUser) HasAccessKeys(svc *iam.Client) bool {
 }
 
 // GetLastAccessKeyDate returns the last date an access key was used
-func (user IAMUser) GetLastAccessKeyDate(svc *iam.Client) time.Time {
+func (user IAMUser) GetLastAccessKeyDate(svc IAMClient) time.Time {
 	input := &iam.ListAccessKeysInput{
 		UserName: aws.String(user.Name),
 	}
