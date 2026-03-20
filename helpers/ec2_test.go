@@ -1500,3 +1500,118 @@ func TestENILookupCache_NATGatewaysByENI_DistinctEntries(t *testing.T) {
 		_ = eniID
 	}
 }
+
+func TestGetSubnetRouteTable_ExplicitAssociation(t *testing.T) {
+	routeTables := []types.RouteTable{
+		{
+			RouteTableId: aws.String("rtb-main-vpc1"),
+			VpcId:        aws.String("vpc-111"),
+			Associations: []types.RouteTableAssociation{
+				{Main: aws.Bool(true)},
+			},
+		},
+		{
+			RouteTableId: aws.String("rtb-explicit"),
+			VpcId:        aws.String("vpc-111"),
+			Associations: []types.RouteTableAssociation{
+				{SubnetId: aws.String("subnet-aaa")},
+			},
+		},
+	}
+
+	rt := GetSubnetRouteTable("subnet-aaa", "vpc-111", routeTables)
+	if rt == nil {
+		t.Fatal("expected route table, got nil")
+	}
+	if *rt.RouteTableId != "rtb-explicit" {
+		t.Errorf("expected rtb-explicit, got %s", *rt.RouteTableId)
+	}
+}
+
+func TestGetSubnetRouteTable_MainRouteTableMatchesVPC(t *testing.T) {
+	// Two VPCs, each with its own main route table.
+	// subnet-bbb belongs to vpc-222 and has no explicit association.
+	// The function must return vpc-222's main route table, not vpc-111's.
+	routeTables := []types.RouteTable{
+		{
+			RouteTableId: aws.String("rtb-main-vpc1"),
+			VpcId:        aws.String("vpc-111"),
+			Associations: []types.RouteTableAssociation{
+				{Main: aws.Bool(true)},
+			},
+		},
+		{
+			RouteTableId: aws.String("rtb-main-vpc2"),
+			VpcId:        aws.String("vpc-222"),
+			Associations: []types.RouteTableAssociation{
+				{Main: aws.Bool(true)},
+			},
+		},
+	}
+
+	rt := GetSubnetRouteTable("subnet-bbb", "vpc-222", routeTables)
+	if rt == nil {
+		t.Fatal("expected route table, got nil")
+	}
+	if *rt.RouteTableId != "rtb-main-vpc2" {
+		t.Errorf("expected rtb-main-vpc2 (vpc-222's main RT), got %s", *rt.RouteTableId)
+	}
+}
+
+func TestGetSubnetRouteTable_NoMatchReturnsNil(t *testing.T) {
+	routeTables := []types.RouteTable{
+		{
+			RouteTableId: aws.String("rtb-main-vpc1"),
+			VpcId:        aws.String("vpc-111"),
+			Associations: []types.RouteTableAssociation{
+				{Main: aws.Bool(true)},
+			},
+		},
+	}
+
+	// Subnet belongs to vpc-999 which has no route tables at all
+	rt := GetSubnetRouteTable("subnet-zzz", "vpc-999", routeTables)
+	if rt != nil {
+		t.Errorf("expected nil for unknown VPC, got %s", *rt.RouteTableId)
+	}
+}
+
+func TestIsPublicSubnet_UsesCorrectVPCMainRouteTable(t *testing.T) {
+	// vpc-111 has a public main route table (with igw)
+	// vpc-222 has a private main route table (no igw)
+	// subnet-private belongs to vpc-222 with no explicit association
+	// Without the VPC constraint, it would incorrectly pick vpc-111's main RT and report public
+	routeTables := []types.RouteTable{
+		{
+			RouteTableId: aws.String("rtb-main-vpc1"),
+			VpcId:        aws.String("vpc-111"),
+			Associations: []types.RouteTableAssociation{
+				{Main: aws.Bool(true)},
+			},
+			Routes: []types.Route{
+				{
+					DestinationCidrBlock: aws.String("0.0.0.0/0"),
+					GatewayId:            aws.String("igw-12345678"),
+				},
+			},
+		},
+		{
+			RouteTableId: aws.String("rtb-main-vpc2"),
+			VpcId:        aws.String("vpc-222"),
+			Associations: []types.RouteTableAssociation{
+				{Main: aws.Bool(true)},
+			},
+			Routes: []types.Route{
+				{
+					DestinationCidrBlock: aws.String("10.0.0.0/16"),
+					GatewayId:            aws.String("local"),
+				},
+			},
+		},
+	}
+
+	result := isPublicSubnet("subnet-private", "vpc-222", routeTables)
+	if result {
+		t.Error("subnet in vpc-222 should be private, but was classified as public (wrong main route table used)")
+	}
+}
