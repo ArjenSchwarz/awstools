@@ -193,7 +193,7 @@ func (instance *SSOInstance) getPermissionSetDetails(permissionsetarn string, sv
 
 func (permissionset *SSOPermissionSet) addAccountInfo(svc SSOAdminAPI) error {
 	maxresults := int32(100)
-	var allAccountIds []string
+	var allAccountIDs []string
 	var nextToken *string
 
 	for {
@@ -206,14 +206,14 @@ func (permissionset *SSOPermissionSet) addAccountInfo(svc SSOAdminAPI) error {
 		if err != nil {
 			return fmt.Errorf("failed to list accounts for permission set %s: %w", permissionset.Arn, err)
 		}
-		allAccountIds = append(allAccountIds, provisionedaccounts.AccountIds...)
+		allAccountIDs = append(allAccountIDs, provisionedaccounts.AccountIds...)
 		nextToken = provisionedaccounts.NextToken
 		if nextToken == nil {
 			break
 		}
 	}
 
-	for _, accountnr := range allAccountIds {
+	for _, accountnr := range allAccountIDs {
 		account := SSOAccount{
 			AccountID: accountnr,
 		}
