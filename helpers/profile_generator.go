@@ -191,8 +191,8 @@ func (pg *ProfileGenerator) initializeConflictDetector() error {
 		return nil // Already initialized
 	}
 
-	// Load AWS config file
-	configFile, err := LoadAWSConfigFile("")
+	// Load AWS config file from output file path (falls back to default when empty)
+	configFile, err := LoadAWSConfigFile(pg.outputFile)
 	if err != nil {
 		return NewFileSystemError("failed to load AWS config file", err)
 	}
@@ -211,8 +211,8 @@ func (pg *ProfileGenerator) initializeConflictDetector() error {
 
 // ValidateTemplateProfile validates the template profile configuration
 func (pg *ProfileGenerator) ValidateTemplateProfile() (*TemplateProfile, error) {
-	// Load AWS config file
-	configFile, err := LoadAWSConfigFile("")
+	// Load AWS config file from output file path (falls back to default when empty)
+	configFile, err := LoadAWSConfigFile(pg.outputFile)
 	if err != nil {
 		return nil, NewFileSystemError("failed to load AWS config file", err)
 	}
@@ -276,8 +276,8 @@ func (pg *ProfileGenerator) GenerateProfiles(templateProfile *TemplateProfile, d
 		return nil, err
 	}
 
-	// Load existing profiles to detect conflicts
-	configFile, err := LoadAWSConfigFile("")
+	// Load existing profiles from output file to detect conflicts (falls back to default when empty)
+	configFile, err := LoadAWSConfigFile(pg.outputFile)
 	if err != nil {
 		return nil, NewFileSystemError("failed to load AWS config file", err)
 	}

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Profile generator now reads from `--output-file` for conflict detection, template validation, and profile generation instead of always reading the default AWS config file (T-538)
+
 ### Added
 
 - Makefile targets for code quality: `fmt`, `vet`, `modernize`, `check`, `security-scan`
@@ -14,6 +18,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Makefile targets for dependency management: `deps-tidy`, `deps-update`
 - Makefile target `install` for installing the application
 - Organized help output with categorized sections
+
+### Fixed
+
+- ENI cache pointer reuse in `batchFetchVPCEndpoints` and `batchFetchNATGateways` — use index-based iteration to store pointers to slice elements instead of loop variables (T-456)
 
 ### Changed
 

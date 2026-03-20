@@ -2670,6 +2670,196 @@ func TestProgressReporting(t *testing.T) {
 	}
 }
 
+// TestOutputFileUsedForConflictDetection verifies that when outputFile is set,
+// initializeConflictDetector reads from the output file rather than the default
+// config file. This is a regression test for T-538.
+func TestOutputFileUsedForConflictDetection(t *testing.T) {
+	// Create the "default" config file with NO conflicting profiles.
+	// Use a non-SSO profile so there's no SSO-based match.
+	defaultConfig := CreateTempConfigFile(t, `[profile some-unrelated-profile]
+region = us-west-2
+`)
+
+	// Create the output file with an existing SSO profile that WILL conflict
+	// via same-name detection.
+	outputDir := t.TempDir()
+	outputPath := filepath.Join(outputDir, "custom-config")
+	outputContent := `[profile test-account-PowerUserAccess]
+region = us-east-1
+sso_start_url = https://example.awsapps.com/start
+sso_region = us-east-1
+sso_account_id = 123456789012
+sso_role_name = PowerUserAccess
+sso_session = test-session
+`
+	err := os.WriteFile(outputPath, []byte(outputContent), 0600)
+	require.NoError(t, err)
+
+	// Point AWS_CONFIG_FILE to the default config (no conflicting profiles)
+	oldValue := os.Getenv("AWS_CONFIG_FILE")
+	defer func() {
+		if oldValue != "" {
+			os.Setenv("AWS_CONFIG_FILE", oldValue)
+		} else {
+			os.Unsetenv("AWS_CONFIG_FILE")
+		}
+	}()
+	os.Setenv("AWS_CONFIG_FILE", defaultConfig)
+
+	// Create generator with outputFile pointing to the file WITH conflicts
+	pg, err := NewProfileGenerator("template-profile", "{account_name}-{role_name}", false, outputPath, ConflictPrompt, aws.Config{})
+	require.NoError(t, err)
+
+	// Initialize conflict detector — should read from outputPath, not defaultConfig
+	err = pg.initializeConflictDetector()
+	require.NoError(t, err)
+	require.NotNil(t, pg.conflictDetector)
+
+	// Detect conflicts with a role whose generated name matches a profile in the output file
+	conflicts, err := pg.conflictDetector.DetectConflicts([]DiscoveredRole{
+		{
+			AccountID:         "123456789012",
+			AccountName:       "test-account",
+			PermissionSetName: "PowerUserAccess",
+			RoleName:          "PowerUserAccess",
+		},
+	})
+	require.NoError(t, err)
+
+	// Should detect a conflict because the output file has "test-account-PowerUserAccess"
+	// If the bug is present (reading default config), this would find zero conflicts
+	assert.NotEmpty(t, conflicts, "conflict detector should read from output file, not default config")
+}
+
+// TestOutputFileUsedForValidateTemplateProfile verifies that when outputFile is set,
+// ValidateTemplateProfile reads from the output file rather than the default config.
+// This is a regression test for T-538.
+func TestOutputFileUsedForValidateTemplateProfile(t *testing.T) {
+	// Create the "default" config file with NO template profile
+	defaultConfig := CreateTempConfigFile(t, `[profile unrelated-profile]
+region = us-west-2
+`)
+
+	// Create the output file that HAS the template profile
+	outputDir := t.TempDir()
+	outputPath := filepath.Join(outputDir, "custom-config")
+	outputContent := `[profile my-sso-template]
+region = us-east-1
+sso_start_url = https://example.awsapps.com/start
+sso_region = us-east-1
+sso_account_id = 123456789012
+sso_role_name = PowerUserAccess
+sso_session = test-session
+`
+	err := os.WriteFile(outputPath, []byte(outputContent), 0600)
+	require.NoError(t, err)
+
+	// Point AWS_CONFIG_FILE to default config (no template profile)
+	oldValue := os.Getenv("AWS_CONFIG_FILE")
+	defer func() {
+		if oldValue != "" {
+			os.Setenv("AWS_CONFIG_FILE", oldValue)
+		} else {
+			os.Unsetenv("AWS_CONFIG_FILE")
+		}
+	}()
+	os.Setenv("AWS_CONFIG_FILE", defaultConfig)
+
+	// Create generator with outputFile pointing to the file WITH template
+	pg, err := NewProfileGenerator("my-sso-template", "{account_name}-{role_name}", false, outputPath, ConflictPrompt, aws.Config{})
+	require.NoError(t, err)
+
+	// ValidateTemplateProfile should find the template in outputPath
+	// If the bug is present, this would fail with "template profile not found"
+	tp, err := pg.ValidateTemplateProfile()
+	assert.NoError(t, err, "ValidateTemplateProfile should read from output file, not default config")
+	if tp != nil {
+		assert.Equal(t, "my-sso-template", tp.Name)
+	}
+}
+
+// TestOutputFileUsedForGenerateProfiles verifies that when outputFile is set,
+// GenerateProfiles reads existing profiles from the output file for conflict
+// resolution rather than the default config. This is a regression test for T-538.
+func TestOutputFileUsedForGenerateProfiles(t *testing.T) {
+	// Create the "default" config file — no conflicting profiles here
+	defaultConfig := CreateTempConfigFile(t, `[profile template-profile]
+region = us-east-1
+sso_start_url = https://example.awsapps.com/start
+sso_region = us-east-1
+sso_account_id = 123456789012
+sso_role_name = PowerUserAccess
+sso_session = test-session
+`)
+
+	// Create the output file with a profile name that would collide
+	outputDir := t.TempDir()
+	outputPath := filepath.Join(outputDir, "custom-config")
+	outputContent := `[profile template-profile]
+region = us-east-1
+sso_start_url = https://example.awsapps.com/start
+sso_region = us-east-1
+sso_account_id = 123456789012
+sso_role_name = PowerUserAccess
+sso_session = test-session
+
+[profile test-account-PowerUserAccess]
+region = us-east-1
+sso_start_url = https://example.awsapps.com/start
+sso_region = us-east-1
+sso_session = test-session
+`
+	err := os.WriteFile(outputPath, []byte(outputContent), 0600)
+	require.NoError(t, err)
+
+	// Point AWS_CONFIG_FILE to default config
+	oldValue := os.Getenv("AWS_CONFIG_FILE")
+	defer func() {
+		if oldValue != "" {
+			os.Setenv("AWS_CONFIG_FILE", oldValue)
+		} else {
+			os.Unsetenv("AWS_CONFIG_FILE")
+		}
+	}()
+	os.Setenv("AWS_CONFIG_FILE", defaultConfig)
+
+	templateProfile := &TemplateProfile{
+		Name:        "template-profile",
+		Region:      "us-east-1",
+		SSOStartURL: "https://example.awsapps.com/start",
+		SSORegion:   "us-east-1",
+		SSOSession:  "test-session",
+		IsSSO:       true,
+	}
+
+	discoveredRoles := []DiscoveredRole{
+		{
+			AccountID:         "123456789012",
+			AccountName:       "test-account",
+			AccountAlias:      "test-alias",
+			PermissionSetName: "PowerUserAccess",
+			RoleName:          "PowerUserAccess",
+		},
+	}
+
+	// Create generator with outputFile
+	pg, err := NewProfileGenerator("template-profile", "{account_name}-{role_name}", false, outputPath, ConflictPrompt, aws.Config{})
+	require.NoError(t, err)
+
+	// GenerateProfiles should detect the name collision in the output file
+	// and generate a suffixed name (e.g., "test-account-PowerUserAccess-1")
+	profiles, err := pg.GenerateProfiles(templateProfile, discoveredRoles)
+	require.NoError(t, err)
+	require.Len(t, profiles, 1)
+
+	// The profile name should be different from "test-account-PowerUserAccess"
+	// because that name already exists in the output file.
+	// If the bug is present, it would read the default config (no collision)
+	// and return "test-account-PowerUserAccess" without a suffix.
+	assert.NotEqual(t, "test-account-PowerUserAccess", profiles[0].Name,
+		"GenerateProfiles should detect name collisions in the output file, not default config")
+}
+
 // Helper function for testing
 func contains(slice []string, item string) bool {
 	return slices.Contains(slice, item)
