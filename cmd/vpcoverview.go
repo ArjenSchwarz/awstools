@@ -79,7 +79,7 @@ func vpcOverview(_ *cobra.Command, _ []string) {
 			subnetDisplay := getResourceDisplayName(subnet.ID, subnet.Tags)
 
 			// Get route table information for this subnet
-			routeTable := helpers.GetSubnetRouteTable(subnet.ID, routeTables)
+			routeTable := helpers.GetSubnetRouteTable(subnet.ID, subnet.VPCId, routeTables)
 			routeTableName, routes := helpers.FormatRouteTableInfo(routeTable)
 
 			content := make(map[string]any)
