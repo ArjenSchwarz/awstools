@@ -1576,6 +1576,33 @@ func TestGetSubnetRouteTable_NoMatchReturnsNil(t *testing.T) {
 	}
 }
 
+func TestIsValidInstanceID(t *testing.T) {
+	tests := []struct {
+		id    string
+		valid bool
+	}{
+		{"i-1234567890abcdef0", true},   // 17-char hex (modern format)
+		{"i-12345678", true},            // 8-char hex (legacy format)
+		{"i-abcdef1234567890a", true},   // 17-char hex
+		{"i-abcdef12", true},            // 8-char hex
+		{"", false},                     // empty
+		{"i-", false},                   // prefix only
+		{"i-123", false},                // too short
+		{"i-1234567890abcdef0a", false}, // too long
+		{"i-ABCDEF12", false},           // uppercase not valid
+		{"i-1234567g", false},           // non-hex character
+		{"vol-12345678", false},         // wrong prefix
+		{"not-an-id", false},            // totally wrong
+	}
+
+	for _, tt := range tests {
+		got := isValidInstanceID(tt.id)
+		if got != tt.valid {
+			t.Errorf("isValidInstanceID(%q) = %v, want %v", tt.id, got, tt.valid)
+		}
+	}
+}
+
 func TestIsPublicSubnet_UsesCorrectVPCMainRouteTable(t *testing.T) {
 	// vpc-111 has a public main route table (with igw)
 	// vpc-222 has a private main route table (no igw)

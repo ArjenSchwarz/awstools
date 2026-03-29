@@ -2,9 +2,12 @@ package helpers
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"log"
 	"net"
 	"os"
+	"regexp"
 	"slices"
 	"sort"
 	"strings"
@@ -12,6 +15,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
+	"github.com/aws/smithy-go"
 )
 
 // ENI and service type constants
@@ -1413,41 +1417,102 @@ func (cache *ENILookupCache) batchFetchVPCEndpoints(svc *ec2.Client, vpcIDs map[
 	}
 }
 
+// instanceIDPattern matches valid EC2 instance IDs (i- followed by 8 or 17 hex chars).
+var instanceIDPattern = regexp.MustCompile(`^i-[0-9a-f]{8}([0-9a-f]{9})?$`)
+
+// isValidInstanceID returns true if the ID matches the EC2 instance ID format.
+func isValidInstanceID(id string) bool {
+	return instanceIDPattern.MatchString(id)
+}
+
+// isInstanceIDError returns true if the error is an InvalidInstanceID API error.
+func isInstanceIDError(err error) bool {
+	var apiErr smithy.APIError
+	if errors.As(err, &apiErr) {
+		code := apiErr.ErrorCode()
+		return code == "InvalidInstanceID.NotFound" || code == "InvalidInstanceID.Malformed"
+	}
+	return false
+}
+
 // batchFetchInstanceNames fetches all instance names for the given instances
 func (cache *ENILookupCache) batchFetchInstanceNames(svc *ec2.Client, instanceIDs map[string]bool) {
 	if len(instanceIDs) == 0 {
 		return
 	}
 
-	// Convert instance IDs to slice for API call
+	// Pre-filter: only keep validly-formatted instance IDs
 	instanceIDList := make([]string, 0, len(instanceIDs))
 	for instanceID := range instanceIDs {
-		instanceIDList = append(instanceIDList, instanceID)
+		if isValidInstanceID(instanceID) {
+			instanceIDList = append(instanceIDList, instanceID)
+		} else {
+			log.Printf("Skipping invalid instance ID format: %s", instanceID)
+		}
+	}
+	if len(instanceIDList) == 0 {
+		return
 	}
 
 	// Fetch all instances in batches (DescribeInstances filter limit)
 	const batchSize = 100
 	for i := 0; i < len(instanceIDList); i += batchSize {
 		end := min(i+batchSize, len(instanceIDList))
+		batch := instanceIDList[i:end]
 
+		cache.describeInstanceBatch(svc, batch)
+	}
+}
+
+// describeInstanceBatch fetches instance names for a single batch.
+// On InvalidInstanceID errors it falls back to individual lookups.
+func (cache *ENILookupCache) describeInstanceBatch(svc *ec2.Client, ids []string) {
+	params := &ec2.DescribeInstancesInput{
+		InstanceIds: ids,
+	}
+
+	paginator := ec2.NewDescribeInstancesPaginator(svc, params)
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(context.TODO())
+		if err != nil {
+			if isInstanceIDError(err) {
+				log.Printf("Some instance IDs not found in batch, falling back to individual lookups")
+				cache.describeInstancesIndividually(svc, ids)
+				return
+			}
+			log.Printf("Error describing instances: %v", err)
+			return
+		}
+		cache.extractInstanceNames(page)
+	}
+}
+
+// describeInstancesIndividually looks up each instance ID one at a time,
+// gracefully skipping any that return errors.
+func (cache *ENILookupCache) describeInstancesIndividually(svc *ec2.Client, ids []string) {
+	for _, id := range ids {
 		params := &ec2.DescribeInstancesInput{
-			InstanceIds: instanceIDList[i:end],
+			InstanceIds: []string{id},
 		}
 
 		paginator := ec2.NewDescribeInstancesPaginator(svc, params)
 		for paginator.HasMorePages() {
 			page, err := paginator.NextPage(context.TODO())
 			if err != nil {
-				// If an instance doesn't exist, continue with others
+				log.Printf("Skipping instance %s: %v", id, err)
 				break
 			}
+			cache.extractInstanceNames(page)
+		}
+	}
+}
 
-			for _, reservation := range page.Reservations {
-				for _, instance := range reservation.Instances {
-					if instance.InstanceId != nil {
-						cache.InstanceNames[*instance.InstanceId] = getNameFromTags(instance.Tags)
-					}
-				}
+// extractInstanceNames populates the cache from a DescribeInstances response.
+func (cache *ENILookupCache) extractInstanceNames(resp *ec2.DescribeInstancesOutput) {
+	for _, reservation := range resp.Reservations {
+		for _, instance := range reservation.Instances {
+			if instance.InstanceId != nil {
+				cache.InstanceNames[*instance.InstanceId] = getNameFromTags(instance.Tags)
 			}
 		}
 	}
