@@ -95,8 +95,8 @@ func getInlinePoliciesForRole(rolename string, verbose bool, svc IAMClient) map[
 			log.Fatal(err.Error())
 		}
 		for _, policy := range page.PolicyNames {
-			policyname := rolename + policy
-			if _, ok := cachedIAMPolicyDocuments[policyname]; !ok {
+			cacheKey := rolename + "/" + policy
+			if _, ok := cachedIAMPolicyDocuments[cacheKey]; !ok {
 				policydocument := IAMPolicyDocument{
 					Name: policy,
 					Type: IAMPolicyTypeInline,
@@ -120,9 +120,9 @@ func getInlinePoliciesForRole(rolename string, verbose bool, svc IAMClient) map[
 						panic(err)
 					}
 				}
-				cachedIAMPolicyDocuments[policyname] = &policydocument
+				cachedIAMPolicyDocuments[cacheKey] = &policydocument
 			}
-			policies[policyname] = cachedIAMPolicyDocuments[policyname]
+			policies[policy] = cachedIAMPolicyDocuments[cacheKey]
 		}
 	}
 	return policies
