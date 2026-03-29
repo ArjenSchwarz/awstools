@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"strings"
 	"sync"
 	"time"
 
@@ -311,15 +312,12 @@ func (rd *RoleDiscovery) isRetryableError(err error) bool {
 	return false
 }
 
-// containsAny checks if a string contains any of the provided substrings
+// containsAny checks if a string contains any of the provided substrings (case-insensitive)
 func containsAny(s string, substrings []string) bool {
+	lower := strings.ToLower(s)
 	for _, substring := range substrings {
-		if len(s) >= len(substring) {
-			for i := 0; i <= len(s)-len(substring); i++ {
-				if s[i:i+len(substring)] == substring {
-					return true
-				}
-			}
+		if strings.Contains(lower, strings.ToLower(substring)) {
+			return true
 		}
 	}
 	return false
