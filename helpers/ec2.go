@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"os"
 	"slices"
 	"sort"
 	"strings"
@@ -1570,7 +1571,7 @@ func FindIPAddressDetails(svc *ec2.Client, ipAddress string) IPFinderResult {
 	if len(enis) > 1 {
 		// Log warning about multiple matches - following awstools pattern of using panic for warnings
 		// This is a rare scenario but can happen in some edge cases
-		fmt.Printf("Warning: Multiple ENIs found with IP %s. Returning details for first ENI (%s)\n",
+		fmt.Fprintf(os.Stderr, "Warning: Multiple ENIs found with IP %s. Returning details for first ENI (%s)\n",
 			ipAddress, aws.ToString(enis[0].NetworkInterfaceId))
 	}
 
