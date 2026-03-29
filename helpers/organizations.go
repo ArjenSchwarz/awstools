@@ -64,36 +64,48 @@ func (entry *OrganizationEntry) findChildren(svc OrganizationsAPI) ([]Organizati
 		ParentId:  aws.String(entry.ID),
 		ChildType: types.ChildType(types.TargetTypeOrganizationalUnit),
 	}
-	ouchildren, err := svc.ListChildren(context.TODO(), ouinput)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list OU children of %s: %w", entry.ID, err)
-	}
-	for _, child := range ouchildren.Children {
-		ouchild, err := formatChild(child, svc)
+	for {
+		ouchildren, err := svc.ListChildren(context.TODO(), ouinput)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to list OU children of %s: %w", entry.ID, err)
 		}
-		ouchildChildren, err := ouchild.findChildren(svc)
-		if err != nil {
-			return nil, err
+		for _, child := range ouchildren.Children {
+			ouchild, err := formatChild(child, svc)
+			if err != nil {
+				return nil, err
+			}
+			ouchildChildren, err := ouchild.findChildren(svc)
+			if err != nil {
+				return nil, err
+			}
+			ouchild.Children = ouchildChildren
+			children = append(children, ouchild)
 		}
-		ouchild.Children = ouchildChildren
-		children = append(children, ouchild)
+		if ouchildren.NextToken == nil {
+			break
+		}
+		ouinput.NextToken = ouchildren.NextToken
 	}
 	accountinput := &organizations.ListChildrenInput{
 		ParentId:  aws.String(entry.ID),
 		ChildType: types.ChildType(types.TargetTypeAccount),
 	}
-	accountchildren, err := svc.ListChildren(context.TODO(), accountinput)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list account children of %s: %w", entry.ID, err)
-	}
-	for _, child := range accountchildren.Children {
-		accountchild, err := formatChild(child, svc)
+	for {
+		accountchildren, err := svc.ListChildren(context.TODO(), accountinput)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to list account children of %s: %w", entry.ID, err)
 		}
-		children = append(children, accountchild)
+		for _, child := range accountchildren.Children {
+			accountchild, err := formatChild(child, svc)
+			if err != nil {
+				return nil, err
+			}
+			children = append(children, accountchild)
+		}
+		if accountchildren.NextToken == nil {
+			break
+		}
+		accountinput.NextToken = accountchildren.NextToken
 	}
 	return children, nil
 }

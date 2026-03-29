@@ -255,6 +255,113 @@ func TestGetFullOrganization_Success(t *testing.T) {
 	assert.Equal(t, "Main Account", org.Children[1].Name)
 }
 
+// Regression tests for T-547: ListChildren pagination must collect all pages
+
+func TestFindChildren_PaginatesOUChildren(t *testing.T) {
+	ouCallCount := 0
+	mock := &mockOrganizationsClient{
+		ListChildrenFunc: func(_ context.Context, params *organizations.ListChildrenInput, _ ...func(*organizations.Options)) (*organizations.ListChildrenOutput, error) {
+			// Only paginate OU children for the root; child OUs have no children
+			if *params.ParentId == "r-root" && params.ChildType == orgtypes.ChildType(orgtypes.TargetTypeOrganizationalUnit) {
+				ouCallCount++
+				if params.NextToken == nil {
+					return &organizations.ListChildrenOutput{
+						Children: []orgtypes.Child{
+							{Id: aws.String("ou-page1"), Type: orgtypes.ChildType(orgtypes.TargetTypeOrganizationalUnit)},
+						},
+						NextToken: aws.String("token-page2"),
+					}, nil
+				}
+				if *params.NextToken == "token-page2" {
+					return &organizations.ListChildrenOutput{
+						Children: []orgtypes.Child{
+							{Id: aws.String("ou-page2"), Type: orgtypes.ChildType(orgtypes.TargetTypeOrganizationalUnit)},
+						},
+					}, nil
+				}
+			}
+			return &organizations.ListChildrenOutput{Children: []orgtypes.Child{}}, nil
+		},
+		DescribeOrganizationalUnitFunc: func(_ context.Context, params *organizations.DescribeOrganizationalUnitInput, _ ...func(*organizations.Options)) (*organizations.DescribeOrganizationalUnitOutput, error) {
+			return &organizations.DescribeOrganizationalUnitOutput{
+				OrganizationalUnit: &orgtypes.OrganizationalUnit{
+					Id:   params.OrganizationalUnitId,
+					Arn:  aws.String("arn:aws:organizations::123456789012:ou/" + *params.OrganizationalUnitId),
+					Name: aws.String("OU-" + *params.OrganizationalUnitId),
+				},
+			}, nil
+		},
+		DescribeAccountFunc: func(_ context.Context, params *organizations.DescribeAccountInput, _ ...func(*organizations.Options)) (*organizations.DescribeAccountOutput, error) {
+			return &organizations.DescribeAccountOutput{
+				Account: &orgtypes.Account{
+					Id:   params.AccountId,
+					Arn:  aws.String("arn:aws:organizations::123456789012:account/" + *params.AccountId),
+					Name: aws.String("Acct-" + *params.AccountId),
+				},
+			}, nil
+		},
+	}
+	entry := &OrganizationEntry{ID: "r-root"}
+
+	children, err := entry.findChildren(mock)
+	require.NoError(t, err)
+
+	// Must have collected OUs from both pages
+	ouChildren := 0
+	for _, c := range children {
+		if c.Type == string(orgtypes.TargetTypeOrganizationalUnit) {
+			ouChildren++
+		}
+	}
+	assert.Equal(t, 2, ouChildren, "should collect OU children from all pages")
+	assert.GreaterOrEqual(t, ouCallCount, 2, "should have called ListChildren at least twice for OUs")
+}
+
+func TestFindChildren_PaginatesAccountChildren(t *testing.T) {
+	callCount := 0
+	mock := &mockOrganizationsClient{
+		ListChildrenFunc: func(_ context.Context, params *organizations.ListChildrenInput, _ ...func(*organizations.Options)) (*organizations.ListChildrenOutput, error) {
+			if params.ChildType == orgtypes.ChildType(orgtypes.TargetTypeOrganizationalUnit) {
+				return &organizations.ListChildrenOutput{Children: []orgtypes.Child{}}, nil
+			}
+			// Account children: paginated across two pages
+			callCount++
+			if params.NextToken == nil {
+				return &organizations.ListChildrenOutput{
+					Children: []orgtypes.Child{
+						{Id: aws.String("111111111111"), Type: orgtypes.ChildType(orgtypes.TargetTypeAccount)},
+					},
+					NextToken: aws.String("acct-page2"),
+				}, nil
+			}
+			if *params.NextToken == "acct-page2" {
+				return &organizations.ListChildrenOutput{
+					Children: []orgtypes.Child{
+						{Id: aws.String("222222222222"), Type: orgtypes.ChildType(orgtypes.TargetTypeAccount)},
+					},
+				}, nil
+			}
+			return &organizations.ListChildrenOutput{Children: []orgtypes.Child{}}, nil
+		},
+		DescribeAccountFunc: func(_ context.Context, params *organizations.DescribeAccountInput, _ ...func(*organizations.Options)) (*organizations.DescribeAccountOutput, error) {
+			return &organizations.DescribeAccountOutput{
+				Account: &orgtypes.Account{
+					Id:   params.AccountId,
+					Arn:  aws.String("arn:aws:organizations::123456789012:account/" + *params.AccountId),
+					Name: aws.String("Acct-" + *params.AccountId),
+				},
+			}, nil
+		},
+	}
+	entry := &OrganizationEntry{ID: "r-root"}
+
+	children, err := entry.findChildren(mock)
+	require.NoError(t, err)
+
+	assert.Len(t, children, 2, "should collect accounts from all pages")
+	assert.GreaterOrEqual(t, callCount, 2, "should have called ListChildren at least twice for accounts")
+}
+
 func TestFindChildren_DescribeOUErrorDuringTraversal_ReturnsError(t *testing.T) {
 	mock := &mockOrganizationsClient{
 		ListChildrenFunc: func(_ context.Context, params *organizations.ListChildrenInput, _ ...func(*organizations.Options)) (*organizations.ListChildrenOutput, error) {
