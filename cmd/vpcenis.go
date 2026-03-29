@@ -6,6 +6,7 @@ import (
 	"github.com/ArjenSchwarz/awstools/config"
 	"github.com/ArjenSchwarz/awstools/helpers"
 	format "github.com/ArjenSchwarz/go-output"
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	"github.com/spf13/cobra"
 )
@@ -39,7 +40,7 @@ func enis(_ *cobra.Command, _ []string) {
 		output.Settings.SeparateTables = true
 		groups := splitBySubnet(interfaces)
 		for subnet, group := range groups {
-			printENIs(group, names, fmt.Sprintf("%s - %s: %s", resultTitle, getNameAndIDFromMap(*group[0].VpcId, names), getNameAndIDFromMap(subnet, names)), true)
+			printENIs(group, names, fmt.Sprintf("%s - %s: %s", resultTitle, getNameAndIDFromMap(aws.ToString(group[0].VpcId), names), getNameAndIDFromMap(subnet, names)), true)
 		}
 	} else {
 		printENIs(interfaces, names, resultTitle, false)
@@ -62,18 +63,20 @@ func printENIs(interfaces []types.NetworkInterface, names map[string]string, res
 	for _, netinterface := range interfaces {
 		content := make(map[string]any)
 		iparray := make([]string, 0)
-		if netinterface.Association != nil {
+		if netinterface.Association != nil && netinterface.Association.PublicIp != nil {
 			iparray = append(iparray, *netinterface.Association.PublicIp)
 		}
 		for _, ips := range netinterface.PrivateIpAddresses {
-			iparray = append(iparray, *ips.PrivateIpAddress)
+			if ips.PrivateIpAddress != nil {
+				iparray = append(iparray, *ips.PrivateIpAddress)
+			}
 		}
-		content["ENI"] = *netinterface.NetworkInterfaceId
+		content["ENI"] = aws.ToString(netinterface.NetworkInterfaceId)
 		content["Type"] = netinterface.InterfaceType
 		content["Attachment"] = getNameAndIDFromMap(getAttachment(netinterface), names)
 		content["IPs"] = iparray
-		content["VPC"] = getNameAndIDFromMap(*netinterface.VpcId, names)
-		content["Subnet"] = getNameAndIDFromMap(*netinterface.SubnetId, names)
+		content["VPC"] = getNameAndIDFromMap(aws.ToString(netinterface.VpcId), names)
+		content["Subnet"] = getNameAndIDFromMap(aws.ToString(netinterface.SubnetId), names)
 		output.AddContents(content)
 	}
 	output.AddToBuffer()
@@ -82,7 +85,8 @@ func printENIs(interfaces []types.NetworkInterface, names map[string]string, res
 func splitBySubnet(interfaces []types.NetworkInterface) map[string][]types.NetworkInterface {
 	result := make(map[string][]types.NetworkInterface)
 	for _, netinterface := range interfaces {
-		result[*netinterface.SubnetId] = append(result[*netinterface.SubnetId], netinterface)
+		subnetID := aws.ToString(netinterface.SubnetId)
+		result[subnetID] = append(result[subnetID], netinterface)
 	}
 	return result
 }
@@ -98,14 +102,14 @@ func getAttachment(netinterface types.NetworkInterface) string {
 	if netinterface.InterfaceType == types.NetworkInterfaceTypeNatGateway || netinterface.InterfaceType == "nat_gateway" {
 		natgw := helpers.GetNatGatewayFromNetworkInterface(netinterface, awsConfig.Ec2Client())
 		if natgw != nil {
-			return *natgw.NatGatewayId
+			return aws.ToString(natgw.NatGatewayId)
 		}
 		return ""
 	}
 	if netinterface.InterfaceType == types.NetworkInterfaceTypeVpcEndpoint {
 		endpoint := helpers.GetVPCEndpointFromNetworkInterface(netinterface, awsConfig.Ec2Client())
 		if endpoint != nil {
-			return fmt.Sprintf("%s (%s)", *endpoint.ServiceName, *endpoint.VpcEndpointId)
+			return fmt.Sprintf("%s (%s)", aws.ToString(endpoint.ServiceName), aws.ToString(endpoint.VpcEndpointId))
 		}
 		return ""
 	}

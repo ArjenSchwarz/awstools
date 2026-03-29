@@ -1060,7 +1060,7 @@ func mapNetworkInterfacesToIPs(networkInterfaces []types.NetworkInterface, subne
 // Uses cache to avoid repeated API calls
 func getENIUsageTypeOptimized(eni types.NetworkInterface, cache *ENILookupCache) string {
 	// Check if it's a VPC endpoint first (highest priority)
-	if _, exists := cache.EndpointsByENI[*eni.NetworkInterfaceId]; exists {
+	if _, exists := cache.EndpointsByENI[aws.ToString(eni.NetworkInterfaceId)]; exists {
 		return vpcEndpointType
 	}
 
@@ -1137,11 +1137,11 @@ func getENIUsageTypeOptimized(eni types.NetworkInterface, cache *ENILookupCache)
 // Uses cache to avoid repeated API calls
 func getENIAttachmentDetailsOptimized(eni types.NetworkInterface, cache *ENILookupCache) string {
 	// Priority 1: Check if it's a VPC endpoint (following JS script logic)
-	if endpoint, exists := cache.EndpointsByENI[*eni.NetworkInterfaceId]; exists {
+	if endpoint, exists := cache.EndpointsByENI[aws.ToString(eni.NetworkInterfaceId)]; exists {
 		// Extract service name (last part after dots, like 's3', 'ec2')
-		serviceParts := strings.Split(*endpoint.ServiceName, ".")
+		serviceParts := strings.Split(aws.ToString(endpoint.ServiceName), ".")
 		shortServiceName := serviceParts[len(serviceParts)-1]
-		return *endpoint.VpcEndpointId + " (" + shortServiceName + ")"
+		return aws.ToString(endpoint.VpcEndpointId) + " (" + shortServiceName + ")"
 	}
 
 	// Priority 2: Handle EC2 instances
@@ -1165,12 +1165,13 @@ func getENIAttachmentDetailsOptimized(eni types.NetworkInterface, cache *ENILook
 			return "Unknown Transit Gateway"
 
 		case types.NetworkInterfaceTypeNatGateway:
-			if natgw, exists := cache.NATGatewaysByENI[*eni.NetworkInterfaceId]; exists {
+			if natgw, exists := cache.NATGatewaysByENI[aws.ToString(eni.NetworkInterfaceId)]; exists {
 				natName := getNameFromTags(natgw.Tags)
-				if natName != "" && natName != *natgw.NatGatewayId {
-					return *natgw.NatGatewayId + " (" + natName + ")"
+				natgwID := aws.ToString(natgw.NatGatewayId)
+				if natName != "" && natName != natgwID {
+					return natgwID + " (" + natName + ")"
 				}
-				return *natgw.NatGatewayId
+				return natgwID
 			}
 			return "Unknown NAT Gateway"
 
@@ -1570,7 +1571,7 @@ func FindIPAddressDetails(svc *ec2.Client, ipAddress string) IPFinderResult {
 		// Log warning about multiple matches - following awstools pattern of using panic for warnings
 		// This is a rare scenario but can happen in some edge cases
 		fmt.Printf("Warning: Multiple ENIs found with IP %s. Returning details for first ENI (%s)\n",
-			ipAddress, *enis[0].NetworkInterfaceId)
+			ipAddress, aws.ToString(enis[0].NetworkInterfaceId))
 	}
 
 	// Process the first matching ENI
@@ -1653,13 +1654,13 @@ func getResourceNameAndID(eni types.NetworkInterface, cache *ENILookupCache) (st
 	}
 
 	// Handle VPC endpoints
-	if endpoint, exists := cache.EndpointsByENI[*eni.NetworkInterfaceId]; exists {
-		return attachmentDetails, *endpoint.VpcEndpointId
+	if endpoint, exists := cache.EndpointsByENI[aws.ToString(eni.NetworkInterfaceId)]; exists {
+		return attachmentDetails, aws.ToString(endpoint.VpcEndpointId)
 	}
 
 	// Handle NAT gateways
-	if natgw, exists := cache.NATGatewaysByENI[*eni.NetworkInterfaceId]; exists {
-		return attachmentDetails, *natgw.NatGatewayId
+	if natgw, exists := cache.NATGatewaysByENI[aws.ToString(eni.NetworkInterfaceId)]; exists {
+		return attachmentDetails, aws.ToString(natgw.NatGatewayId)
 	}
 
 	// Default to attachment details
