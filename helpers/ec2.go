@@ -1060,8 +1060,11 @@ func mapNetworkInterfacesToIPs(networkInterfaces []types.NetworkInterface, subne
 // Uses cache to avoid repeated API calls
 func getENIUsageTypeOptimized(eni types.NetworkInterface, cache *ENILookupCache) string {
 	// Check if it's a VPC endpoint first (highest priority)
-	if _, exists := cache.EndpointsByENI[aws.ToString(eni.NetworkInterfaceId)]; exists {
-		return vpcEndpointType
+	eniID := aws.ToString(eni.NetworkInterfaceId)
+	if eniID != "" {
+		if _, exists := cache.EndpointsByENI[eniID]; exists {
+			return vpcEndpointType
+		}
 	}
 
 	// Handle EC2 instances
@@ -1137,11 +1140,14 @@ func getENIUsageTypeOptimized(eni types.NetworkInterface, cache *ENILookupCache)
 // Uses cache to avoid repeated API calls
 func getENIAttachmentDetailsOptimized(eni types.NetworkInterface, cache *ENILookupCache) string {
 	// Priority 1: Check if it's a VPC endpoint (following JS script logic)
-	if endpoint, exists := cache.EndpointsByENI[aws.ToString(eni.NetworkInterfaceId)]; exists {
-		// Extract service name (last part after dots, like 's3', 'ec2')
-		serviceParts := strings.Split(aws.ToString(endpoint.ServiceName), ".")
-		shortServiceName := serviceParts[len(serviceParts)-1]
-		return aws.ToString(endpoint.VpcEndpointId) + " (" + shortServiceName + ")"
+	eniID := aws.ToString(eni.NetworkInterfaceId)
+	if eniID != "" {
+		if endpoint, exists := cache.EndpointsByENI[eniID]; exists {
+			serviceName := aws.ToString(endpoint.ServiceName)
+			serviceParts := strings.Split(serviceName, ".")
+			shortServiceName := serviceParts[len(serviceParts)-1]
+			return aws.ToString(endpoint.VpcEndpointId) + " (" + shortServiceName + ")"
+		}
 	}
 
 	// Priority 2: Handle EC2 instances
@@ -1165,13 +1171,15 @@ func getENIAttachmentDetailsOptimized(eni types.NetworkInterface, cache *ENILook
 			return "Unknown Transit Gateway"
 
 		case types.NetworkInterfaceTypeNatGateway:
-			if natgw, exists := cache.NATGatewaysByENI[aws.ToString(eni.NetworkInterfaceId)]; exists {
-				natName := getNameFromTags(natgw.Tags)
-				natgwID := aws.ToString(natgw.NatGatewayId)
-				if natName != "" && natName != natgwID {
-					return natgwID + " (" + natName + ")"
+			if eniID != "" {
+				if natgw, exists := cache.NATGatewaysByENI[eniID]; exists {
+					natGatewayID := aws.ToString(natgw.NatGatewayId)
+					natName := getNameFromTags(natgw.Tags)
+					if natName != "" && natName != natGatewayID {
+						return natGatewayID + " (" + natName + ")"
+					}
+					return natGatewayID
 				}
-				return natgwID
 			}
 			return "Unknown NAT Gateway"
 
@@ -1360,7 +1368,7 @@ func (cache *ENILookupCache) batchFetchVPCEndpoints(svc *ec2.Client, vpcIDs map[
 	for paginator.HasMorePages() {
 		page, err := paginator.NextPage(context.TODO())
 		if err != nil {
-			panic(err)
+			return
 		}
 		allEndpoints = append(allEndpoints, page.VpcEndpoints...)
 	}
@@ -1440,7 +1448,7 @@ func (cache *ENILookupCache) batchFetchNATGateways(svc *ec2.Client, vpcIDs map[s
 	for paginator.HasMorePages() {
 		page, err := paginator.NextPage(context.TODO())
 		if err != nil {
-			panic(err)
+			return
 		}
 		allGateways = append(allGateways, page.NatGateways...)
 	}
@@ -1481,7 +1489,7 @@ func (cache *ENILookupCache) batchFetchTransitGateways(svc *ec2.Client, vpcIDs m
 	for paginator.HasMorePages() {
 		page, err := paginator.NextPage(context.TODO())
 		if err != nil {
-			panic(err)
+			return
 		}
 		for _, attachment := range page.TransitGatewayVpcAttachments {
 			if attachment.VpcId != nil && attachment.TransitGatewayAttachmentId != nil {
@@ -1653,14 +1661,17 @@ func getResourceNameAndID(eni types.NetworkInterface, cache *ENILookupCache) (st
 		return attachmentDetails, *eni.Attachment.InstanceId
 	}
 
-	// Handle VPC endpoints
-	if endpoint, exists := cache.EndpointsByENI[aws.ToString(eni.NetworkInterfaceId)]; exists {
-		return attachmentDetails, aws.ToString(endpoint.VpcEndpointId)
-	}
+	eniID := aws.ToString(eni.NetworkInterfaceId)
+	if eniID != "" {
+		// Handle VPC endpoints
+		if endpoint, exists := cache.EndpointsByENI[eniID]; exists {
+			return attachmentDetails, aws.ToString(endpoint.VpcEndpointId)
+		}
 
-	// Handle NAT gateways
-	if natgw, exists := cache.NATGatewaysByENI[aws.ToString(eni.NetworkInterfaceId)]; exists {
-		return attachmentDetails, aws.ToString(natgw.NatGatewayId)
+		// Handle NAT gateways
+		if natgw, exists := cache.NATGatewaysByENI[eniID]; exists {
+			return attachmentDetails, aws.ToString(natgw.NatGatewayId)
+		}
 	}
 
 	// Default to attachment details
