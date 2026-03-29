@@ -6,6 +6,7 @@ import (
 	"github.com/ArjenSchwarz/awstools/config"
 	"github.com/ArjenSchwarz/awstools/helpers"
 	format "github.com/ArjenSchwarz/go-output"
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/spf13/cobra"
 )
 
@@ -95,9 +96,14 @@ func formatIPFinderOutput(result helpers.IPFinderResult) {
 		subnetDisplay = result.Subnet.ID
 	}
 
+	var eniID string
+	if result.ENI != nil {
+		eniID = aws.ToString(result.ENI.NetworkInterfaceId)
+	}
+
 	outputData := []map[string]any{
 		{"Field": "IP Address", "Value": result.IPAddress},
-		{"Field": "ENI ID", "Value": *result.ENI.NetworkInterfaceId},
+		{"Field": "ENI ID", "Value": eniID},
 		{"Field": "Resource Type", "Value": result.ResourceType},
 		{"Field": "Resource Name", "Value": resourceName},
 		{"Field": "Resource ID", "Value": result.ResourceID},
