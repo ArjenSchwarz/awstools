@@ -1615,3 +1615,83 @@ func TestIsPublicSubnet_UsesCorrectVPCMainRouteTable(t *testing.T) {
 		t.Error("subnet in vpc-222 should be private, but was classified as public (wrong main route table used)")
 	}
 }
+
+func TestHasInternetGatewayRoute_IPv6DefaultRoute(t *testing.T) {
+	// A route table with an IPv6 default route (::/0) via an internet gateway
+	// should be detected as having internet access.
+	routeTable := types.RouteTable{
+		RouteTableId: aws.String("rtb-ipv6"),
+		Routes: []types.Route{
+			{
+				DestinationIpv6CidrBlock: aws.String("::/0"),
+				GatewayId:                aws.String("igw-ipv6only"),
+			},
+		},
+	}
+	if !hasInternetGatewayRoute(routeTable) {
+		t.Error("route table with IPv6 ::/0 via igw should be detected as having internet gateway route")
+	}
+}
+
+func TestHasInternetGatewayRoute_DualStack(t *testing.T) {
+	// A dual-stack route table with both IPv4 and IPv6 default routes via igw.
+	routeTable := types.RouteTable{
+		RouteTableId: aws.String("rtb-dualstack"),
+		Routes: []types.Route{
+			{
+				DestinationCidrBlock: aws.String("0.0.0.0/0"),
+				GatewayId:            aws.String("igw-dual"),
+			},
+			{
+				DestinationIpv6CidrBlock: aws.String("::/0"),
+				GatewayId:                aws.String("igw-dual"),
+			},
+		},
+	}
+	if !hasInternetGatewayRoute(routeTable) {
+		t.Error("dual-stack route table with igw should be detected as having internet gateway route")
+	}
+}
+
+func TestHasInternetGatewayRoute_IPv6EgressOnly(t *testing.T) {
+	// An egress-only internet gateway (eigw-) is NOT a full internet gateway.
+	// Subnets with only eigw routes should NOT be classified as public.
+	routeTable := types.RouteTable{
+		RouteTableId: aws.String("rtb-eigw"),
+		Routes: []types.Route{
+			{
+				DestinationIpv6CidrBlock:    aws.String("::/0"),
+				EgressOnlyInternetGatewayId: aws.String("eigw-12345678"),
+			},
+		},
+	}
+	if hasInternetGatewayRoute(routeTable) {
+		t.Error("route table with only eigw should NOT be detected as having internet gateway route")
+	}
+}
+
+func TestIsPublicSubnet_IPv6OnlyPublic(t *testing.T) {
+	// Subnet with IPv6-only internet route via igw should be classified as public.
+	routeTables := []types.RouteTable{
+		{
+			RouteTableId: aws.String("rtb-ipv6pub"),
+			VpcId:        aws.String("vpc-ipv6"),
+			Associations: []types.RouteTableAssociation{
+				{
+					SubnetId: aws.String("subnet-ipv6pub"),
+				},
+			},
+			Routes: []types.Route{
+				{
+					DestinationIpv6CidrBlock: aws.String("::/0"),
+					GatewayId:                aws.String("igw-v6"),
+				},
+			},
+		},
+	}
+
+	result := isPublicSubnet("subnet-ipv6pub", "vpc-ipv6", routeTables)
+	if !result {
+		t.Error("subnet with IPv6 ::/0 via igw should be classified as public")
+	}
+}

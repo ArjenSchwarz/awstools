@@ -902,12 +902,13 @@ func hasInternetGatewayRoute(routeTable types.RouteTable) bool {
 	for _, route := range routeTable.Routes {
 		// Check for internet gateway route
 		if route.GatewayId != nil && strings.HasPrefix(*route.GatewayId, "igw-") {
-			// Check if it's a default route (0.0.0.0/0) or covers broad ranges
-			if route.DestinationCidrBlock != nil {
-				cidr := *route.DestinationCidrBlock
-				if cidr == "0.0.0.0/0" {
-					return true
-				}
+			// Check for IPv4 default route (0.0.0.0/0)
+			if route.DestinationCidrBlock != nil && *route.DestinationCidrBlock == "0.0.0.0/0" {
+				return true
+			}
+			// Check for IPv6 default route (::/0)
+			if route.DestinationIpv6CidrBlock != nil && *route.DestinationIpv6CidrBlock == "::/0" {
+				return true
 			}
 		}
 	}
