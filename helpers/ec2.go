@@ -42,12 +42,16 @@ func GetEc2Name(ec2name string, svc *ec2.Client) string {
 
 // GetAllSecurityGroups returns a list of all securitygroups in the region
 func GetAllSecurityGroups(svc *ec2.Client) []types.SecurityGroup {
-	resp, err := svc.DescribeSecurityGroups(context.TODO(), &ec2.DescribeSecurityGroupsInput{})
-	if err != nil {
-		panic(err)
+	var result []types.SecurityGroup
+	paginator := ec2.NewDescribeSecurityGroupsPaginator(svc, &ec2.DescribeSecurityGroupsInput{})
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(context.TODO())
+		if err != nil {
+			panic(err)
+		}
+		result = append(result, page.SecurityGroups...)
 	}
-
-	return resp.SecurityGroups
+	return result
 }
 
 // GetEc2BySecurityGroup retrieves all instances attached to a securitygroup
@@ -60,22 +64,30 @@ func GetEc2BySecurityGroup(securitygroupID *string, svc *ec2.Client) []types.Res
 			},
 		},
 	}
-	resp, err := svc.DescribeInstances(context.TODO(), input)
-	if err != nil {
-		panic(err)
+	var result []types.Reservation
+	paginator := ec2.NewDescribeInstancesPaginator(svc, input)
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(context.TODO())
+		if err != nil {
+			panic(err)
+		}
+		result = append(result, page.Reservations...)
 	}
-
-	return resp.Reservations
+	return result
 }
 
 // GetAllEc2Instances retrieves all EC2 instances
 func GetAllEc2Instances(svc *ec2.Client) []types.Reservation {
-	resp, err := svc.DescribeInstances(context.TODO(), &ec2.DescribeInstancesInput{})
-	if err != nil {
-		panic(err)
+	var result []types.Reservation
+	paginator := ec2.NewDescribeInstancesPaginator(svc, &ec2.DescribeInstancesInput{})
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(context.TODO())
+		if err != nil {
+			panic(err)
+		}
+		result = append(result, page.Reservations...)
 	}
-
-	return resp.Reservations
+	return result
 }
 
 // GetAllEC2ResourceNames retrieves the names of EC2 related objects
@@ -92,56 +104,68 @@ func GetAllEC2ResourceNames(svc *ec2.Client) map[string]string {
 
 // addAllVPCNames returns the names of all vpcs in a map
 func addAllVPCNames(svc *ec2.Client, result map[string]string) map[string]string {
-	resp, err := svc.DescribeVpcs(context.TODO(), &ec2.DescribeVpcsInput{})
-	if err != nil {
-		panic(err)
-	}
-	for _, vpc := range resp.Vpcs {
-		result[*vpc.VpcId] = *vpc.VpcId
-		if name := getNameFromTags(vpc.Tags); name != "" {
-			result[*vpc.VpcId] = name
+	paginator := ec2.NewDescribeVpcsPaginator(svc, &ec2.DescribeVpcsInput{})
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(context.TODO())
+		if err != nil {
+			panic(err)
+		}
+		for _, vpc := range page.Vpcs {
+			result[*vpc.VpcId] = *vpc.VpcId
+			if name := getNameFromTags(vpc.Tags); name != "" {
+				result[*vpc.VpcId] = name
+			}
 		}
 	}
 	return result
 }
 
 func addAllPeerNames(svc *ec2.Client, result map[string]string) map[string]string {
-	resp, err := svc.DescribeVpcPeeringConnections(context.TODO(), &ec2.DescribeVpcPeeringConnectionsInput{})
-	if err != nil {
-		panic(err)
-	}
-	for _, peer := range resp.VpcPeeringConnections {
-		result[*peer.VpcPeeringConnectionId] = *peer.VpcPeeringConnectionId
-		if name := getNameFromTags(peer.Tags); name != "" {
-			result[*peer.VpcPeeringConnectionId] = name
+	paginator := ec2.NewDescribeVpcPeeringConnectionsPaginator(svc, &ec2.DescribeVpcPeeringConnectionsInput{})
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(context.TODO())
+		if err != nil {
+			panic(err)
+		}
+		for _, peer := range page.VpcPeeringConnections {
+			result[*peer.VpcPeeringConnectionId] = *peer.VpcPeeringConnectionId
+			if name := getNameFromTags(peer.Tags); name != "" {
+				result[*peer.VpcPeeringConnectionId] = name
+			}
 		}
 	}
 	return result
 }
 
 func addAllSubnetNames(svc *ec2.Client, result map[string]string) map[string]string {
-	resp, err := svc.DescribeSubnets(context.TODO(), &ec2.DescribeSubnetsInput{})
-	if err != nil {
-		panic(err)
-	}
-	for _, subnet := range resp.Subnets {
-		result[*subnet.SubnetId] = *subnet.SubnetId
-		if name := getNameFromTags(subnet.Tags); name != "" {
-			result[*subnet.SubnetId] = name
+	paginator := ec2.NewDescribeSubnetsPaginator(svc, &ec2.DescribeSubnetsInput{})
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(context.TODO())
+		if err != nil {
+			panic(err)
+		}
+		for _, subnet := range page.Subnets {
+			result[*subnet.SubnetId] = *subnet.SubnetId
+			if name := getNameFromTags(subnet.Tags); name != "" {
+				result[*subnet.SubnetId] = name
+			}
 		}
 	}
 	return result
 }
 
 func addAllRouteTableNames(svc *ec2.Client, result map[string]string) map[string]string {
-	resp, err := svc.DescribeRouteTables(context.TODO(), &ec2.DescribeRouteTablesInput{})
-	if err != nil {
-		panic(err)
-	}
-	for _, resource := range resp.RouteTables {
-		result[*resource.RouteTableId] = *resource.RouteTableId
-		if name := getNameFromTags(resource.Tags); name != "" {
-			result[*resource.RouteTableId] = name
+	paginator := ec2.NewDescribeRouteTablesPaginator(svc, &ec2.DescribeRouteTablesInput{})
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(context.TODO())
+		if err != nil {
+			panic(err)
+		}
+		for _, resource := range page.RouteTables {
+			result[*resource.RouteTableId] = *resource.RouteTableId
+			if name := getNameFromTags(resource.Tags); name != "" {
+				result[*resource.RouteTableId] = name
+			}
 		}
 	}
 	return result
@@ -1737,17 +1761,20 @@ func getSecurityGroupInfo(svc *ec2.Client, groups []types.GroupIdentifier) []Sec
 		GroupIds: groupIDs,
 	}
 
-	resp, err := svc.DescribeSecurityGroups(context.TODO(), input)
-	if err != nil {
-		handleAWSAPIError(err, "DescribeSecurityGroups")
-	}
-
 	var result []SecurityGroupInfo
-	for _, sg := range resp.SecurityGroups {
-		result = append(result, SecurityGroupInfo{
-			ID:   aws.ToString(sg.GroupId),
-			Name: aws.ToString(sg.GroupName),
-		})
+	paginator := ec2.NewDescribeSecurityGroupsPaginator(svc, input)
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(context.TODO())
+		if err != nil {
+			handleAWSAPIError(err, "DescribeSecurityGroups")
+		}
+
+		for _, sg := range page.SecurityGroups {
+			result = append(result, SecurityGroupInfo{
+				ID:   aws.ToString(sg.GroupId),
+				Name: aws.ToString(sg.GroupName),
+			})
+		}
 	}
 
 	return result
