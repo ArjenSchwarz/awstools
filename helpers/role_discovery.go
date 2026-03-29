@@ -160,6 +160,17 @@ func (rd *RoleDiscovery) getAccountsFromToken(ctx context.Context, token *Cached
 
 // getRolesForAccount retrieves roles for a specific account
 func (rd *RoleDiscovery) getRolesForAccount(ctx context.Context, token *CachedToken, account types.AccountInfo) ([]DiscoveredRole, error) {
+	// Skip accounts with nil AccountId — required for API calls
+	if account.AccountId == nil {
+		return nil, nil
+	}
+
+	accountID := aws.ToString(account.AccountId)
+	accountName := aws.ToString(account.AccountName)
+	if accountName == "" {
+		accountName = accountID
+	}
+
 	var roles []DiscoveredRole
 	maxResults := int32(100)
 	var nextToken *string
@@ -175,41 +186,42 @@ func (rd *RoleDiscovery) getRolesForAccount(ctx context.Context, token *CachedTo
 		result, err := rd.ssoClient.ListAccountRoles(ctx, input)
 		if err != nil {
 			return nil, NewAPIError("failed to list account roles", err).
-				WithContext("account_id", *account.AccountId).
-				WithContext("account_name", *account.AccountName).
+				WithContext("account_id", accountID).
+				WithContext("account_name", accountName).
 				WithContext("suggestion", "Run 'aws sso login' to refresh authentication")
 		}
 
 		// Create discovered roles from the response
 		for _, roleInfo := range result.RoleList {
-			accountName := *account.AccountName
-			if accountName == "" {
-				accountName = *account.AccountId // Fallback to account ID
+			// Skip roles with nil RoleName — required field
+			if roleInfo.RoleName == nil {
+				continue
 			}
+			roleName := aws.ToString(roleInfo.RoleName)
 
 			// Cache the SSO-provided account name as the alias for this account.
 			// The SSO ListAccounts API provides per-account names, unlike IAM
 			// ListAccountAliases which only returns the current account's alias.
 			rd.cacheMutex.Lock()
-			if _, exists := rd.aliasCache[*account.AccountId]; !exists {
-				rd.aliasCache[*account.AccountId] = accountName
+			if _, exists := rd.aliasCache[accountID]; !exists {
+				rd.aliasCache[accountID] = accountName
 			}
 			rd.cacheMutex.Unlock()
 
-			accountAlias, _ := rd.GetAccountAlias(*account.AccountId)
+			accountAlias, _ := rd.GetAccountAlias(accountID)
 
 			role := DiscoveredRole{
-				AccountID:         *account.AccountId,
+				AccountID:         accountID,
 				AccountName:       accountName,
 				AccountAlias:      accountAlias,
-				PermissionSetName: *roleInfo.RoleName,
-				RoleName:          *roleInfo.RoleName,
+				PermissionSetName: roleName,
+				RoleName:          roleName,
 			}
 
 			if err := role.Validate(); err != nil {
 				return nil, NewValidationError("invalid discovered role", err).
-					WithContext("account_id", *account.AccountId).
-					WithContext("role_name", *roleInfo.RoleName)
+					WithContext("account_id", accountID).
+					WithContext("role_name", roleName)
 			}
 
 			roles = append(roles, role)
