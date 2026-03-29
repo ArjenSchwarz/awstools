@@ -760,38 +760,58 @@ func GetVPCUsageOverview(svc *ec2.Client) VPCOverview {
 
 // retrieveVPCData fetches all VPCs using DescribeVpcs API
 func retrieveVPCData(svc *ec2.Client) []types.Vpc {
-	resp, err := svc.DescribeVpcs(context.TODO(), &ec2.DescribeVpcsInput{})
-	if err != nil {
-		panic(err)
+	var result []types.Vpc
+	paginator := ec2.NewDescribeVpcsPaginator(svc, &ec2.DescribeVpcsInput{})
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(context.TODO())
+		if err != nil {
+			panic(err)
+		}
+		result = append(result, page.Vpcs...)
 	}
-	return resp.Vpcs
+	return result
 }
 
 // retrieveSubnetData fetches all subnets using DescribeSubnets API
 func retrieveSubnetData(svc *ec2.Client) []types.Subnet {
-	resp, err := svc.DescribeSubnets(context.TODO(), &ec2.DescribeSubnetsInput{})
-	if err != nil {
-		panic(err)
+	var result []types.Subnet
+	paginator := ec2.NewDescribeSubnetsPaginator(svc, &ec2.DescribeSubnetsInput{})
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(context.TODO())
+		if err != nil {
+			panic(err)
+		}
+		result = append(result, page.Subnets...)
 	}
-	return resp.Subnets
+	return result
 }
 
 // retrieveNetworkInterfaces fetches all network interfaces using DescribeNetworkInterfaces API
 func retrieveNetworkInterfaces(svc *ec2.Client) []types.NetworkInterface {
-	resp, err := svc.DescribeNetworkInterfaces(context.TODO(), &ec2.DescribeNetworkInterfacesInput{})
-	if err != nil {
-		panic(err)
+	var result []types.NetworkInterface
+	paginator := ec2.NewDescribeNetworkInterfacesPaginator(svc, &ec2.DescribeNetworkInterfacesInput{})
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(context.TODO())
+		if err != nil {
+			panic(err)
+		}
+		result = append(result, page.NetworkInterfaces...)
 	}
-	return resp.NetworkInterfaces
+	return result
 }
 
 // retrieveRouteTables fetches all route tables using DescribeRouteTables API
 func retrieveRouteTables(svc *ec2.Client) []types.RouteTable {
-	resp, err := svc.DescribeRouteTables(context.TODO(), &ec2.DescribeRouteTablesInput{})
-	if err != nil {
-		panic(err)
+	var result []types.RouteTable
+	paginator := ec2.NewDescribeRouteTablesPaginator(svc, &ec2.DescribeRouteTablesInput{})
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(context.TODO())
+		if err != nil {
+			panic(err)
+		}
+		result = append(result, page.RouteTables...)
 	}
-	return resp.RouteTables
+	return result
 }
 
 // GetSubnetRouteTable finds the route table associated with a specific subnet.
@@ -1333,14 +1353,19 @@ func (cache *ENILookupCache) batchFetchVPCEndpoints(svc *ec2.Client, vpcIDs map[
 		},
 	}
 
-	resp, err := svc.DescribeVpcEndpoints(context.Background(), params)
-	if err != nil {
-		panic(err)
+	var allEndpoints []types.VpcEndpoint
+	paginator := ec2.NewDescribeVpcEndpointsPaginator(svc, params)
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(context.TODO())
+		if err != nil {
+			panic(err)
+		}
+		allEndpoints = append(allEndpoints, page.VpcEndpoints...)
 	}
 
 	// Index endpoints by ENI ID for fast lookup
-	for i := range resp.VpcEndpoints {
-		ep := &resp.VpcEndpoints[i]
+	for i := range allEndpoints {
+		ep := &allEndpoints[i]
 		for _, eniID := range ep.NetworkInterfaceIds {
 			cache.EndpointsByENI[eniID] = ep
 		}
@@ -1359,8 +1384,8 @@ func (cache *ENILookupCache) batchFetchInstanceNames(svc *ec2.Client, instanceID
 		instanceIDList = append(instanceIDList, instanceID)
 	}
 
-	// Fetch all instances in batches (DescribeInstances has a limit)
-	const batchSize = 100 // AWS limit for DescribeInstances
+	// Fetch all instances in batches (DescribeInstances filter limit)
+	const batchSize = 100
 	for i := 0; i < len(instanceIDList); i += batchSize {
 		end := min(i+batchSize, len(instanceIDList))
 
@@ -1368,17 +1393,19 @@ func (cache *ENILookupCache) batchFetchInstanceNames(svc *ec2.Client, instanceID
 			InstanceIds: instanceIDList[i:end],
 		}
 
-		resp, err := svc.DescribeInstances(context.TODO(), params)
-		if err != nil {
-			// If an instance doesn't exist, continue with others
-			continue
-		}
+		paginator := ec2.NewDescribeInstancesPaginator(svc, params)
+		for paginator.HasMorePages() {
+			page, err := paginator.NextPage(context.TODO())
+			if err != nil {
+				// If an instance doesn't exist, continue with others
+				break
+			}
 
-		// Extract names from instances
-		for _, reservation := range resp.Reservations {
-			for _, instance := range reservation.Instances {
-				if instance.InstanceId != nil {
-					cache.InstanceNames[*instance.InstanceId] = getNameFromTags(instance.Tags)
+			for _, reservation := range page.Reservations {
+				for _, instance := range reservation.Instances {
+					if instance.InstanceId != nil {
+						cache.InstanceNames[*instance.InstanceId] = getNameFromTags(instance.Tags)
+					}
 				}
 			}
 		}
@@ -1406,14 +1433,19 @@ func (cache *ENILookupCache) batchFetchNATGateways(svc *ec2.Client, vpcIDs map[s
 		},
 	}
 
-	resp, err := svc.DescribeNatGateways(context.Background(), params)
-	if err != nil {
-		panic(err)
+	var allGateways []types.NatGateway
+	paginator := ec2.NewDescribeNatGatewaysPaginator(svc, params)
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(context.TODO())
+		if err != nil {
+			panic(err)
+		}
+		allGateways = append(allGateways, page.NatGateways...)
 	}
 
 	// Index NAT gateways by ENI ID for fast lookup
-	for i := range resp.NatGateways {
-		gw := &resp.NatGateways[i]
+	for i := range allGateways {
+		gw := &allGateways[i]
 		for _, address := range gw.NatGatewayAddresses {
 			if address.NetworkInterfaceId != nil {
 				cache.NATGatewaysByENI[*address.NetworkInterfaceId] = gw
@@ -1443,15 +1475,16 @@ func (cache *ENILookupCache) batchFetchTransitGateways(svc *ec2.Client, vpcIDs m
 		},
 	}
 
-	resp, err := svc.DescribeTransitGatewayVpcAttachments(context.Background(), params)
-	if err != nil {
-		panic(err)
-	}
-
-	// Index TGW attachments by VPC ID for lookup
-	for _, attachment := range resp.TransitGatewayVpcAttachments {
-		if attachment.VpcId != nil && attachment.TransitGatewayAttachmentId != nil {
-			cache.TransitGateways[*attachment.VpcId] = *attachment.TransitGatewayAttachmentId
+	paginator := ec2.NewDescribeTransitGatewayVpcAttachmentsPaginator(svc, params)
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(context.TODO())
+		if err != nil {
+			panic(err)
+		}
+		for _, attachment := range page.TransitGatewayVpcAttachments {
+			if attachment.VpcId != nil && attachment.TransitGatewayAttachmentId != nil {
+				cache.TransitGateways[*attachment.VpcId] = *attachment.TransitGatewayAttachmentId
+			}
 		}
 	}
 }
