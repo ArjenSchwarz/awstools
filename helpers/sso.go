@@ -86,9 +86,13 @@ func getSSOInstance(svc SSOAdminAPI) (SSOInstance, error) {
 	if len(instances.Instances) > 1 {
 		return SSOInstance{}, fmt.Errorf("found multiple SSO instances, expected exactly one")
 	}
+	inst := instances.Instances[0]
+	if inst.IdentityStoreId == nil || inst.InstanceArn == nil {
+		return SSOInstance{}, fmt.Errorf("SSO instance has nil IdentityStoreId or InstanceArn")
+	}
 	ssoInstance := SSOInstance{
-		IdentityStoreID: aws.ToString(instances.Instances[0].IdentityStoreId),
-		Arn:             aws.ToString(instances.Instances[0].InstanceArn),
+		IdentityStoreID: aws.ToString(inst.IdentityStoreId),
+		Arn:             aws.ToString(inst.InstanceArn),
 	}
 	return ssoInstance, nil
 }
@@ -137,19 +141,18 @@ func (instance *SSOInstance) getPermissionSetDetails(permissionsetarn string, sv
 	if err != nil {
 		return SSOPermissionSet{}, fmt.Errorf("failed to describe permission set %s: %w", permissionsetarn, err)
 	}
-	var createdAt time.Time
-	if permissionsetdescription.PermissionSet.CreatedDate != nil {
-		createdAt = *permissionsetdescription.PermissionSet.CreatedDate
-	}
+	ps := permissionsetdescription.PermissionSet
 	permissionset := SSOPermissionSet{
 		Arn:             permissionsetarn,
-		Name:            aws.ToString(permissionsetdescription.PermissionSet.Name),
-		CreatedAt:       createdAt,
-		SessionDuration: aws.ToString(permissionsetdescription.PermissionSet.SessionDuration),
+		Name:            aws.ToString(ps.Name),
+		SessionDuration: aws.ToString(ps.SessionDuration),
 		Instance:        instance,
 	}
-	if permissionsetdescription.PermissionSet.Description != nil {
-		permissionset.Description = *permissionsetdescription.PermissionSet.Description
+	if ps.CreatedDate != nil {
+		permissionset.CreatedAt = *ps.CreatedDate
+	}
+	if ps.Description != nil {
+		permissionset.Description = *ps.Description
 	}
 	// Get accounts
 	if err := permissionset.addAccountInfo(svc); err != nil {
@@ -171,6 +174,9 @@ func (instance *SSOInstance) getPermissionSetDetails(permissionsetarn string, sv
 			return SSOPermissionSet{}, fmt.Errorf("failed to list managed policies for permission set %s: %w", permissionsetarn, err)
 		}
 		for _, managedpolicy := range managedpolicies.AttachedManagedPolicies {
+			if managedpolicy.Arn == nil || managedpolicy.Name == nil {
+				continue
+			}
 			policy := SSOPolicy{
 				Arn:  aws.ToString(managedpolicy.Arn),
 				Name: aws.ToString(managedpolicy.Name),
@@ -234,6 +240,9 @@ func (permissionset *SSOPermissionSet) addAccountInfo(svc SSOAdminAPI) error {
 				return fmt.Errorf("failed to list account assignments for account %s, permission set %s: %w", accountnr, permissionset.Arn, err)
 			}
 			for _, assignmentraw := range accountassignments.AccountAssignments {
+				if assignmentraw.PrincipalId == nil {
+					continue
+				}
 				assignment := SSOAccountAssignment{
 					PrincipalType: string(assignmentraw.PrincipalType),
 					PrincipalID:   aws.ToString(assignmentraw.PrincipalId),
