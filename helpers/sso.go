@@ -87,8 +87,8 @@ func getSSOInstance(svc SSOAdminAPI) (SSOInstance, error) {
 		return SSOInstance{}, fmt.Errorf("found multiple SSO instances, expected exactly one")
 	}
 	ssoInstance := SSOInstance{
-		IdentityStoreID: *instances.Instances[0].IdentityStoreId,
-		Arn:             *instances.Instances[0].InstanceArn,
+		IdentityStoreID: aws.ToString(instances.Instances[0].IdentityStoreId),
+		Arn:             aws.ToString(instances.Instances[0].InstanceArn),
 	}
 	return ssoInstance, nil
 }
@@ -137,11 +137,15 @@ func (instance *SSOInstance) getPermissionSetDetails(permissionsetarn string, sv
 	if err != nil {
 		return SSOPermissionSet{}, fmt.Errorf("failed to describe permission set %s: %w", permissionsetarn, err)
 	}
+	var createdAt time.Time
+	if permissionsetdescription.PermissionSet.CreatedDate != nil {
+		createdAt = *permissionsetdescription.PermissionSet.CreatedDate
+	}
 	permissionset := SSOPermissionSet{
 		Arn:             permissionsetarn,
-		Name:            *permissionsetdescription.PermissionSet.Name,
-		CreatedAt:       *permissionsetdescription.PermissionSet.CreatedDate,
-		SessionDuration: *permissionsetdescription.PermissionSet.SessionDuration,
+		Name:            aws.ToString(permissionsetdescription.PermissionSet.Name),
+		CreatedAt:       createdAt,
+		SessionDuration: aws.ToString(permissionsetdescription.PermissionSet.SessionDuration),
 		Instance:        instance,
 	}
 	if permissionsetdescription.PermissionSet.Description != nil {
@@ -168,8 +172,8 @@ func (instance *SSOInstance) getPermissionSetDetails(permissionsetarn string, sv
 		}
 		for _, managedpolicy := range managedpolicies.AttachedManagedPolicies {
 			policy := SSOPolicy{
-				Arn:  *managedpolicy.Arn,
-				Name: *managedpolicy.Name,
+				Arn:  aws.ToString(managedpolicy.Arn),
+				Name: aws.ToString(managedpolicy.Name),
 			}
 			allPolicies = append(allPolicies, policy)
 		}
@@ -187,7 +191,7 @@ func (instance *SSOInstance) getPermissionSetDetails(permissionsetarn string, sv
 	if err != nil {
 		return SSOPermissionSet{}, fmt.Errorf("failed to get inline policy for permission set %s: %w", permissionsetarn, err)
 	}
-	permissionset.InlinePolicy = *inlinepolicy.InlinePolicy
+	permissionset.InlinePolicy = aws.ToString(inlinepolicy.InlinePolicy)
 	return permissionset, nil
 }
 
@@ -232,7 +236,7 @@ func (permissionset *SSOPermissionSet) addAccountInfo(svc SSOAdminAPI) error {
 			for _, assignmentraw := range accountassignments.AccountAssignments {
 				assignment := SSOAccountAssignment{
 					PrincipalType: string(assignmentraw.PrincipalType),
-					PrincipalID:   *assignmentraw.PrincipalId,
+					PrincipalID:   aws.ToString(assignmentraw.PrincipalId),
 					PermissionSet: permissionset,
 				}
 				account.addAssignmentToAccount(assignment)
