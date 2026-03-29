@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/ArjenSchwarz/awstools/config"
 	"github.com/ArjenSchwarz/awstools/helpers"
@@ -57,12 +58,12 @@ func findIPAddress(_ *cobra.Command, args []string) {
 
 func formatIPFinderOutput(result helpers.IPFinderResult) {
 	if !result.Found {
-		fmt.Printf("IP address %s not found in any ENI in the current region\n", result.IPAddress)
-		fmt.Printf("\nTroubleshooting suggestions:\n")
-		fmt.Printf("  - Verify the IP address is correct\n")
-		fmt.Printf("  - Check if the IP is in a different AWS region using --region flag\n")
-		fmt.Printf("  - Ensure you have the necessary permissions to describe network interfaces\n")
-		fmt.Printf("  - Consider that the IP might be associated with a different AWS account\n")
+		fmt.Fprintf(os.Stderr, "IP address %s not found in any ENI in the current region\n", result.IPAddress)
+		fmt.Fprintf(os.Stderr, "\nTroubleshooting suggestions:\n")
+		fmt.Fprintf(os.Stderr, "  - Verify the IP address is correct\n")
+		fmt.Fprintf(os.Stderr, "  - Check if the IP is in a different AWS region using --region flag\n")
+		fmt.Fprintf(os.Stderr, "  - Ensure you have the necessary permissions to describe network interfaces\n")
+		fmt.Fprintf(os.Stderr, "  - Consider that the IP might be associated with a different AWS account\n")
 		return
 	}
 
