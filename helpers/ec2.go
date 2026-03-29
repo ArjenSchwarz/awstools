@@ -323,6 +323,9 @@ func parseVPCRoutes(routes []types.Route) []VPCRoute {
 		if route.DestinationIpv6CidrBlock != nil {
 			rt.DestinationCIDR = *route.DestinationIpv6CidrBlock
 		}
+		if route.DestinationPrefixListId != nil {
+			rt.DestinationCIDR = *route.DestinationPrefixListId
+		}
 		if route.VpcPeeringConnectionId != nil {
 			rt.DestinationTarget = *route.VpcPeeringConnectionId
 		}
@@ -878,10 +881,13 @@ func FormatRouteTableInfo(routeTable *types.RouteTable) (string, []string) {
 	var routeList []string
 	for _, route := range routeTable.Routes {
 		destCIDR := ""
-		if route.DestinationCidrBlock != nil {
+		switch {
+		case route.DestinationCidrBlock != nil:
 			destCIDR = *route.DestinationCidrBlock
-		} else if route.DestinationIpv6CidrBlock != nil {
+		case route.DestinationIpv6CidrBlock != nil:
 			destCIDR = *route.DestinationIpv6CidrBlock
+		case route.DestinationPrefixListId != nil:
+			destCIDR = *route.DestinationPrefixListId
 		}
 
 		target := ""

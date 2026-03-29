@@ -1695,3 +1695,70 @@ func TestIsPublicSubnet_IPv6OnlyPublic(t *testing.T) {
 		t.Error("subnet with IPv6 ::/0 via igw should be classified as public")
 	}
 }
+
+// Regression tests for T-568: prefix list routes were silently dropped
+// because FormatRouteTableInfo only checked DestinationCidrBlock and
+// DestinationIpv6CidrBlock, ignoring DestinationPrefixListId entirely.
+
+func TestFormatRouteTableInfo_PrefixListRoute(t *testing.T) {
+	rt := &types.RouteTable{
+		RouteTableId: aws.String("rtb-prefix"),
+		Routes: []types.Route{
+			{
+				DestinationPrefixListId: aws.String("pl-68a54001"),
+				GatewayId:               aws.String("vpce-abc123"),
+			},
+		},
+	}
+
+	_, routes := FormatRouteTableInfo(rt)
+
+	if len(routes) != 1 {
+		t.Fatalf("expected 1 route, got %d: %v", len(routes), routes)
+	}
+	expected := "pl-68a54001: vpce-abc123"
+	if routes[0] != expected {
+		t.Errorf("expected %q, got %q", expected, routes[0])
+	}
+}
+
+func TestFormatRouteTableInfo_MixedRoutes(t *testing.T) {
+	// A route table with all three destination types: IPv4 CIDR,
+	// IPv6 CIDR, and prefix list.
+	rt := &types.RouteTable{
+		RouteTableId: aws.String("rtb-mixed"),
+		Routes: []types.Route{
+			{
+				DestinationCidrBlock: aws.String("0.0.0.0/0"),
+				GatewayId:            aws.String("igw-111"),
+			},
+			{
+				DestinationIpv6CidrBlock: aws.String("::/0"),
+				GatewayId:                aws.String("igw-111"),
+			},
+			{
+				DestinationPrefixListId: aws.String("pl-s3"),
+				GatewayId:               aws.String("vpce-s3"),
+			},
+			{
+				DestinationCidrBlock: aws.String("10.0.0.0/16"),
+			},
+		},
+	}
+
+	_, routes := FormatRouteTableInfo(rt)
+
+	if len(routes) != 4 {
+		t.Fatalf("expected 4 routes, got %d: %v", len(routes), routes)
+	}
+
+	expectedRoutes := []string{
+		"0.0.0.0/0: igw-111",
+		"::/0: igw-111",
+		"pl-s3: vpce-s3",
+		"10.0.0.0/16: local",
+	}
+	if !reflect.DeepEqual(routes, expectedRoutes) {
+		t.Errorf("routes mismatch:\n  got:  %v\n  want: %v", routes, expectedRoutes)
+	}
+}
