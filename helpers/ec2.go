@@ -112,9 +112,13 @@ func addAllVPCNames(svc *ec2.Client, result map[string]string) map[string]string
 			panic(err)
 		}
 		for _, vpc := range page.Vpcs {
-			result[*vpc.VpcId] = *vpc.VpcId
+			vpcID := aws.ToString(vpc.VpcId)
+			if vpcID == "" {
+				continue
+			}
+			result[vpcID] = vpcID
 			if name := getNameFromTags(vpc.Tags); name != "" {
-				result[*vpc.VpcId] = name
+				result[vpcID] = name
 			}
 		}
 	}
@@ -129,9 +133,13 @@ func addAllPeerNames(svc *ec2.Client, result map[string]string) map[string]strin
 			panic(err)
 		}
 		for _, peer := range page.VpcPeeringConnections {
-			result[*peer.VpcPeeringConnectionId] = *peer.VpcPeeringConnectionId
+			peerID := aws.ToString(peer.VpcPeeringConnectionId)
+			if peerID == "" {
+				continue
+			}
+			result[peerID] = peerID
 			if name := getNameFromTags(peer.Tags); name != "" {
-				result[*peer.VpcPeeringConnectionId] = name
+				result[peerID] = name
 			}
 		}
 	}
@@ -146,9 +154,13 @@ func addAllSubnetNames(svc *ec2.Client, result map[string]string) map[string]str
 			panic(err)
 		}
 		for _, subnet := range page.Subnets {
-			result[*subnet.SubnetId] = *subnet.SubnetId
+			subnetID := aws.ToString(subnet.SubnetId)
+			if subnetID == "" {
+				continue
+			}
+			result[subnetID] = subnetID
 			if name := getNameFromTags(subnet.Tags); name != "" {
-				result[*subnet.SubnetId] = name
+				result[subnetID] = name
 			}
 		}
 	}
@@ -163,9 +175,13 @@ func addAllRouteTableNames(svc *ec2.Client, result map[string]string) map[string
 			panic(err)
 		}
 		for _, resource := range page.RouteTables {
-			result[*resource.RouteTableId] = *resource.RouteTableId
+			rtID := aws.ToString(resource.RouteTableId)
+			if rtID == "" {
+				continue
+			}
+			result[rtID] = rtID
 			if name := getNameFromTags(resource.Tags); name != "" {
-				result[*resource.RouteTableId] = name
+				result[rtID] = name
 			}
 		}
 	}
@@ -258,11 +274,19 @@ func GetAllVpcPeers(svc *ec2.Client) []VpcPeering {
 	}
 	for _, connection := range resp.VpcPeeringConnections {
 		peering := VpcPeering{
-			RequesterVpc: VPCHolder{ID: *connection.RequesterVpcInfo.VpcId,
-				AccountID: *connection.RequesterVpcInfo.OwnerId},
-			AccepterVpc: VPCHolder{ID: *connection.AccepterVpcInfo.VpcId,
-				AccountID: *connection.AccepterVpcInfo.OwnerId},
-			PeeringID: *connection.VpcPeeringConnectionId,
+			PeeringID: aws.ToString(connection.VpcPeeringConnectionId),
+		}
+		if connection.RequesterVpcInfo != nil {
+			peering.RequesterVpc = VPCHolder{
+				ID:        aws.ToString(connection.RequesterVpcInfo.VpcId),
+				AccountID: aws.ToString(connection.RequesterVpcInfo.OwnerId),
+			}
+		}
+		if connection.AccepterVpcInfo != nil {
+			peering.AccepterVpc = VPCHolder{
+				ID:        aws.ToString(connection.AccepterVpcInfo.VpcId),
+				AccountID: aws.ToString(connection.AccepterVpcInfo.OwnerId),
+			}
 		}
 		result = append(result, peering)
 	}
@@ -301,9 +325,9 @@ func GetAllVPCRouteTables(svc *ec2.Client) []VPCRouteTable {
 			}
 		}
 		table := VPCRouteTable{
-			Vpc: VPCHolder{ID: *routetable.VpcId,
-				AccountID: *routetable.OwnerId},
-			ID:      *routetable.RouteTableId,
+			Vpc: VPCHolder{ID: aws.ToString(routetable.VpcId),
+				AccountID: aws.ToString(routetable.OwnerId)},
+			ID:      aws.ToString(routetable.RouteTableId),
 			Routes:  parseVPCRoutes(routetable.Routes),
 			Subnets: subnets,
 		}
@@ -391,11 +415,12 @@ func GetAllTransitGateways(svc *ec2.Client) []TransitGateway {
 		panic(err)
 	}
 	for _, tgw := range resp.TransitGateways {
+		tgwID := aws.ToString(tgw.TransitGatewayId)
 		tgwobject := TransitGateway{
-			ID:          *tgw.TransitGatewayId,
-			AccountID:   *tgw.OwnerId,
+			ID:          tgwID,
+			AccountID:   aws.ToString(tgw.OwnerId),
 			Name:        getNameFromTags(tgw.Tags),
-			RouteTables: GetRouteTablesForTransitGateway(*tgw.TransitGatewayId, svc),
+			RouteTables: GetRouteTablesForTransitGateway(tgwID, svc),
 		}
 		result = append(result, tgwobject)
 	}
@@ -590,11 +615,15 @@ func GetNetworkInterfaces(svc *ec2.Client) []types.NetworkInterface {
 
 // GetTransitGatewayFromNetworkInterface returns the Transit Gateway attachment ID for a network interface
 func GetTransitGatewayFromNetworkInterface(netinterface types.NetworkInterface, svc *ec2.Client) string {
+	vpcID := aws.ToString(netinterface.VpcId)
+	if vpcID == "" {
+		return ""
+	}
 	params := &ec2.DescribeTransitGatewayVpcAttachmentsInput{
 		Filters: []types.Filter{
 			{
 				Name:   aws.String("vpc-id"),
-				Values: []string{*netinterface.VpcId},
+				Values: []string{vpcID},
 			},
 		},
 	}
@@ -602,14 +631,14 @@ func GetTransitGatewayFromNetworkInterface(netinterface types.NetworkInterface, 
 	if err != nil {
 		panic(err)
 	}
-	return matchTransitGatewayAttachment(resp.TransitGatewayVpcAttachments, *netinterface.SubnetId)
+	return matchTransitGatewayAttachment(resp.TransitGatewayVpcAttachments, aws.ToString(netinterface.SubnetId))
 }
 
 // matchTransitGatewayAttachment finds the attachment whose SubnetIds contain the given subnet.
 func matchTransitGatewayAttachment(attachments []types.TransitGatewayVpcAttachment, subnetID string) string {
 	for _, attachment := range attachments {
 		if slices.Contains(attachment.SubnetIds, subnetID) {
-			return *attachment.TransitGatewayAttachmentId
+			return aws.ToString(attachment.TransitGatewayAttachmentId)
 		}
 	}
 	return ""
@@ -618,11 +647,15 @@ func matchTransitGatewayAttachment(attachments []types.TransitGatewayVpcAttachme
 // GetVPCEndpointFromNetworkInterface returns the VPC endpoint associated with a network interface
 func GetVPCEndpointFromNetworkInterface(netinterface types.NetworkInterface, svc *ec2.Client) *types.VpcEndpoint {
 	// TODO: Consider caching this
+	vpcID := aws.ToString(netinterface.VpcId)
+	if vpcID == "" {
+		return nil
+	}
 	params := &ec2.DescribeVpcEndpointsInput{
 		Filters: []types.Filter{
 			{
 				Name:   aws.String("vpc-id"),
-				Values: []string{*netinterface.VpcId},
+				Values: []string{vpcID},
 			},
 		},
 	}
@@ -630,9 +663,10 @@ func GetVPCEndpointFromNetworkInterface(netinterface types.NetworkInterface, svc
 	if err != nil {
 		panic(err)
 	}
-	if len(resp.VpcEndpoints) > 0 {
+	eniID := aws.ToString(netinterface.NetworkInterfaceId)
+	if len(resp.VpcEndpoints) > 0 && eniID != "" {
 		for _, endpoint := range resp.VpcEndpoints {
-			if slices.Contains(endpoint.NetworkInterfaceIds, *netinterface.NetworkInterfaceId) {
+			if slices.Contains(endpoint.NetworkInterfaceIds, eniID) {
 				return &endpoint
 			}
 		}
@@ -642,11 +676,15 @@ func GetVPCEndpointFromNetworkInterface(netinterface types.NetworkInterface, svc
 
 // GetNatGatewayFromNetworkInterface returns the NAT gateway associated with a network interface
 func GetNatGatewayFromNetworkInterface(netinterface types.NetworkInterface, svc *ec2.Client) *types.NatGateway {
+	vpcID := aws.ToString(netinterface.VpcId)
+	if vpcID == "" {
+		return nil
+	}
 	params := &ec2.DescribeNatGatewaysInput{
 		Filter: []types.Filter{
 			{
 				Name:   aws.String("vpc-id"),
-				Values: []string{*netinterface.VpcId},
+				Values: []string{vpcID},
 			},
 		},
 	}
@@ -654,10 +692,11 @@ func GetNatGatewayFromNetworkInterface(netinterface types.NetworkInterface, svc 
 	if err != nil {
 		panic(err)
 	}
-	if len(resp.NatGateways) > 0 {
+	eniID := aws.ToString(netinterface.NetworkInterfaceId)
+	if len(resp.NatGateways) > 0 && eniID != "" {
 		for _, natgw := range resp.NatGateways {
 			for _, address := range natgw.NatGatewayAddresses {
-				if *address.NetworkInterfaceId == *netinterface.NetworkInterfaceId {
+				if aws.ToString(address.NetworkInterfaceId) == eniID {
 					return &natgw
 				}
 			}
@@ -726,18 +765,21 @@ func GetVPCUsageOverview(svc *ec2.Client) VPCOverview {
 	var summary VPCUsageSummary
 
 	for _, vpc := range vpcs {
+		vpcID := aws.ToString(vpc.VpcId)
 		vpcInfo := VPCUsageInfo{
-			ID:   *vpc.VpcId,
+			ID:   vpcID,
 			Name: getNameFromTags(vpc.Tags),
-			CIDR: *vpc.CidrBlock,
+			CIDR: aws.ToString(vpc.CidrBlock),
 			Tags: vpc.Tags,
 		}
 
 		var vpcSubnets []SubnetUsageInfo
 		for _, subnet := range subnets {
-			if *subnet.VpcId == *vpc.VpcId {
+			if aws.ToString(subnet.VpcId) == vpcID {
+				subnetCidr := aws.ToString(subnet.CidrBlock)
+				subnetID := aws.ToString(subnet.SubnetId)
 				// Calculate total IPs
-				totalIPs, _, err := calculateSubnetStats(*subnet.CidrBlock)
+				totalIPs, _, err := calculateSubnetStats(subnetCidr)
 				if err != nil {
 					panic(err)
 				}
@@ -749,13 +791,13 @@ func GetVPCUsageOverview(svc *ec2.Client) VPCOverview {
 				}
 
 				subnetInfo := SubnetUsageInfo{
-					ID:           *subnet.SubnetId,
+					ID:           subnetID,
 					Name:         getNameFromTags(subnet.Tags),
-					CIDR:         *subnet.CidrBlock,
-					VPCId:        *subnet.VpcId,
+					CIDR:         subnetCidr,
+					VPCId:        aws.ToString(subnet.VpcId),
 					VPCName:      vpcInfo.Name,
 					Tags:         subnet.Tags,
-					IsPublic:     isPublicSubnet(*subnet.SubnetId, *subnet.VpcId, routeTables),
+					IsPublic:     isPublicSubnet(subnetID, vpcID, routeTables),
 					TotalIPs:     totalIPs,
 					AvailableIPs: availableIPs,
 					UsedIPs:      usedIPs,
@@ -1170,8 +1212,9 @@ func getENIUsageTypeOptimized(eni types.NetworkInterface, cache *ENILookupCache)
 // getENIAttachmentDetailsOptimized returns specific details about what the ENI is attached to
 // Uses cache to avoid repeated API calls
 func getENIAttachmentDetailsOptimized(eni types.NetworkInterface, cache *ENILookupCache) string {
-	// Priority 1: Check if it's a VPC endpoint (following JS script logic)
 	eniID := aws.ToString(eni.NetworkInterfaceId)
+
+	// Priority 1: Check if it's a VPC endpoint (following JS script logic)
 	if eniID != "" {
 		if endpoint, exists := cache.EndpointsByENI[eniID]; exists {
 			serviceName := aws.ToString(endpoint.ServiceName)
@@ -1266,7 +1309,10 @@ func getENIAttachmentDetailsOptimized(eni types.NetworkInterface, cache *ENILook
 // Note: This function uses optimized batch API calls via ENILookupCache to avoid N+1 queries
 // when analyzing large numbers of network interfaces.
 func analyzeSubnetIPUsage(subnet types.Subnet, networkInterfaces []types.NetworkInterface, svc *ec2.Client) ([]IPAddressInfo, int, int, int, int, error) {
-	cidr := *subnet.CidrBlock
+	cidr := aws.ToString(subnet.CidrBlock)
+	if cidr == "" {
+		return nil, 0, 0, 0, 0, fmt.Errorf("subnet has no CIDR block")
+	}
 
 	// Get all IPs in the subnet
 	allIPs, err := generateIPRange(cidr)
@@ -1278,7 +1324,7 @@ func analyzeSubnetIPUsage(subnet types.Subnet, networkInterfaces []types.Network
 	reservedIPs := identifyAWSReservedIPs(allIPs)
 
 	// Map ENIs to IPs
-	eniIPMap := mapNetworkInterfacesToIPs(networkInterfaces, *subnet.SubnetId, svc)
+	eniIPMap := mapNetworkInterfacesToIPs(networkInterfaces, aws.ToString(subnet.SubnetId), svc)
 
 	var ipDetails []IPAddressInfo
 	usedCount := 0
