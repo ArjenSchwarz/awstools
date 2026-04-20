@@ -663,6 +663,15 @@ func GetNetworkInterfaces(svc ec2.DescribeNetworkInterfacesAPIClient) []types.Ne
 
 // GetTransitGatewayFromNetworkInterface returns the Transit Gateway attachment ID for a network interface
 func GetTransitGatewayFromNetworkInterface(netinterface types.NetworkInterface, svc *ec2.Client) string {
+	return getTransitGatewayFromNetworkInterface(netinterface, svc)
+}
+
+// getTransitGatewayFromNetworkInterface implements GetTransitGatewayFromNetworkInterface
+// against the minimal DescribeTransitGatewayVpcAttachmentsAPIClient interface
+// so pagination can be unit tested without a real *ec2.Client. It walks every
+// page of DescribeTransitGatewayVpcAttachments (T-657 — a matching attachment
+// on page 2+ was previously missed).
+func getTransitGatewayFromNetworkInterface(netinterface types.NetworkInterface, svc ec2.DescribeTransitGatewayVpcAttachmentsAPIClient) string {
 	vpcID := aws.ToString(netinterface.VpcId)
 	if vpcID == "" {
 		return ""
@@ -675,11 +684,18 @@ func GetTransitGatewayFromNetworkInterface(netinterface types.NetworkInterface, 
 			},
 		},
 	}
-	resp, err := svc.DescribeTransitGatewayVpcAttachments(context.Background(), params)
-	if err != nil {
-		panic(err)
+	subnetID := aws.ToString(netinterface.SubnetId)
+	paginator := ec2.NewDescribeTransitGatewayVpcAttachmentsPaginator(svc, params)
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(context.Background())
+		if err != nil {
+			panic(err)
+		}
+		if id := matchTransitGatewayAttachment(page.TransitGatewayVpcAttachments, subnetID); id != "" {
+			return id
+		}
 	}
-	return matchTransitGatewayAttachment(resp.TransitGatewayVpcAttachments, aws.ToString(netinterface.SubnetId))
+	return ""
 }
 
 // matchTransitGatewayAttachment finds the attachment whose SubnetIds contain the given subnet.
@@ -695,8 +711,20 @@ func matchTransitGatewayAttachment(attachments []types.TransitGatewayVpcAttachme
 // GetVPCEndpointFromNetworkInterface returns the VPC endpoint associated with a network interface
 func GetVPCEndpointFromNetworkInterface(netinterface types.NetworkInterface, svc *ec2.Client) *types.VpcEndpoint {
 	// TODO: Consider caching this
+	return getVPCEndpointFromNetworkInterface(netinterface, svc)
+}
+
+// getVPCEndpointFromNetworkInterface implements GetVPCEndpointFromNetworkInterface
+// against the minimal DescribeVpcEndpointsAPIClient interface so pagination can
+// be unit tested. Walks every page of DescribeVpcEndpoints (T-657 — a matching
+// endpoint on page 2+ was previously missed).
+func getVPCEndpointFromNetworkInterface(netinterface types.NetworkInterface, svc ec2.DescribeVpcEndpointsAPIClient) *types.VpcEndpoint {
 	vpcID := aws.ToString(netinterface.VpcId)
 	if vpcID == "" {
+		return nil
+	}
+	eniID := aws.ToString(netinterface.NetworkInterfaceId)
+	if eniID == "" {
 		return nil
 	}
 	params := &ec2.DescribeVpcEndpointsInput{
@@ -707,13 +735,14 @@ func GetVPCEndpointFromNetworkInterface(netinterface types.NetworkInterface, svc
 			},
 		},
 	}
-	resp, err := svc.DescribeVpcEndpoints(context.Background(), params)
-	if err != nil {
-		panic(err)
-	}
-	eniID := aws.ToString(netinterface.NetworkInterfaceId)
-	if len(resp.VpcEndpoints) > 0 && eniID != "" {
-		for _, endpoint := range resp.VpcEndpoints {
+	paginator := ec2.NewDescribeVpcEndpointsPaginator(svc, params)
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(context.Background())
+		if err != nil {
+			panic(err)
+		}
+		for i := range page.VpcEndpoints {
+			endpoint := page.VpcEndpoints[i]
 			if slices.Contains(endpoint.NetworkInterfaceIds, eniID) {
 				return &endpoint
 			}
@@ -724,6 +753,14 @@ func GetVPCEndpointFromNetworkInterface(netinterface types.NetworkInterface, svc
 
 // GetNatGatewayFromNetworkInterface returns the NAT gateway associated with a network interface
 func GetNatGatewayFromNetworkInterface(netinterface types.NetworkInterface, svc *ec2.Client) *types.NatGateway {
+	return getNatGatewayFromNetworkInterface(netinterface, svc)
+}
+
+// getNatGatewayFromNetworkInterface implements GetNatGatewayFromNetworkInterface
+// against the minimal DescribeNatGatewaysAPIClient interface so pagination can
+// be unit tested. Walks every page of DescribeNatGateways (T-657 — a matching
+// gateway on page 2+ was previously missed).
+func getNatGatewayFromNetworkInterface(netinterface types.NetworkInterface, svc ec2.DescribeNatGatewaysAPIClient) *types.NatGateway {
 	vpcID := aws.ToString(netinterface.VpcId)
 	if vpcID == "" {
 		return nil
@@ -736,11 +773,18 @@ func GetNatGatewayFromNetworkInterface(netinterface types.NetworkInterface, svc 
 			},
 		},
 	}
-	resp, err := svc.DescribeNatGateways(context.Background(), params)
-	if err != nil {
-		panic(err)
+	eniID := aws.ToString(netinterface.NetworkInterfaceId)
+	paginator := ec2.NewDescribeNatGatewaysPaginator(svc, params)
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(context.Background())
+		if err != nil {
+			panic(err)
+		}
+		if match := matchNatGatewayByENI(page.NatGateways, eniID); match != nil {
+			return match
+		}
 	}
-	return matchNatGatewayByENI(resp.NatGateways, aws.ToString(netinterface.NetworkInterfaceId))
+	return nil
 }
 
 // matchNatGatewayByENI scans NAT gateways and returns the one whose addresses

@@ -70,3 +70,12 @@ the pagination logic lives in the unexported `getAllVPCRouteTables` which takes
 the narrower `ec2.DescribeRouteTablesAPIClient` interface. Unit tests mock that
 interface (see `helpers/vpc_routetable_pagination_test.go`) — this is the same
 split used for the IAM pagination tests.
+
+The same split is used by the per-ENI lookup helpers after T-657:
+`GetVPCEndpointFromNetworkInterface`, `GetNatGatewayFromNetworkInterface`, and
+`GetTransitGatewayFromNetworkInterface` forward to unexported implementations
+that take `ec2.DescribeVpcEndpointsAPIClient`,
+`ec2.DescribeNatGatewaysAPIClient`, and
+`ec2.DescribeTransitGatewayVpcAttachmentsAPIClient` respectively. All three
+walk every page via `NewDescribe*Paginator`. Tests live in
+`helpers/ec2_eni_lookup_pagination_test.go`.
