@@ -203,16 +203,24 @@ func addAllTransitGatewayNames(svc *ec2.Client, result map[string]string) map[st
 	return result
 }
 
-// addAllVPCNames returns the names of all vpns in a map
-func addAllVpnNames(svc *ec2.Client, result map[string]string) map[string]string {
+// addAllVpnNames adds every VPN connection's display name to the result map.
+// AWS's DescribeVpnConnections API is not paginated (no NextToken/MaxResults),
+// so a single call returns every VPN connection in the region. The helper
+// accepts the narrow ec2.DescribeVpnConnectionsAPIClient interface so it can
+// be unit tested without a real *ec2.Client.
+func addAllVpnNames(svc ec2.DescribeVpnConnectionsAPIClient, result map[string]string) map[string]string {
 	resp, err := svc.DescribeVpnConnections(context.TODO(), &ec2.DescribeVpnConnectionsInput{})
 	if err != nil {
 		panic(err)
 	}
 	for _, vpn := range resp.VpnConnections {
-		result[*vpn.VpnConnectionId] = *vpn.VpnConnectionId
+		vpnID := aws.ToString(vpn.VpnConnectionId)
+		if vpnID == "" {
+			continue
+		}
+		result[vpnID] = vpnID
 		if name := getNameFromTags(vpn.Tags); name != "" {
-			result[*vpn.VpnConnectionId] = name
+			result[vpnID] = name
 		}
 	}
 	return result
@@ -269,30 +277,43 @@ type VPCHolder struct {
 	AccountID string
 }
 
-// GetAllVpcPeers returns the peerings that are present in this region of this account
+// GetAllVpcPeers returns the peerings that are present in this region of this
+// account. It paginates through every page of DescribeVpcPeeringConnections so
+// accounts with more peerings than fit in a single response are fully
+// enumerated.
 func GetAllVpcPeers(svc *ec2.Client) []VpcPeering {
+	return getAllVpcPeers(svc)
+}
+
+// getAllVpcPeers implements GetAllVpcPeers against the minimal
+// DescribeVpcPeeringConnectionsAPIClient interface so the pagination logic can
+// be unit tested without a real *ec2.Client.
+func getAllVpcPeers(svc ec2.DescribeVpcPeeringConnectionsAPIClient) []VpcPeering {
 	var result []VpcPeering
-	resp, err := svc.DescribeVpcPeeringConnections(context.TODO(), &ec2.DescribeVpcPeeringConnectionsInput{})
-	if err != nil {
-		panic(err)
-	}
-	for _, connection := range resp.VpcPeeringConnections {
-		peering := VpcPeering{
-			PeeringID: aws.ToString(connection.VpcPeeringConnectionId),
+	paginator := ec2.NewDescribeVpcPeeringConnectionsPaginator(svc, &ec2.DescribeVpcPeeringConnectionsInput{})
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(context.TODO())
+		if err != nil {
+			panic(err)
 		}
-		if connection.RequesterVpcInfo != nil {
-			peering.RequesterVpc = VPCHolder{
-				ID:        aws.ToString(connection.RequesterVpcInfo.VpcId),
-				AccountID: aws.ToString(connection.RequesterVpcInfo.OwnerId),
+		for _, connection := range page.VpcPeeringConnections {
+			peering := VpcPeering{
+				PeeringID: aws.ToString(connection.VpcPeeringConnectionId),
 			}
-		}
-		if connection.AccepterVpcInfo != nil {
-			peering.AccepterVpc = VPCHolder{
-				ID:        aws.ToString(connection.AccepterVpcInfo.VpcId),
-				AccountID: aws.ToString(connection.AccepterVpcInfo.OwnerId),
+			if connection.RequesterVpcInfo != nil {
+				peering.RequesterVpc = VPCHolder{
+					ID:        aws.ToString(connection.RequesterVpcInfo.VpcId),
+					AccountID: aws.ToString(connection.RequesterVpcInfo.OwnerId),
+				}
 			}
+			if connection.AccepterVpcInfo != nil {
+				peering.AccepterVpc = VPCHolder{
+					ID:        aws.ToString(connection.AccepterVpcInfo.VpcId),
+					AccountID: aws.ToString(connection.AccepterVpcInfo.OwnerId),
+				}
+			}
+			result = append(result, peering)
 		}
-		result = append(result, peering)
 	}
 	return result
 }
