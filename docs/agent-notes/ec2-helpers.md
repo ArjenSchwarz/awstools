@@ -54,6 +54,15 @@ tests can pass a mock. The helper uses `NewDescribeNetworkInterfacesPaginator`
 so large accounts don't get truncated output. `GetVPCUsageOverview` reuses
 this helper; there is no separate private `retrieveNetworkInterfaces`.
 
+`searchENIsByIP` (used by `FindIPAddressDetails` / `vpc ip-finder`) follows
+the same pattern after T-757: it takes
+`ec2.DescribeNetworkInterfacesAPIClient` and walks every page via
+`NewDescribeNetworkInterfacesPaginator`. Before the fix a single
+`DescribeNetworkInterfaces` call was made with an `addresses.private-ip-address`
+filter, so multi-VPC matches for the same RFC1918 IP on later pages were
+silently dropped (and the "multiple matches" warning never fired). Tests live
+in `helpers/ec2_ipfinder_pagination_test.go`.
+
 ## ENI Matching Helpers
 
 Pure, testable helpers live alongside the AWS-client-taking wrappers. Each scans a slice of AWS objects for an ENI or subnet match so nil-safety can be tested without mocking.
