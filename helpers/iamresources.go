@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"maps"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -62,22 +63,71 @@ type IAMRole struct {
 	Verbose          bool
 }
 
+// assumeRoleActions lists the trust-policy actions that grant the ability to
+// assume a role. Matched case-insensitively against the statement's Action.
+var assumeRoleActions = []string{
+	"sts:AssumeRole",
+	"sts:AssumeRoleWithSAML",
+}
+
+// statementAllowsAssumeRole reports whether a trust-policy statement allows
+// an assume-role action. It requires Effect == "Allow" (case-insensitive) and
+// accepts Action as a string or a slice (string or any), matching the known
+// assume-role actions case-insensitively.
+func statementAllowsAssumeRole(statement IAMPolicyDocumentStatement) bool {
+	if !strings.EqualFold(statement.Effect, "Allow") {
+		return false
+	}
+	for _, action := range normalizeActions(statement.Action) {
+		for _, want := range assumeRoleActions {
+			if strings.EqualFold(action, want) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// normalizeActions converts the polymorphic Action value into a slice of
+// strings. AWS policy documents allow Action as either a single string or an
+// array; after JSON unmarshal into an `any` field, the runtime value is a
+// `string` or `[]any`. A typed `[]string` is also accepted for callers that
+// construct statements directly.
+func normalizeActions(action any) []string {
+	switch v := action.(type) {
+	case string:
+		return []string{v}
+	case []string:
+		return v
+	case []any:
+		out := make([]string, 0, len(v))
+		for _, item := range v {
+			if s, ok := item.(string); ok {
+				out = append(out, s)
+			}
+		}
+		return out
+	}
+	return nil
+}
+
 // CanBeAssumedFrom returns information about the assumerole policy
 func (role *IAMRole) CanBeAssumedFrom() []string {
 	allowances := []string{}
 	for _, statement := range role.AssumeRolePolicy.Statement {
-		if statement.Action == "sts:AssumeRole" || statement.Action == "sts:AssumeRoleWithSAML" {
-			// Create a slice of keys for consistent ordering
-			keys := make([]string, 0, len(statement.Principal))
-			for key := range statement.Principal {
-				keys = append(keys, key)
-			}
-			// Sort keys alphabetically for consistent ordering
-			sort.Strings(keys)
-			for _, key := range keys {
-				allowance := fmt.Sprintf("%s: %s", key, statement.Principal[key])
-				allowances = append(allowances, allowance)
-			}
+		if !statementAllowsAssumeRole(statement) {
+			continue
+		}
+		// Create a slice of keys for consistent ordering
+		keys := make([]string, 0, len(statement.Principal))
+		for key := range statement.Principal {
+			keys = append(keys, key)
+		}
+		// Sort keys alphabetically for consistent ordering
+		sort.Strings(keys)
+		for _, key := range keys {
+			allowance := fmt.Sprintf("%s: %s", key, statement.Principal[key])
+			allowances = append(allowances, allowance)
 		}
 	}
 	return allowances

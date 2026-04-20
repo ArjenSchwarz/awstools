@@ -33,3 +33,21 @@ Affected functions: `getUserList`, `GetPoliciesMap`, `GetUserPoliciesMapForUser`
 - `cmd/iamuserlist.go` — Calls `GetUserDetails`, `GetGroupDetails`, `HasAccessKeys`, `GetLastAccessKeyDate`
 - `cmd/iamrolelist.go` — Calls `GetRolesAndPolicies`
 - `cmd/names.go` — Calls `GetAccountAlias`
+
+## Trust Policy Action Parsing (T-818)
+
+`IAMPolicyDocumentStatement.Action` is typed `any` because AWS policy
+documents allow either a string or an array. After JSON unmarshal the runtime
+value is `string` or `[]any`. `CanBeAssumedFrom` delegates to two helpers in
+`helpers/iamresources.go`:
+
+- `normalizeActions(action any) []string` — converts `string`, `[]string`, or
+  `[]any` into a flat string slice (any unknown type yields `nil`).
+- `statementAllowsAssumeRole(statement) bool` — requires
+  `Effect == "Allow"` (case-insensitive) and matches normalised actions
+  case-insensitively against `assumeRoleActions`
+  (`sts:AssumeRole`, `sts:AssumeRoleWithSAML`).
+
+When adding new trust actions (e.g. `sts:AssumeRoleWithWebIdentity`) extend
+`assumeRoleActions`. Deny statements are always excluded from the returned
+allowances.

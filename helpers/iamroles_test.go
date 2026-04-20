@@ -1,6 +1,7 @@
 package helpers
 
 import (
+	"encoding/json"
 	"reflect"
 	"testing"
 
@@ -106,7 +107,7 @@ func TestIAMRole_CanBeAssumedFrom_ExtendedCases(t *testing.T) {
 			expected: []string{"Service: ec2.amazonaws.com", "Federated: arn:aws:iam::123456789012:saml-provider/Provider"},
 		},
 		{
-			name: "role with deny effect - function doesn't check Effect field",
+			name: "role with deny effect is excluded",
 			role: IAMRole{
 				AssumeRolePolicy: IAMPolicyDocument{
 					Statement: []IAMPolicyDocumentStatement{
@@ -120,13 +121,205 @@ func TestIAMRole_CanBeAssumedFrom_ExtendedCases(t *testing.T) {
 					},
 				},
 			},
-			expected: []string{"Service: ec2.amazonaws.com"}, // Function currently doesn't check Effect
+			expected: []string{},
+		},
+		{
+			name: "role with action slice of any including assume role (T-818)",
+			role: IAMRole{
+				AssumeRolePolicy: IAMPolicyDocument{
+					Statement: []IAMPolicyDocumentStatement{
+						{
+							Effect: "Allow",
+							// JSON unmarshal of ["sts:AssumeRole", "sts:TagSession"] into any yields []any
+							Action: []any{"sts:AssumeRole", "sts:TagSession"},
+							Principal: map[string]string{
+								"Service": "ec2.amazonaws.com",
+							},
+						},
+					},
+				},
+			},
+			expected: []string{"Service: ec2.amazonaws.com"},
+		},
+		{
+			name: "role with action slice of strings including assume role",
+			role: IAMRole{
+				AssumeRolePolicy: IAMPolicyDocument{
+					Statement: []IAMPolicyDocumentStatement{
+						{
+							Effect: "Allow",
+							Action: []string{"sts:TagSession", "sts:AssumeRoleWithSAML"},
+							Principal: map[string]string{
+								"Federated": "arn:aws:iam::123456789012:saml-provider/Provider",
+							},
+						},
+					},
+				},
+			},
+			expected: []string{"Federated: arn:aws:iam::123456789012:saml-provider/Provider"},
+		},
+		{
+			name: "role with action slice missing any assume role action",
+			role: IAMRole{
+				AssumeRolePolicy: IAMPolicyDocument{
+					Statement: []IAMPolicyDocumentStatement{
+						{
+							Effect: "Allow",
+							Action: []any{"sts:TagSession", "sts:SetSourceIdentity"},
+							Principal: map[string]string{
+								"Service": "ec2.amazonaws.com",
+							},
+						},
+					},
+				},
+			},
+			expected: []string{},
+		},
+		{
+			name: "role with non-standard casing on action matches case-insensitively (T-818)",
+			role: IAMRole{
+				AssumeRolePolicy: IAMPolicyDocument{
+					Statement: []IAMPolicyDocumentStatement{
+						{
+							Effect: "Allow",
+							Action: "STS:AssumeRole",
+							Principal: map[string]string{
+								"Service": "ec2.amazonaws.com",
+							},
+						},
+					},
+				},
+			},
+			expected: []string{"Service: ec2.amazonaws.com"},
+		},
+		{
+			name: "role with non-standard casing on effect still treated as allow",
+			role: IAMRole{
+				AssumeRolePolicy: IAMPolicyDocument{
+					Statement: []IAMPolicyDocumentStatement{
+						{
+							Effect: "allow",
+							Action: "sts:AssumeRole",
+							Principal: map[string]string{
+								"Service": "ec2.amazonaws.com",
+							},
+						},
+					},
+				},
+			},
+			expected: []string{"Service: ec2.amazonaws.com"},
+		},
+		{
+			name: "mixed allow and deny statements only returns allow principals",
+			role: IAMRole{
+				AssumeRolePolicy: IAMPolicyDocument{
+					Statement: []IAMPolicyDocumentStatement{
+						{
+							Effect: "Deny",
+							Action: "sts:AssumeRole",
+							Principal: map[string]string{
+								"AWS": "arn:aws:iam::999999999999:root",
+							},
+						},
+						{
+							Effect: "Allow",
+							Action: []any{"sts:AssumeRole"},
+							Principal: map[string]string{
+								"Service": "ec2.amazonaws.com",
+							},
+						},
+					},
+				},
+			},
+			expected: []string{"Service: ec2.amazonaws.com"},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := tt.role.CanBeAssumedFrom()
+			if !reflect.DeepEqual(result, tt.expected) {
+				t.Errorf("CanBeAssumedFrom() = %v, want %v", result, tt.expected)
+			}
+		})
+	}
+}
+
+// TestIAMRole_CanBeAssumedFrom_JSONUnmarshal verifies the parser handles
+// trust policy shapes after a real JSON unmarshal round-trip — including
+// Action as an array, as produced by AWS, and mixed Effect values (T-818).
+func TestIAMRole_CanBeAssumedFrom_JSONUnmarshal(t *testing.T) {
+	tests := []struct {
+		name     string
+		document string
+		expected []string
+	}{
+		{
+			name: "single string action unmarshalled",
+			document: `{
+				"Version": "2012-10-17",
+				"Statement": [
+					{
+						"Effect": "Allow",
+						"Action": "sts:AssumeRole",
+						"Principal": {"Service": "ec2.amazonaws.com"}
+					}
+				]
+			}`,
+			expected: []string{"Service: ec2.amazonaws.com"},
+		},
+		{
+			name: "array action with assume role and tag session unmarshalled (T-818)",
+			document: `{
+				"Version": "2012-10-17",
+				"Statement": [
+					{
+						"Effect": "Allow",
+						"Action": ["sts:AssumeRole", "sts:TagSession"],
+						"Principal": {"Service": "ec2.amazonaws.com"}
+					}
+				]
+			}`,
+			expected: []string{"Service: ec2.amazonaws.com"},
+		},
+		{
+			name: "array action without assume role is excluded",
+			document: `{
+				"Version": "2012-10-17",
+				"Statement": [
+					{
+						"Effect": "Allow",
+						"Action": ["sts:TagSession"],
+						"Principal": {"Service": "ec2.amazonaws.com"}
+					}
+				]
+			}`,
+			expected: []string{},
+		},
+		{
+			name: "deny statement is excluded after unmarshal (T-818)",
+			document: `{
+				"Version": "2012-10-17",
+				"Statement": [
+					{
+						"Effect": "Deny",
+						"Action": "sts:AssumeRole",
+						"Principal": {"AWS": "arn:aws:iam::999999999999:root"}
+					}
+				]
+			}`,
+			expected: []string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var doc IAMPolicyDocument
+			if err := json.Unmarshal([]byte(tt.document), &doc); err != nil {
+				t.Fatalf("failed to unmarshal policy document: %v", err)
+			}
+			role := IAMRole{AssumeRolePolicy: doc}
+			result := role.CanBeAssumedFrom()
 			if !reflect.DeepEqual(result, tt.expected) {
 				t.Errorf("CanBeAssumedFrom() = %v, want %v", result, tt.expected)
 			}
