@@ -775,8 +775,10 @@ func GetNetworkInterfaces(svc ec2.DescribeNetworkInterfacesAPIClient) []types.Ne
 	return result
 }
 
-// GetTransitGatewayFromNetworkInterface returns the Transit Gateway attachment ID for a network interface
-func GetTransitGatewayFromNetworkInterface(netinterface types.NetworkInterface, svc *ec2.Client) string {
+// GetTransitGatewayFromNetworkInterface returns the Transit Gateway attachment ID for a network interface.
+// The svc parameter is the AWS SDK paginator interface so callers can pass either
+// a real *ec2.Client or a testing mock.
+func GetTransitGatewayFromNetworkInterface(netinterface types.NetworkInterface, svc ec2.DescribeTransitGatewayVpcAttachmentsAPIClient) string {
 	return getTransitGatewayFromNetworkInterface(netinterface, svc)
 }
 
@@ -822,8 +824,10 @@ func matchTransitGatewayAttachment(attachments []types.TransitGatewayVpcAttachme
 	return ""
 }
 
-// GetVPCEndpointFromNetworkInterface returns the VPC endpoint associated with a network interface
-func GetVPCEndpointFromNetworkInterface(netinterface types.NetworkInterface, svc *ec2.Client) *types.VpcEndpoint {
+// GetVPCEndpointFromNetworkInterface returns the VPC endpoint associated with a network interface.
+// The svc parameter is the AWS SDK paginator interface so callers can pass either
+// a real *ec2.Client or a testing mock.
+func GetVPCEndpointFromNetworkInterface(netinterface types.NetworkInterface, svc ec2.DescribeVpcEndpointsAPIClient) *types.VpcEndpoint {
 	// TODO: Consider caching this
 	return getVPCEndpointFromNetworkInterface(netinterface, svc)
 }
@@ -865,8 +869,10 @@ func getVPCEndpointFromNetworkInterface(netinterface types.NetworkInterface, svc
 	return nil
 }
 
-// GetNatGatewayFromNetworkInterface returns the NAT gateway associated with a network interface
-func GetNatGatewayFromNetworkInterface(netinterface types.NetworkInterface, svc *ec2.Client) *types.NatGateway {
+// GetNatGatewayFromNetworkInterface returns the NAT gateway associated with a network interface.
+// The svc parameter is the AWS SDK paginator interface so callers can pass either
+// a real *ec2.Client or a testing mock.
+func GetNatGatewayFromNetworkInterface(netinterface types.NetworkInterface, svc ec2.DescribeNatGatewaysAPIClient) *types.NatGateway {
 	return getNatGatewayFromNetworkInterface(netinterface, svc)
 }
 

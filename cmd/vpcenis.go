@@ -7,9 +7,23 @@ import (
 	"github.com/ArjenSchwarz/awstools/helpers"
 	format "github.com/ArjenSchwarz/go-output"
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	"github.com/spf13/cobra"
 )
+
+// eniAttachmentLookupClient is the minimum EC2 API surface required by
+// getAttachment to resolve ENI attachment metadata. Combining the three
+// Describe* API client interfaces here keeps production callers passing a
+// single *ec2.Client while letting tests supply a mock that paginates.
+// Pagination for each underlying Describe call lives in helpers/ec2.go
+// (T-657); this interface just pins the command-side path to those
+// paginated helpers.
+type eniAttachmentLookupClient interface {
+	ec2.DescribeVpcEndpointsAPIClient
+	ec2.DescribeNatGatewaysAPIClient
+	ec2.DescribeTransitGatewayVpcAttachmentsAPIClient
+}
 
 // peeringsCmd represents the peerings command
 var enisCmd = &cobra.Command{
@@ -32,23 +46,24 @@ func init() {
 
 func enis(_ *cobra.Command, _ []string) {
 	awsConfig := config.DefaultAwsConfig(*settings)
-	names := helpers.GetAllEC2ResourceNames(awsConfig.Ec2Client())
+	ec2Client := awsConfig.Ec2Client()
+	names := helpers.GetAllEC2ResourceNames(ec2Client)
 	resultTitle := "VPC ENIs for account " + getName(helpers.GetAccountID(awsConfig.StsClient()))
-	interfaces := helpers.GetNetworkInterfaces(awsConfig.Ec2Client())
+	interfaces := helpers.GetNetworkInterfaces(ec2Client)
 	output := format.OutputArray{Settings: settings.NewOutputSettings()}
 	if vpceenisSplit {
 		output.Settings.SeparateTables = true
 		groups := splitBySubnet(interfaces)
 		for subnet, group := range groups {
-			printENIs(group, names, fmt.Sprintf("%s - %s: %s", resultTitle, getNameAndIDFromMap(aws.ToString(group[0].VpcId), names), getNameAndIDFromMap(subnet, names)), true)
+			printENIs(group, names, fmt.Sprintf("%s - %s: %s", resultTitle, getNameAndIDFromMap(aws.ToString(group[0].VpcId), names), getNameAndIDFromMap(subnet, names)), true, ec2Client)
 		}
 	} else {
-		printENIs(interfaces, names, resultTitle, false)
+		printENIs(interfaces, names, resultTitle, false, ec2Client)
 	}
 	output.Write()
 }
 
-func printENIs(interfaces []types.NetworkInterface, names map[string]string, resultTitle string, split bool) {
+func printENIs(interfaces []types.NetworkInterface, names map[string]string, resultTitle string, split bool, svc eniAttachmentLookupClient) {
 	keys := []string{"ENI", "Type", "Attachment", "IPs", "VPC", "Subnet"}
 	output := format.OutputArray{Keys: keys, Settings: settings.NewOutputSettings()}
 	output.Settings.Title = resultTitle
@@ -73,7 +88,7 @@ func printENIs(interfaces []types.NetworkInterface, names map[string]string, res
 		}
 		content["ENI"] = aws.ToString(netinterface.NetworkInterfaceId)
 		content["Type"] = netinterface.InterfaceType
-		content["Attachment"] = getNameAndIDFromMap(getAttachment(netinterface), names)
+		content["Attachment"] = getNameAndIDFromMap(getAttachment(netinterface, svc), names)
 		content["IPs"] = iparray
 		content["VPC"] = getNameAndIDFromMap(aws.ToString(netinterface.VpcId), names)
 		content["Subnet"] = getNameAndIDFromMap(aws.ToString(netinterface.SubnetId), names)
@@ -91,23 +106,27 @@ func splitBySubnet(interfaces []types.NetworkInterface) map[string][]types.Netwo
 	return result
 }
 
-func getAttachment(netinterface types.NetworkInterface) string {
-	awsConfig := config.DefaultAwsConfig(*settings)
+// getAttachment resolves the attachment label for a given ENI. For instance
+// ENIs it returns the instance ID directly; for TGW/NAT/VPC-endpoint ENIs it
+// dispatches to the matching paginated helper (T-657 fixed those helpers to
+// walk every page). The svc parameter is the composite client interface so
+// tests can supply a paginating mock without a real *ec2.Client.
+func getAttachment(netinterface types.NetworkInterface, svc eniAttachmentLookupClient) string {
 	if netinterface.Attachment != nil && netinterface.Attachment.InstanceId != nil {
 		return *netinterface.Attachment.InstanceId
 	}
 	if netinterface.InterfaceType == types.NetworkInterfaceTypeTransitGateway {
-		return helpers.GetTransitGatewayFromNetworkInterface(netinterface, awsConfig.Ec2Client())
+		return helpers.GetTransitGatewayFromNetworkInterface(netinterface, svc)
 	}
 	if netinterface.InterfaceType == types.NetworkInterfaceTypeNatGateway || netinterface.InterfaceType == "nat_gateway" {
-		natgw := helpers.GetNatGatewayFromNetworkInterface(netinterface, awsConfig.Ec2Client())
+		natgw := helpers.GetNatGatewayFromNetworkInterface(netinterface, svc)
 		if natgw != nil {
 			return aws.ToString(natgw.NatGatewayId)
 		}
 		return ""
 	}
 	if netinterface.InterfaceType == types.NetworkInterfaceTypeVpcEndpoint {
-		endpoint := helpers.GetVPCEndpointFromNetworkInterface(netinterface, awsConfig.Ec2Client())
+		endpoint := helpers.GetVPCEndpointFromNetworkInterface(netinterface, svc)
 		if endpoint != nil {
 			return fmt.Sprintf("%s (%s)", aws.ToString(endpoint.ServiceName), aws.ToString(endpoint.VpcEndpointId))
 		}
