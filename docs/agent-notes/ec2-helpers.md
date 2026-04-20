@@ -45,6 +45,15 @@ pointers directly — prefix-list routes will panic.
 Attachment fields `TransitGatewayAttachmentId` and `ResourceId` are also
 pointers; use `aws.ToString` rather than raw deref.
 
+## ENI Listing
+
+`GetNetworkInterfaces` (`helpers/ec2.go`) accepts
+`ec2.DescribeNetworkInterfacesAPIClient` rather than `*ec2.Client` directly.
+`*ec2.Client` satisfies the interface so real callers are unaffected, and
+tests can pass a mock. The helper uses `NewDescribeNetworkInterfacesPaginator`
+so large accounts don't get truncated output. `GetVPCUsageOverview` reuses
+this helper; there is no separate private `retrieveNetworkInterfaces`.
+
 ## ENI Matching Helpers
 
 Pure, testable helpers live alongside the AWS-client-taking wrappers. Each scans a slice of AWS objects for an ENI or subnet match so nil-safety can be tested without mocking.
