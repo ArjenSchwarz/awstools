@@ -25,3 +25,7 @@ AWS profile names are case-sensitive — they are matched verbatim against `[pro
 - Invalid profile or missing credentials → `DefaultAwsConfig` panics (caught by CLI). Tests recover from this panic explicitly.
 - STS call failure → `setCallerInfo` panics. Not graceful — consider error propagation if this ever becomes a common failure mode.
 - Partial STS response (nil fields) → handled via `resolveCallerIdentity`; identity fields become empty strings, no panic.
+
+## AWS Config File Parser
+
+`helpers/aws_config_file.go:parseConfigFileWithRecovery` reads `~/.aws/config` with `bufio.Scanner`. The default token size (64 KiB) is too small for configs with long `credential_process` commands or other oversized custom properties, so the parser calls `scanner.Buffer` with a 1 MiB cap (`maxConfigLineSize`). Without this, a single long line causes `bufio.ErrTooLong` and aborts the whole parse, bypassing the partial-recovery logic. This was the fix for T-867.
