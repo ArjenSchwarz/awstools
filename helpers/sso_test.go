@@ -171,6 +171,47 @@ func TestSSOPermissionSet_WithManagedPolicies(t *testing.T) {
 	}
 }
 
+// Regression test for T-891: ListInstances must paginate across all pages.
+// AWS caps ListInstances at a small page size, so discovery must follow
+// NextToken to avoid silently dropping the caller's SSO instance when it
+// happens to appear on a later page.
+func TestListInstances_Pagination(t *testing.T) {
+	mock := newBasicMock()
+	listInstancesCalls := 0
+	mock.ListInstancesFunc = func(ctx context.Context, params *ssoadmin.ListInstancesInput, optFns ...func(*ssoadmin.Options)) (*ssoadmin.ListInstancesOutput, error) {
+		listInstancesCalls++
+		switch listInstancesCalls {
+		case 1:
+			assert.Nil(t, params.NextToken, "first call should not have NextToken")
+			return &ssoadmin.ListInstancesOutput{
+				Instances: []ssotypes.InstanceMetadata{},
+				NextToken: aws.String("page2"),
+			}, nil
+		case 2:
+			assert.Equal(t, "page2", *params.NextToken)
+			return &ssoadmin.ListInstancesOutput{
+				Instances: []ssotypes.InstanceMetadata{
+					{
+						IdentityStoreId: aws.String("d-laterpage"),
+						InstanceArn:     aws.String("arn:aws:sso:::instance/ssoins-laterpage"),
+					},
+				},
+				NextToken: nil,
+			}, nil
+		default:
+			t.Fatal("ListInstances called too many times")
+			return nil, nil
+		}
+	}
+
+	instance, err := GetSSOAccountInstance(mock)
+	require.NoError(t, err)
+	assert.Equal(t, 2, listInstancesCalls, "ListInstances should be called twice to follow NextToken")
+	assert.Equal(t, "d-laterpage", instance.IdentityStoreID,
+		"should find the SSO instance on the second page")
+	assert.Equal(t, "arn:aws:sso:::instance/ssoins-laterpage", instance.Arn)
+}
+
 // Regression tests for T-479: pagination must collect all pages
 
 // newBasicMock returns a mock with common defaults set for a single permission set.
