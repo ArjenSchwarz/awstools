@@ -29,6 +29,21 @@ All callers must pass the subnet's VPC ID. The VPC ID is available from:
   truncates results in large accounts. `GetAllVPCRouteTables`, `retrieveRouteTables`,
   and `addAllRouteTableNames` all follow the paginator pattern.
 
+## Transit Gateway Route Parsing
+
+`parseActiveRoute` and `parseBlackholeRoute` convert `types.TransitGatewayRoute`
+into the internal `TransitGatewayRoute` struct. The SDK type has two optional
+destination pointers — `DestinationCidrBlock` (IPv4 or IPv6 CIDR) and
+`PrefixListId` — and AWS populates only one. TGW routes do not have a separate
+IPv6 destination field; v6 CIDRs reuse `DestinationCidrBlock`.
+
+The helper `tgwRouteDestination(route)` encapsulates the fallback: CIDR first,
+then prefix list ID, then empty string. Never dereference the destination
+pointers directly — prefix-list routes will panic.
+
+Attachment fields `TransitGatewayAttachmentId` and `ResourceId` are also
+pointers; use `aws.ToString` rather than raw deref.
+
 ## Testing Pattern
 
 `GetAllVPCRouteTables` takes `*ec2.Client` so callers don't have to change, but

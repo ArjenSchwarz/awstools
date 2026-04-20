@@ -517,25 +517,48 @@ func GetActiveRoutesForTransitGatewayRouteTable(routetableID string, svc *ec2.Cl
 	return result
 }
 
+// tgwRouteDestination returns a human-readable destination for a Transit Gateway
+// route. AWS populates either DestinationCidrBlock (for IPv4/IPv6 CIDR routes)
+// or PrefixListId (for prefix-list routes) — both are optional pointers, so we
+// fall back from one to the other and return an empty string if neither is set.
+func tgwRouteDestination(route types.TransitGatewayRoute) string {
+	if cidr := aws.ToString(route.DestinationCidrBlock); cidr != "" {
+		return cidr
+	}
+	return aws.ToString(route.PrefixListId)
+}
+
 // parseActiveRoute converts an AWS SDK TransitGatewayRoute into our TransitGatewayRoute type.
 func parseActiveRoute(route types.TransitGatewayRoute) TransitGatewayRoute {
 	tgwroute := TransitGatewayRoute{
 		State:     string(route.State),
-		CIDR:      *route.DestinationCidrBlock,
+		CIDR:      tgwRouteDestination(route),
 		RouteType: string(route.Type),
 	}
 	if len(route.TransitGatewayAttachments) > 0 {
-		resourceid := *route.TransitGatewayAttachments[0].ResourceId
+		attachment := route.TransitGatewayAttachments[0]
+		resourceid := aws.ToString(attachment.ResourceId)
 		// We don't care about the public IPs of the routes, so strip those off
-		if route.TransitGatewayAttachments[0].ResourceType == types.TransitGatewayAttachmentResourceTypeVpn {
+		if attachment.ResourceType == types.TransitGatewayAttachmentResourceTypeVpn {
 			resourceid = strings.Split(resourceid, "(")[0]
 		}
 		tgwroute.Attachment = TransitGatewayAttachment{
-			ID:         *route.TransitGatewayAttachments[0].TransitGatewayAttachmentId,
+			ID:         aws.ToString(attachment.TransitGatewayAttachmentId),
 			ResourceID: resourceid,
 		}
 	}
 	return tgwroute
+}
+
+// parseBlackholeRoute converts an AWS SDK blackhole TransitGatewayRoute into
+// our TransitGatewayRoute type. Blackhole routes have no useful attachment, so
+// only the destination and type are captured.
+func parseBlackholeRoute(route types.TransitGatewayRoute) TransitGatewayRoute {
+	return TransitGatewayRoute{
+		State:     string(route.State),
+		CIDR:      tgwRouteDestination(route),
+		RouteType: string(route.Type),
+	}
 }
 
 // GetBlackholeRoutesForTransitGatewayRouteTable returns all routes that are currently active for a Transit Gateway route table
@@ -556,12 +579,7 @@ func GetBlackholeRoutesForTransitGatewayRouteTable(routetableID string, svc *ec2
 		panic(err)
 	}
 	for _, route := range resp.Routes {
-		tgwroute := TransitGatewayRoute{
-			State:     string(route.State),
-			CIDR:      *route.DestinationCidrBlock,
-			RouteType: string(route.Type),
-		}
-		result = append(result, tgwroute)
+		result = append(result, parseBlackholeRoute(route))
 	}
 	return result
 }

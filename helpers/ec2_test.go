@@ -630,6 +630,108 @@ func TestParseActiveRoute_VPNStripsPublicIP(t *testing.T) {
 	}
 }
 
+// TestParseActiveRoute_NilCIDRWithPrefixList verifies that parseActiveRoute does
+// not panic when AWS returns a TGW route without a DestinationCidrBlock (as
+// happens for prefix-list routes) and surfaces the prefix list ID instead. (T-658)
+func TestParseActiveRoute_NilCIDRWithPrefixList(t *testing.T) {
+	route := types.TransitGatewayRoute{
+		DestinationCidrBlock: nil,
+		PrefixListId:         aws.String("pl-12345678"),
+		State:                types.TransitGatewayRouteStateActive,
+		Type:                 types.TransitGatewayRouteTypeStatic,
+	}
+
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("parseActiveRoute panicked on nil DestinationCidrBlock: %v", r)
+		}
+	}()
+
+	result := parseActiveRoute(route)
+	if result.CIDR != "pl-12345678" {
+		t.Errorf("Expected CIDR to fall back to prefix list ID 'pl-12345678', got %q", result.CIDR)
+	}
+}
+
+// TestParseActiveRoute_NilCIDRNoPrefixList verifies that parseActiveRoute does
+// not panic when both DestinationCidrBlock and PrefixListId are nil. (T-658)
+func TestParseActiveRoute_NilCIDRNoPrefixList(t *testing.T) {
+	route := types.TransitGatewayRoute{
+		DestinationCidrBlock: nil,
+		PrefixListId:         nil,
+		State:                types.TransitGatewayRouteStateActive,
+		Type:                 types.TransitGatewayRouteTypeStatic,
+	}
+
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("parseActiveRoute panicked on nil destinations: %v", r)
+		}
+	}()
+
+	result := parseActiveRoute(route)
+	if result.CIDR != "" {
+		t.Errorf("Expected empty CIDR when both destinations are nil, got %q", result.CIDR)
+	}
+}
+
+// TestParseActiveRoute_NilAttachmentPointers verifies that parseActiveRoute does
+// not panic when TransitGatewayRouteAttachment has nil ResourceId or
+// TransitGatewayAttachmentId pointers. (T-658)
+func TestParseActiveRoute_NilAttachmentPointers(t *testing.T) {
+	route := types.TransitGatewayRoute{
+		DestinationCidrBlock: aws.String("10.3.0.0/16"),
+		State:                types.TransitGatewayRouteStateActive,
+		Type:                 types.TransitGatewayRouteTypeStatic,
+		TransitGatewayAttachments: []types.TransitGatewayRouteAttachment{
+			{
+				ResourceId:                 nil,
+				TransitGatewayAttachmentId: nil,
+				ResourceType:               types.TransitGatewayAttachmentResourceTypeVpc,
+			},
+		},
+	}
+
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("parseActiveRoute panicked on nil attachment pointers: %v", r)
+		}
+	}()
+
+	result := parseActiveRoute(route)
+	if result.Attachment.ID != "" {
+		t.Errorf("Expected empty Attachment.ID for nil pointer, got %q", result.Attachment.ID)
+	}
+	if result.Attachment.ResourceID != "" {
+		t.Errorf("Expected empty Attachment.ResourceID for nil pointer, got %q", result.Attachment.ResourceID)
+	}
+}
+
+// TestParseBlackholeRoute_NilCIDRWithPrefixList verifies the blackhole route
+// parser mirrors the active route parser in nil-safety. (T-658)
+func TestParseBlackholeRoute_NilCIDRWithPrefixList(t *testing.T) {
+	route := types.TransitGatewayRoute{
+		DestinationCidrBlock: nil,
+		PrefixListId:         aws.String("pl-87654321"),
+		State:                types.TransitGatewayRouteStateBlackhole,
+		Type:                 types.TransitGatewayRouteTypeStatic,
+	}
+
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("parseBlackholeRoute panicked on nil DestinationCidrBlock: %v", r)
+		}
+	}()
+
+	result := parseBlackholeRoute(route)
+	if result.CIDR != "pl-87654321" {
+		t.Errorf("Expected CIDR to fall back to prefix list ID 'pl-87654321', got %q", result.CIDR)
+	}
+	if result.State != "blackhole" {
+		t.Errorf("Expected State 'blackhole', got %s", result.State)
+	}
+}
+
 func TestIsValidIPAddress(t *testing.T) {
 	tests := []struct {
 		name     string
