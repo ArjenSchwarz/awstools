@@ -94,16 +94,35 @@ func warnS3DetailError(bucket, call string, err error) {
 }
 
 // GetAllBuckets retrieves all S3 buckets and returns them along with
-// the owner name.
+// the owner name. S3 ListBuckets supports ContinuationToken pagination,
+// so the full list is assembled by walking every page. Owner is taken
+// from the first page (the API returns it on every page, but its value
+// is invariant across pages).
 func GetAllBuckets(svc S3API) ([]types.Bucket, string) {
-	params := &s3.ListBucketsInput{}
-	resp, err := svc.ListBuckets(context.TODO(), params)
+	var (
+		buckets []types.Bucket
+		owner   string
+		token   *string
+	)
 
-	if err != nil {
-		panic(err)
+	for i := 0; ; i++ {
+		resp, err := svc.ListBuckets(context.TODO(), &s3.ListBucketsInput{
+			ContinuationToken: token,
+		})
+		if err != nil {
+			panic(err)
+		}
+		if i == 0 {
+			owner = resolveOwnerName(resp.Owner)
+		}
+		buckets = append(buckets, resp.Buckets...)
+		if resp.ContinuationToken == nil || *resp.ContinuationToken == "" {
+			break
+		}
+		token = resp.ContinuationToken
 	}
 
-	return resp.Buckets, resolveOwnerName(resp.Owner)
+	return buckets, owner
 }
 
 // GetBucketDetails retrieves detailed information for all S3 buckets

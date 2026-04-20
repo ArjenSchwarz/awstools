@@ -6,8 +6,14 @@ Scope: `helpers/s3.go` plus its consumers in `cmd/s3list.go` and
 ## Architecture
 
 - `GetBucketDetails(svc S3API) []S3Bucket` is the single entry point
-  used by the CLI. It calls `ListBuckets` once and then issues a
+  used by the CLI. It calls `GetAllBuckets` and then issues a
   sequence of per-bucket detail calls.
+- `GetAllBuckets` walks every page of `ListBuckets` using the
+  `ContinuationToken` on `ListBucketsInput`/`ListBucketsOutput`
+  (T-835). AWS now paginates `ListBuckets` for accounts above the
+  default 10k bucket quota, so a single call is no longer enough.
+  Owner is captured from the first page (it's returned on every page
+  but doesn't change).
 - `S3API` is a helper-owned interface (added for T-714). It lists
   only the S3 SDK methods used inside the helper so tests can inject
   per-call failures with a `mockS3Client`.
@@ -85,3 +91,7 @@ legitimate values.
   `TestGetBucketDetails_UnknownOnDetailErrors`,
   `TestGetBucketDetails_HealthyPathSetsPointers`,
   `TestComputeBucketIsPublic`.
+- Regression tests for T-835 pagination:
+  `TestGetAllBuckets_Pagination` (asserts every page is walked) and
+  `TestGetAllBuckets_SinglePage` (asserts the loop stops after one
+  call when no `ContinuationToken` is returned).
