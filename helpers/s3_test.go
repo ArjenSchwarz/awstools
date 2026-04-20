@@ -1,10 +1,14 @@
 package helpers
 
 import (
+	"context"
+	"errors"
+	"os"
 	"reflect"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 )
 
@@ -200,15 +204,15 @@ func TestS3Bucket_Struct(t *testing.T) {
 		Account:              "123456789012",
 		Name:                 "my-test-bucket",
 		Owner:                "bucket-owner",
-		IsPublic:             true,
+		IsPublic:             aws.Bool(true),
 		Region:               "us-west-2",
-		OpenACLs:             false,
-		PublicPolicy:         true,
-		LoggingEnabled:       true,
+		OpenACLs:             aws.Bool(false),
+		PublicPolicy:         aws.Bool(true),
+		LoggingEnabled:       aws.Bool(true),
 		LoggingBucket:        "logging-bucket",
-		HasEncryption:        true,
-		Versioning:           true,
-		VersioningMFAEnabled: false,
+		HasEncryption:        aws.Bool(true),
+		Versioning:           aws.Bool(true),
+		VersioningMFAEnabled: aws.Bool(false),
 		Tags: map[string]string{
 			"Environment": "Production",
 			"Team":        "DevOps",
@@ -223,32 +227,32 @@ func TestS3Bucket_Struct(t *testing.T) {
 	if bucket.Name != "my-test-bucket" {
 		t.Errorf("Expected Name to be 'my-test-bucket', got %s", bucket.Name)
 	}
-	if !bucket.IsPublic {
-		t.Errorf("Expected IsPublic to be true, got %v", bucket.IsPublic)
+	if !aws.ToBool(bucket.IsPublic) {
+		t.Errorf("Expected IsPublic to be true, got %v", aws.ToBool(bucket.IsPublic))
 	}
 	if bucket.Region != "us-west-2" {
 		t.Errorf("Expected Region to be 'us-west-2', got %s", bucket.Region)
 	}
-	if bucket.OpenACLs {
-		t.Errorf("Expected OpenACLs to be false, got %v", bucket.OpenACLs)
+	if aws.ToBool(bucket.OpenACLs) {
+		t.Errorf("Expected OpenACLs to be false, got %v", aws.ToBool(bucket.OpenACLs))
 	}
-	if !bucket.PublicPolicy {
-		t.Errorf("Expected PublicPolicy to be true, got %v", bucket.PublicPolicy)
+	if !aws.ToBool(bucket.PublicPolicy) {
+		t.Errorf("Expected PublicPolicy to be true, got %v", aws.ToBool(bucket.PublicPolicy))
 	}
-	if !bucket.LoggingEnabled {
-		t.Errorf("Expected LoggingEnabled to be true, got %v", bucket.LoggingEnabled)
+	if !aws.ToBool(bucket.LoggingEnabled) {
+		t.Errorf("Expected LoggingEnabled to be true, got %v", aws.ToBool(bucket.LoggingEnabled))
 	}
 	if bucket.LoggingBucket != "logging-bucket" {
 		t.Errorf("Expected LoggingBucket to be 'logging-bucket', got %s", bucket.LoggingBucket)
 	}
-	if !bucket.HasEncryption {
-		t.Errorf("Expected HasEncryption to be true, got %v", bucket.HasEncryption)
+	if !aws.ToBool(bucket.HasEncryption) {
+		t.Errorf("Expected HasEncryption to be true, got %v", aws.ToBool(bucket.HasEncryption))
 	}
-	if !bucket.Versioning {
-		t.Errorf("Expected Versioning to be true, got %v", bucket.Versioning)
+	if !aws.ToBool(bucket.Versioning) {
+		t.Errorf("Expected Versioning to be true, got %v", aws.ToBool(bucket.Versioning))
 	}
-	if bucket.VersioningMFAEnabled {
-		t.Errorf("Expected VersioningMFAEnabled to be false, got %v", bucket.VersioningMFAEnabled)
+	if aws.ToBool(bucket.VersioningMFAEnabled) {
+		t.Errorf("Expected VersioningMFAEnabled to be false, got %v", aws.ToBool(bucket.VersioningMFAEnabled))
 	}
 
 	// Test tags
@@ -312,7 +316,7 @@ func TestS3Bucket_ACLsAndGrants(t *testing.T) {
 
 func TestS3Bucket_EncryptionRules(t *testing.T) {
 	bucket := S3Bucket{
-		HasEncryption: true,
+		HasEncryption: aws.Bool(true),
 		EncryptionRules: []types.ServerSideEncryptionRule{
 			{
 				ApplyServerSideEncryptionByDefault: &types.ServerSideEncryptionByDefault{
@@ -322,8 +326,8 @@ func TestS3Bucket_EncryptionRules(t *testing.T) {
 		},
 	}
 
-	if !bucket.HasEncryption {
-		t.Errorf("Expected HasEncryption to be true, got %v", bucket.HasEncryption)
+	if !aws.ToBool(bucket.HasEncryption) {
+		t.Errorf("Expected HasEncryption to be true, got %v", aws.ToBool(bucket.HasEncryption))
 	}
 
 	if len(bucket.EncryptionRules) != 1 {
@@ -563,5 +567,344 @@ func TestS3Bucket_PublicAccessBlockConfiguration(t *testing.T) {
 	}
 	if !aws.ToBool(config.RestrictPublicBuckets) {
 		t.Errorf("Expected RestrictPublicBuckets to be true, got %v", aws.ToBool(config.RestrictPublicBuckets))
+	}
+}
+
+// mockS3Client implements S3API. Each method delegates to a function
+// field so individual tests can return specific responses or errors
+// per call.
+type mockS3Client struct {
+	listBuckets           func(ctx context.Context, params *s3.ListBucketsInput, optFns ...func(*s3.Options)) (*s3.ListBucketsOutput, error)
+	getBucketPolicyStatus func(ctx context.Context, params *s3.GetBucketPolicyStatusInput, optFns ...func(*s3.Options)) (*s3.GetBucketPolicyStatusOutput, error)
+	getBucketAcl          func(ctx context.Context, params *s3.GetBucketAclInput, optFns ...func(*s3.Options)) (*s3.GetBucketAclOutput, error)
+	getPublicAccessBlock  func(ctx context.Context, params *s3.GetPublicAccessBlockInput, optFns ...func(*s3.Options)) (*s3.GetPublicAccessBlockOutput, error)
+	getBucketLocation     func(ctx context.Context, params *s3.GetBucketLocationInput, optFns ...func(*s3.Options)) (*s3.GetBucketLocationOutput, error)
+	getBucketLogging      func(ctx context.Context, params *s3.GetBucketLoggingInput, optFns ...func(*s3.Options)) (*s3.GetBucketLoggingOutput, error)
+	getBucketEncryption   func(ctx context.Context, params *s3.GetBucketEncryptionInput, optFns ...func(*s3.Options)) (*s3.GetBucketEncryptionOutput, error)
+	getBucketTagging      func(ctx context.Context, params *s3.GetBucketTaggingInput, optFns ...func(*s3.Options)) (*s3.GetBucketTaggingOutput, error)
+	getBucketPolicy       func(ctx context.Context, params *s3.GetBucketPolicyInput, optFns ...func(*s3.Options)) (*s3.GetBucketPolicyOutput, error)
+	getBucketReplication  func(ctx context.Context, params *s3.GetBucketReplicationInput, optFns ...func(*s3.Options)) (*s3.GetBucketReplicationOutput, error)
+	getBucketVersioning   func(ctx context.Context, params *s3.GetBucketVersioningInput, optFns ...func(*s3.Options)) (*s3.GetBucketVersioningOutput, error)
+}
+
+func (m *mockS3Client) ListBuckets(ctx context.Context, params *s3.ListBucketsInput, optFns ...func(*s3.Options)) (*s3.ListBucketsOutput, error) {
+	return m.listBuckets(ctx, params, optFns...)
+}
+
+func (m *mockS3Client) GetBucketPolicyStatus(ctx context.Context, params *s3.GetBucketPolicyStatusInput, optFns ...func(*s3.Options)) (*s3.GetBucketPolicyStatusOutput, error) {
+	return m.getBucketPolicyStatus(ctx, params, optFns...)
+}
+
+func (m *mockS3Client) GetBucketAcl(ctx context.Context, params *s3.GetBucketAclInput, optFns ...func(*s3.Options)) (*s3.GetBucketAclOutput, error) {
+	return m.getBucketAcl(ctx, params, optFns...)
+}
+
+func (m *mockS3Client) GetPublicAccessBlock(ctx context.Context, params *s3.GetPublicAccessBlockInput, optFns ...func(*s3.Options)) (*s3.GetPublicAccessBlockOutput, error) {
+	return m.getPublicAccessBlock(ctx, params, optFns...)
+}
+
+func (m *mockS3Client) GetBucketLocation(ctx context.Context, params *s3.GetBucketLocationInput, optFns ...func(*s3.Options)) (*s3.GetBucketLocationOutput, error) {
+	return m.getBucketLocation(ctx, params, optFns...)
+}
+
+func (m *mockS3Client) GetBucketLogging(ctx context.Context, params *s3.GetBucketLoggingInput, optFns ...func(*s3.Options)) (*s3.GetBucketLoggingOutput, error) {
+	return m.getBucketLogging(ctx, params, optFns...)
+}
+
+func (m *mockS3Client) GetBucketEncryption(ctx context.Context, params *s3.GetBucketEncryptionInput, optFns ...func(*s3.Options)) (*s3.GetBucketEncryptionOutput, error) {
+	return m.getBucketEncryption(ctx, params, optFns...)
+}
+
+func (m *mockS3Client) GetBucketTagging(ctx context.Context, params *s3.GetBucketTaggingInput, optFns ...func(*s3.Options)) (*s3.GetBucketTaggingOutput, error) {
+	return m.getBucketTagging(ctx, params, optFns...)
+}
+
+func (m *mockS3Client) GetBucketPolicy(ctx context.Context, params *s3.GetBucketPolicyInput, optFns ...func(*s3.Options)) (*s3.GetBucketPolicyOutput, error) {
+	return m.getBucketPolicy(ctx, params, optFns...)
+}
+
+func (m *mockS3Client) GetBucketReplication(ctx context.Context, params *s3.GetBucketReplicationInput, optFns ...func(*s3.Options)) (*s3.GetBucketReplicationOutput, error) {
+	return m.getBucketReplication(ctx, params, optFns...)
+}
+
+func (m *mockS3Client) GetBucketVersioning(ctx context.Context, params *s3.GetBucketVersioningInput, optFns ...func(*s3.Options)) (*s3.GetBucketVersioningOutput, error) {
+	return m.getBucketVersioning(ctx, params, optFns...)
+}
+
+// healthyS3Mock returns a mock where every detail call succeeds with
+// a benign default response. Individual tests override the fields
+// they want to fail.
+func healthyS3Mock(bucketName string) *mockS3Client {
+	return &mockS3Client{
+		listBuckets: func(ctx context.Context, params *s3.ListBucketsInput, optFns ...func(*s3.Options)) (*s3.ListBucketsOutput, error) {
+			return &s3.ListBucketsOutput{
+				Buckets: []types.Bucket{{Name: aws.String(bucketName)}},
+				Owner:   &types.Owner{DisplayName: aws.String("owner"), ID: aws.String("owner-id")},
+			}, nil
+		},
+		getBucketPolicyStatus: func(ctx context.Context, params *s3.GetBucketPolicyStatusInput, optFns ...func(*s3.Options)) (*s3.GetBucketPolicyStatusOutput, error) {
+			return &s3.GetBucketPolicyStatusOutput{PolicyStatus: &types.PolicyStatus{IsPublic: aws.Bool(false)}}, nil
+		},
+		getBucketAcl: func(ctx context.Context, params *s3.GetBucketAclInput, optFns ...func(*s3.Options)) (*s3.GetBucketAclOutput, error) {
+			return &s3.GetBucketAclOutput{Grants: []types.Grant{}}, nil
+		},
+		getPublicAccessBlock: func(ctx context.Context, params *s3.GetPublicAccessBlockInput, optFns ...func(*s3.Options)) (*s3.GetPublicAccessBlockOutput, error) {
+			return &s3.GetPublicAccessBlockOutput{PublicAccessBlockConfiguration: &types.PublicAccessBlockConfiguration{}}, nil
+		},
+		getBucketLocation: func(ctx context.Context, params *s3.GetBucketLocationInput, optFns ...func(*s3.Options)) (*s3.GetBucketLocationOutput, error) {
+			return &s3.GetBucketLocationOutput{LocationConstraint: types.BucketLocationConstraintEuWest1}, nil
+		},
+		getBucketLogging: func(ctx context.Context, params *s3.GetBucketLoggingInput, optFns ...func(*s3.Options)) (*s3.GetBucketLoggingOutput, error) {
+			return &s3.GetBucketLoggingOutput{LoggingEnabled: &types.LoggingEnabled{TargetBucket: aws.String("log-target")}}, nil
+		},
+		getBucketEncryption: func(ctx context.Context, params *s3.GetBucketEncryptionInput, optFns ...func(*s3.Options)) (*s3.GetBucketEncryptionOutput, error) {
+			return &s3.GetBucketEncryptionOutput{
+				ServerSideEncryptionConfiguration: &types.ServerSideEncryptionConfiguration{
+					Rules: []types.ServerSideEncryptionRule{{
+						ApplyServerSideEncryptionByDefault: &types.ServerSideEncryptionByDefault{
+							SSEAlgorithm: types.ServerSideEncryptionAes256,
+						},
+					}},
+				},
+			}, nil
+		},
+		getBucketTagging: func(ctx context.Context, params *s3.GetBucketTaggingInput, optFns ...func(*s3.Options)) (*s3.GetBucketTaggingOutput, error) {
+			return &s3.GetBucketTaggingOutput{TagSet: []types.Tag{}}, nil
+		},
+		getBucketPolicy: func(ctx context.Context, params *s3.GetBucketPolicyInput, optFns ...func(*s3.Options)) (*s3.GetBucketPolicyOutput, error) {
+			return &s3.GetBucketPolicyOutput{Policy: aws.String("")}, nil
+		},
+		getBucketReplication: func(ctx context.Context, params *s3.GetBucketReplicationInput, optFns ...func(*s3.Options)) (*s3.GetBucketReplicationOutput, error) {
+			return &s3.GetBucketReplicationOutput{}, nil
+		},
+		getBucketVersioning: func(ctx context.Context, params *s3.GetBucketVersioningInput, optFns ...func(*s3.Options)) (*s3.GetBucketVersioningOutput, error) {
+			return &s3.GetBucketVersioningOutput{Status: types.BucketVersioningStatusEnabled, MFADelete: types.MFADeleteStatusEnabled}, nil
+		},
+	}
+}
+
+// silenceStderr redirects os.Stderr to /dev/null for the duration of
+// a test so warning logs emitted by GetBucketDetails don't pollute
+// the test output. It restores the original file descriptor on
+// cleanup.
+func silenceStderr(t *testing.T) {
+	t.Helper()
+	orig := os.Stderr
+	devNull, err := os.Open(os.DevNull)
+	if err != nil {
+		t.Fatalf("open /dev/null: %v", err)
+	}
+	os.Stderr = devNull
+	t.Cleanup(func() {
+		os.Stderr = orig
+		devNull.Close()
+	})
+}
+
+// TestGetBucketDetails_UnknownOnDetailErrors is the regression test
+// for T-714. When any of the per-bucket detail calls fails, the
+// matching tri-state field on the returned S3Bucket must be nil
+// ("unknown") rather than falsely defaulting to false.
+func TestGetBucketDetails_UnknownOnDetailErrors(t *testing.T) {
+	const bucketName = "test-bucket"
+	errBoom := errors.New("boom")
+
+	tests := []struct {
+		name       string
+		breakMock  func(m *mockS3Client)
+		expectNil  func(b S3Bucket) bool
+		fieldLabel string
+	}{
+		{
+			name: "GetBucketEncryption failure => HasEncryption is unknown",
+			breakMock: func(m *mockS3Client) {
+				m.getBucketEncryption = func(ctx context.Context, params *s3.GetBucketEncryptionInput, optFns ...func(*s3.Options)) (*s3.GetBucketEncryptionOutput, error) {
+					return nil, errBoom
+				}
+			},
+			expectNil:  func(b S3Bucket) bool { return b.HasEncryption == nil },
+			fieldLabel: "HasEncryption",
+		},
+		{
+			name: "GetBucketVersioning failure => Versioning and VersioningMFAEnabled are unknown",
+			breakMock: func(m *mockS3Client) {
+				m.getBucketVersioning = func(ctx context.Context, params *s3.GetBucketVersioningInput, optFns ...func(*s3.Options)) (*s3.GetBucketVersioningOutput, error) {
+					return nil, errBoom
+				}
+			},
+			expectNil:  func(b S3Bucket) bool { return b.Versioning == nil && b.VersioningMFAEnabled == nil },
+			fieldLabel: "Versioning/VersioningMFAEnabled",
+		},
+		{
+			name: "GetBucketLogging failure => LoggingEnabled is unknown",
+			breakMock: func(m *mockS3Client) {
+				m.getBucketLogging = func(ctx context.Context, params *s3.GetBucketLoggingInput, optFns ...func(*s3.Options)) (*s3.GetBucketLoggingOutput, error) {
+					return nil, errBoom
+				}
+			},
+			expectNil:  func(b S3Bucket) bool { return b.LoggingEnabled == nil },
+			fieldLabel: "LoggingEnabled",
+		},
+		{
+			name: "GetBucketAcl failure => OpenACLs and IsPublic are unknown",
+			breakMock: func(m *mockS3Client) {
+				m.getBucketAcl = func(ctx context.Context, params *s3.GetBucketAclInput, optFns ...func(*s3.Options)) (*s3.GetBucketAclOutput, error) {
+					return nil, errBoom
+				}
+			},
+			// IsPublic must also be unknown because an unknown ACL
+			// could flip the answer.
+			expectNil:  func(b S3Bucket) bool { return b.OpenACLs == nil && b.IsPublic == nil },
+			fieldLabel: "OpenACLs/IsPublic",
+		},
+		{
+			name: "GetBucketPolicyStatus failure => PublicPolicy and IsPublic are unknown",
+			breakMock: func(m *mockS3Client) {
+				m.getBucketPolicyStatus = func(ctx context.Context, params *s3.GetBucketPolicyStatusInput, optFns ...func(*s3.Options)) (*s3.GetBucketPolicyStatusOutput, error) {
+					return nil, errBoom
+				}
+			},
+			expectNil:  func(b S3Bucket) bool { return b.PublicPolicy == nil && b.IsPublic == nil },
+			fieldLabel: "PublicPolicy/IsPublic",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			silenceStderr(t)
+			mock := healthyS3Mock(bucketName)
+			tt.breakMock(mock)
+
+			buckets := GetBucketDetails(mock)
+			if len(buckets) != 1 {
+				t.Fatalf("expected 1 bucket, got %d", len(buckets))
+			}
+			if !tt.expectNil(buckets[0]) {
+				t.Errorf("expected %s to be nil (unknown); got bucket=%+v", tt.fieldLabel, buckets[0])
+			}
+		})
+	}
+}
+
+// TestGetBucketDetails_HealthyPathSetsPointers verifies that when all
+// detail calls succeed the tri-state pointers are populated (not nil).
+func TestGetBucketDetails_HealthyPathSetsPointers(t *testing.T) {
+	silenceStderr(t)
+	mock := healthyS3Mock("ok-bucket")
+
+	buckets := GetBucketDetails(mock)
+	if len(buckets) != 1 {
+		t.Fatalf("expected 1 bucket, got %d", len(buckets))
+	}
+	b := buckets[0]
+	if b.HasEncryption == nil || !*b.HasEncryption {
+		t.Errorf("HasEncryption expected true, got %v", b.HasEncryption)
+	}
+	if b.Versioning == nil || !*b.Versioning {
+		t.Errorf("Versioning expected true, got %v", b.Versioning)
+	}
+	if b.VersioningMFAEnabled == nil || !*b.VersioningMFAEnabled {
+		t.Errorf("VersioningMFAEnabled expected true, got %v", b.VersioningMFAEnabled)
+	}
+	if b.LoggingEnabled == nil || !*b.LoggingEnabled {
+		t.Errorf("LoggingEnabled expected true, got %v", b.LoggingEnabled)
+	}
+	if b.LoggingBucket != "log-target" {
+		t.Errorf("LoggingBucket expected log-target, got %q", b.LoggingBucket)
+	}
+	if b.OpenACLs == nil || *b.OpenACLs {
+		t.Errorf("OpenACLs expected false, got %v", b.OpenACLs)
+	}
+	if b.PublicPolicy == nil || *b.PublicPolicy {
+		t.Errorf("PublicPolicy expected false, got %v", b.PublicPolicy)
+	}
+	if b.IsPublic == nil || *b.IsPublic {
+		t.Errorf("IsPublic expected false, got %v", b.IsPublic)
+	}
+}
+
+// TestComputeBucketIsPublic covers the tri-state aggregation logic so
+// that unknown policy/ACL inputs don't silently become "not public".
+func TestComputeBucketIsPublic(t *testing.T) {
+	tests := []struct {
+		name     string
+		policy   *bool
+		acls     *bool
+		pab      *types.PublicAccessBlockConfiguration
+		expected *bool
+	}{
+		{
+			name:     "both confirmed not public, no PAB => not public",
+			policy:   aws.Bool(false),
+			acls:     aws.Bool(false),
+			pab:      nil,
+			expected: aws.Bool(false),
+		},
+		{
+			name:     "confirmed public policy => public",
+			policy:   aws.Bool(true),
+			acls:     aws.Bool(false),
+			pab:      nil,
+			expected: aws.Bool(true),
+		},
+		{
+			name:     "confirmed public ACLs => public",
+			policy:   aws.Bool(false),
+			acls:     aws.Bool(true),
+			pab:      nil,
+			expected: aws.Bool(true),
+		},
+		{
+			name:     "unknown policy, clean ACLs, no PAB => unknown",
+			policy:   nil,
+			acls:     aws.Bool(false),
+			pab:      nil,
+			expected: nil,
+		},
+		{
+			name:     "clean policy, unknown ACLs, no PAB => unknown",
+			policy:   aws.Bool(false),
+			acls:     nil,
+			pab:      nil,
+			expected: nil,
+		},
+		{
+			name:   "unknown inputs but PAB fully locks down => not public",
+			policy: nil,
+			acls:   nil,
+			pab: &types.PublicAccessBlockConfiguration{
+				BlockPublicAcls:       aws.Bool(true),
+				BlockPublicPolicy:     aws.Bool(true),
+				IgnorePublicAcls:      aws.Bool(true),
+				RestrictPublicBuckets: aws.Bool(true),
+			},
+			expected: aws.Bool(false),
+		},
+		{
+			name:   "public policy neutralised by PAB => not public",
+			policy: aws.Bool(true),
+			acls:   aws.Bool(false),
+			pab: &types.PublicAccessBlockConfiguration{
+				BlockPublicAcls:       aws.Bool(true),
+				BlockPublicPolicy:     aws.Bool(true),
+				IgnorePublicAcls:      aws.Bool(true),
+				RestrictPublicBuckets: aws.Bool(true),
+			},
+			expected: aws.Bool(false),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := computeBucketIsPublic(tt.policy, tt.acls, tt.pab)
+			switch {
+			case got == nil && tt.expected == nil:
+				// ok
+			case got == nil || tt.expected == nil:
+				t.Fatalf("got=%v, want=%v", got, tt.expected)
+			case *got != *tt.expected:
+				t.Fatalf("got=%v, want=%v", *got, *tt.expected)
+			}
+		})
 	}
 }
