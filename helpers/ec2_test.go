@@ -188,10 +188,31 @@ func TestIsLatestInstanceFamily(t *testing.T) {
 			instanceFamily: "invalid",
 			expected:       false,
 		},
+		// Malformed / short input — must not panic (regression tests for T-671)
+		{
+			name:           "empty string returns false without panic",
+			instanceFamily: "",
+			expected:       false,
+		},
+		{
+			name:           "single character returns false without panic",
+			instanceFamily: "c",
+			expected:       false,
+		},
+		{
+			name:           "single unknown character returns false without panic",
+			instanceFamily: "z",
+			expected:       false,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			defer func() {
+				if r := recover(); r != nil {
+					t.Errorf("IsLatestInstanceFamily(%q) panicked: %v", tt.instanceFamily, r)
+				}
+			}()
 			result := IsLatestInstanceFamily(tt.instanceFamily)
 			if result != tt.expected {
 				t.Errorf("IsLatestInstanceFamily(%q) = %v, want %v", tt.instanceFamily, result, tt.expected)
@@ -606,6 +627,108 @@ func TestParseActiveRoute_VPNStripsPublicIP(t *testing.T) {
 
 	if result.Attachment.ResourceID != "vpn-abc123" {
 		t.Errorf("Expected ResourceID 'vpn-abc123' (public IP stripped), got %s", result.Attachment.ResourceID)
+	}
+}
+
+// TestParseActiveRoute_NilCIDRWithPrefixList verifies that parseActiveRoute does
+// not panic when AWS returns a TGW route without a DestinationCidrBlock (as
+// happens for prefix-list routes) and surfaces the prefix list ID instead. (T-658)
+func TestParseActiveRoute_NilCIDRWithPrefixList(t *testing.T) {
+	route := types.TransitGatewayRoute{
+		DestinationCidrBlock: nil,
+		PrefixListId:         aws.String("pl-12345678"),
+		State:                types.TransitGatewayRouteStateActive,
+		Type:                 types.TransitGatewayRouteTypeStatic,
+	}
+
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("parseActiveRoute panicked on nil DestinationCidrBlock: %v", r)
+		}
+	}()
+
+	result := parseActiveRoute(route)
+	if result.CIDR != "pl-12345678" {
+		t.Errorf("Expected CIDR to fall back to prefix list ID 'pl-12345678', got %q", result.CIDR)
+	}
+}
+
+// TestParseActiveRoute_NilCIDRNoPrefixList verifies that parseActiveRoute does
+// not panic when both DestinationCidrBlock and PrefixListId are nil. (T-658)
+func TestParseActiveRoute_NilCIDRNoPrefixList(t *testing.T) {
+	route := types.TransitGatewayRoute{
+		DestinationCidrBlock: nil,
+		PrefixListId:         nil,
+		State:                types.TransitGatewayRouteStateActive,
+		Type:                 types.TransitGatewayRouteTypeStatic,
+	}
+
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("parseActiveRoute panicked on nil destinations: %v", r)
+		}
+	}()
+
+	result := parseActiveRoute(route)
+	if result.CIDR != "" {
+		t.Errorf("Expected empty CIDR when both destinations are nil, got %q", result.CIDR)
+	}
+}
+
+// TestParseActiveRoute_NilAttachmentPointers verifies that parseActiveRoute does
+// not panic when TransitGatewayRouteAttachment has nil ResourceId or
+// TransitGatewayAttachmentId pointers. (T-658)
+func TestParseActiveRoute_NilAttachmentPointers(t *testing.T) {
+	route := types.TransitGatewayRoute{
+		DestinationCidrBlock: aws.String("10.3.0.0/16"),
+		State:                types.TransitGatewayRouteStateActive,
+		Type:                 types.TransitGatewayRouteTypeStatic,
+		TransitGatewayAttachments: []types.TransitGatewayRouteAttachment{
+			{
+				ResourceId:                 nil,
+				TransitGatewayAttachmentId: nil,
+				ResourceType:               types.TransitGatewayAttachmentResourceTypeVpc,
+			},
+		},
+	}
+
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("parseActiveRoute panicked on nil attachment pointers: %v", r)
+		}
+	}()
+
+	result := parseActiveRoute(route)
+	if result.Attachment.ID != "" {
+		t.Errorf("Expected empty Attachment.ID for nil pointer, got %q", result.Attachment.ID)
+	}
+	if result.Attachment.ResourceID != "" {
+		t.Errorf("Expected empty Attachment.ResourceID for nil pointer, got %q", result.Attachment.ResourceID)
+	}
+}
+
+// TestParseBlackholeRoute_NilCIDRWithPrefixList verifies the blackhole route
+// parser mirrors the active route parser in nil-safety. (T-658)
+func TestParseBlackholeRoute_NilCIDRWithPrefixList(t *testing.T) {
+	route := types.TransitGatewayRoute{
+		DestinationCidrBlock: nil,
+		PrefixListId:         aws.String("pl-87654321"),
+		State:                types.TransitGatewayRouteStateBlackhole,
+		Type:                 types.TransitGatewayRouteTypeStatic,
+	}
+
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("parseBlackholeRoute panicked on nil DestinationCidrBlock: %v", r)
+		}
+	}()
+
+	result := parseBlackholeRoute(route)
+	if result.CIDR != "pl-87654321" {
+		t.Errorf("Expected CIDR to fall back to prefix list ID 'pl-87654321', got %q", result.CIDR)
+	}
+	if result.State != "blackhole" {
+		t.Errorf("Expected State 'blackhole', got %s", result.State)
 	}
 }
 
@@ -1746,6 +1869,86 @@ func TestFormatRouteTableInfo_PrefixListRoute(t *testing.T) {
 	expected := "pl-68a54001: vpce-abc123"
 	if routes[0] != expected {
 		t.Errorf("expected %q, got %q", expected, routes[0])
+	}
+}
+
+// Regression tests for T-656: GetNatGatewayFromNetworkInterface must tolerate
+// NAT gateway address entries and network interfaces where NetworkInterfaceId
+// is nil without panicking. Scanning must continue past missing values and
+// match the correct NAT gateway when a later address has a non-nil matching ID.
+
+func TestMatchNatGatewayByENI_NilAddressNetworkInterfaceID(t *testing.T) {
+	natgateways := []types.NatGateway{
+		{
+			NatGatewayId: aws.String("nat-aaa"),
+			NatGatewayAddresses: []types.NatGatewayAddress{
+				{NetworkInterfaceId: nil},
+				{NetworkInterfaceId: aws.String("eni-match")},
+			},
+		},
+	}
+
+	result := matchNatGatewayByENI(natgateways, "eni-match")
+	if result == nil {
+		t.Fatal("expected matching NAT gateway, got nil (nil address NetworkInterfaceId aborted scan)")
+	}
+	if aws.ToString(result.NatGatewayId) != "nat-aaa" {
+		t.Errorf("expected nat-aaa, got %s", aws.ToString(result.NatGatewayId))
+	}
+}
+
+func TestMatchNatGatewayByENI_EmptyENIID(t *testing.T) {
+	natgateways := []types.NatGateway{
+		{
+			NatGatewayId: aws.String("nat-aaa"),
+			NatGatewayAddresses: []types.NatGatewayAddress{
+				{NetworkInterfaceId: nil},
+			},
+		},
+	}
+
+	if result := matchNatGatewayByENI(natgateways, ""); result != nil {
+		t.Errorf("expected nil for empty eniID, got %s", aws.ToString(result.NatGatewayId))
+	}
+}
+
+func TestMatchNatGatewayByENI_NoMatch(t *testing.T) {
+	natgateways := []types.NatGateway{
+		{
+			NatGatewayId: aws.String("nat-aaa"),
+			NatGatewayAddresses: []types.NatGatewayAddress{
+				{NetworkInterfaceId: aws.String("eni-other")},
+			},
+		},
+	}
+
+	if result := matchNatGatewayByENI(natgateways, "eni-missing"); result != nil {
+		t.Errorf("expected nil when no match, got %s", aws.ToString(result.NatGatewayId))
+	}
+}
+
+func TestMatchNatGatewayByENI_MatchOnLaterGateway(t *testing.T) {
+	natgateways := []types.NatGateway{
+		{
+			NatGatewayId: aws.String("nat-first"),
+			NatGatewayAddresses: []types.NatGatewayAddress{
+				{NetworkInterfaceId: nil},
+			},
+		},
+		{
+			NatGatewayId: aws.String("nat-second"),
+			NatGatewayAddresses: []types.NatGatewayAddress{
+				{NetworkInterfaceId: aws.String("eni-target")},
+			},
+		},
+	}
+
+	result := matchNatGatewayByENI(natgateways, "eni-target")
+	if result == nil {
+		t.Fatal("expected match on second gateway, got nil")
+	}
+	if aws.ToString(result.NatGatewayId) != "nat-second" {
+		t.Errorf("expected nat-second, got %s", aws.ToString(result.NatGatewayId))
 	}
 }
 
