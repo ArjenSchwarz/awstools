@@ -547,7 +547,7 @@ func TestNormalizeBucketLocation(t *testing.T) {
 
 func TestS3Bucket_PublicAccessBlockConfiguration(t *testing.T) {
 	bucket := S3Bucket{
-		PublicAccessBlockConfiguration: types.PublicAccessBlockConfiguration{
+		PublicAccessBlockConfiguration: &types.PublicAccessBlockConfiguration{
 			BlockPublicAcls:       aws.Bool(true),
 			BlockPublicPolicy:     aws.Bool(true),
 			IgnorePublicAcls:      aws.Bool(true),
@@ -556,6 +556,9 @@ func TestS3Bucket_PublicAccessBlockConfiguration(t *testing.T) {
 	}
 
 	config := bucket.PublicAccessBlockConfiguration
+	if config == nil {
+		t.Fatalf("Expected PublicAccessBlockConfiguration to be set, got nil")
+	}
 	if !aws.ToBool(config.BlockPublicAcls) {
 		t.Errorf("Expected BlockPublicAcls to be true, got %v", aws.ToBool(config.BlockPublicAcls))
 	}
@@ -906,5 +909,31 @@ func TestComputeBucketIsPublic(t *testing.T) {
 				t.Fatalf("got=%v, want=%v", *got, *tt.expected)
 			}
 		})
+	}
+}
+
+// TestS3Bucket_PublicAccessBlockUnknown verifies that an S3Bucket with no
+// PublicAccessBlockConfiguration (e.g. when the GetPublicAccessBlock API call
+// failed or returned no configuration) is represented distinctly from a bucket
+// whose PAB has all four flags set to false. Regression test for T-693.
+func TestS3Bucket_PublicAccessBlockUnknown(t *testing.T) {
+	unknown := S3Bucket{}
+	if unknown.PublicAccessBlockConfiguration != nil {
+		t.Errorf("Expected PublicAccessBlockConfiguration to be nil when unknown, got %+v", unknown.PublicAccessBlockConfiguration)
+	}
+
+	allFalse := S3Bucket{
+		PublicAccessBlockConfiguration: &types.PublicAccessBlockConfiguration{
+			BlockPublicAcls:       aws.Bool(false),
+			BlockPublicPolicy:     aws.Bool(false),
+			IgnorePublicAcls:      aws.Bool(false),
+			RestrictPublicBuckets: aws.Bool(false),
+		},
+	}
+	if allFalse.PublicAccessBlockConfiguration == nil {
+		t.Fatalf("Expected PublicAccessBlockConfiguration to be set for all-false bucket")
+	}
+	if aws.ToBool(allFalse.PublicAccessBlockConfiguration.BlockPublicAcls) {
+		t.Errorf("Expected BlockPublicAcls to be false, got true")
 	}
 }

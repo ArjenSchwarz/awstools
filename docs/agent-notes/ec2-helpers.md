@@ -70,3 +70,58 @@ the pagination logic lives in the unexported `getAllVPCRouteTables` which takes
 the narrower `ec2.DescribeRouteTablesAPIClient` interface. Unit tests mock that
 interface (see `helpers/vpc_routetable_pagination_test.go`) — this is the same
 split used for the IAM pagination tests.
+
+The same split is used by the per-ENI lookup helpers after T-657:
+`GetVPCEndpointFromNetworkInterface`, `GetNatGatewayFromNetworkInterface`, and
+`GetTransitGatewayFromNetworkInterface` forward to unexported implementations
+that take `ec2.DescribeVpcEndpointsAPIClient`,
+`ec2.DescribeNatGatewaysAPIClient`, and
+`ec2.DescribeTransitGatewayVpcAttachmentsAPIClient` respectively. All three
+walk every page via `NewDescribe*Paginator`. Tests live in
+`helpers/ec2_eni_lookup_pagination_test.go`.
+
+`GetAllVpcPeers` follows the same split: the exported function takes
+`*ec2.Client` while the unexported `getAllVpcPeers` takes
+`ec2.DescribeVpcPeeringConnectionsAPIClient` and walks
+`ec2.NewDescribeVpcPeeringConnectionsPaginator` (T-746). Before that fix the
+helper issued a single `DescribeVpcPeeringConnections` call and silently
+dropped peerings on subsequent pages.
+
+## Transit Gateway Inventory (T-669)
+
+The TGW inventory helpers follow the same split pattern. Public wrappers take
+`*ec2.Client`; private implementations take the composite
+`tgwInventoryAPIClient` interface (bundles
+`ec2.DescribeTransitGatewaysAPIClient`,
+`ec2.DescribeTransitGatewayRouteTablesAPIClient`,
+`ec2.GetTransitGatewayRouteTableAssociationsAPIClient`, and
+`SearchTransitGatewayRoutes`). Mock against that composite interface — see
+`helpers/tgw_pagination_test.go`.
+
+- `GetAllTransitGateways` → `getAllTransitGateways` walks
+  `NewDescribeTransitGatewaysPaginator`.
+- `GetRouteTablesForTransitGateway` → `getRouteTablesForTransitGateway` walks
+  `NewDescribeTransitGatewayRouteTablesPaginator`.
+- `GetSourceAttachmentsForTransitGatewayRouteTable` →
+  `getSourceAttachmentsForTransitGatewayRouteTable` walks
+  `NewGetTransitGatewayRouteTableAssociationsPaginator`.
+
+**`SearchTransitGatewayRoutes` is the exception** — the AWS API has no
+`NextToken` for this operation. Results are capped at 1000 rows with an
+`AdditionalRoutesAvailable` flag. The active-route helper
+(`getActiveRoutesForTransitGatewayRouteTable`) sets `MaxResults: 1000`
+explicitly and, on overflow, re-queries per route type (`propagated` and
+`static`) to raise the effective ceiling to ~2000 active routes per route
+table. The blackhole-route helper just logs a warning on overflow because
+blackhole routes are normally few. Never rely on a single unfiltered
+`SearchTransitGatewayRoutes` call in a large account.
+
+## VPN Connections API
+
+`DescribeVpnConnections` is **not** a paginated AWS API — the input/output
+structs have no `NextToken` or `MaxResults` and the SDK provides no paginator.
+A single call returns every VPN connection in the region. `addAllVpnNames`
+(`helpers/ec2.go`) therefore uses one call, but takes
+`ec2.DescribeVpnConnectionsAPIClient` instead of `*ec2.Client` so the helper
+is unit-testable (T-746). The same applies to `DescribeVpnGateways`, which is
+currently not used anywhere in the codebase.

@@ -44,11 +44,21 @@ aggregation lives in `computeBucketIsPublic`. Rules:
 - Otherwise, any unknown input makes the composite unknown too,
   because the unknown side could flip the answer.
 
-## PAB handling is T-693's scope
+## PublicAccessBlock tri-state (T-693)
 
-`PublicAccessBlockConfiguration` itself is still the SDK type (a
-value, not a pointer). T-693 handles the "unknown PAB" case
-separately. T-714 intentionally left it alone.
+`S3Bucket.PublicAccessBlockConfiguration` is a
+`*types.PublicAccessBlockConfiguration` (pointer), not a value. A
+`nil` pointer means the state is unknown — either the bucket has no
+PAB configured (AWS returns `NoSuchPublicAccessBlockConfiguration`)
+or the caller lacks `s3:GetBucketPublicAccessBlock`. This must be
+distinct from a non-nil config whose four `*bool` flags are all
+`false`, which is an explicit permissive configuration.
+
+The renderer `parsePublicAccessBlock` in `cmd/s3list.go` returns the
+literal string `"Unknown"` for the nil case. Previously the code
+used a value type and silently swallowed the error, so unknown
+buckets were rendered as "All false" — indistinguishable from the
+legitimate all-false state.
 
 ## Error handling
 
@@ -57,6 +67,11 @@ detail call via `warnS3DetailError`. It does not abort processing —
 the failing field is simply left `nil`. `GetAllBuckets` still panics
 on `ListBuckets` failure (pre-existing behaviour); there is no
 useful fallback when the initial list cannot be obtained.
+
+When adding a new per-bucket API call, prefer to represent the
+unknown/absent state distinctly (pointer or explicit known flag)
+rather than relying on zero values, to avoid collisions with
+legitimate values.
 
 ## Testing
 

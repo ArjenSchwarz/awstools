@@ -49,7 +49,7 @@ type S3Bucket struct {
 	OpenACLs                       *bool
 	Owner                          string
 	Policy                         string
-	PublicAccessBlockConfiguration types.PublicAccessBlockConfiguration
+	PublicAccessBlockConfiguration *types.PublicAccessBlockConfiguration
 	PublicPolicy                   *bool
 	Region                         string
 	Replication                    types.ReplicationConfiguration
@@ -172,9 +172,7 @@ func GetBucketDetails(svc S3API) []S3Bucket {
 			PublicPolicy: policyIsPublic,
 		}
 
-		if publicresp != nil && publicresp.PublicAccessBlockConfiguration != nil {
-			bucketObject.PublicAccessBlockConfiguration = *publicresp.PublicAccessBlockConfiguration
-		}
+		bucketObject.PublicAccessBlockConfiguration = pab
 
 		loggingresp, err := svc.GetBucketLogging(context.TODO(), &s3.GetBucketLoggingInput{Bucket: bucket.Name})
 		if err != nil {

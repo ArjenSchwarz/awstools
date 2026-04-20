@@ -203,16 +203,24 @@ func addAllTransitGatewayNames(svc *ec2.Client, result map[string]string) map[st
 	return result
 }
 
-// addAllVPCNames returns the names of all vpns in a map
-func addAllVpnNames(svc *ec2.Client, result map[string]string) map[string]string {
+// addAllVpnNames adds every VPN connection's display name to the result map.
+// AWS's DescribeVpnConnections API is not paginated (no NextToken/MaxResults),
+// so a single call returns every VPN connection in the region. The helper
+// accepts the narrow ec2.DescribeVpnConnectionsAPIClient interface so it can
+// be unit tested without a real *ec2.Client.
+func addAllVpnNames(svc ec2.DescribeVpnConnectionsAPIClient, result map[string]string) map[string]string {
 	resp, err := svc.DescribeVpnConnections(context.TODO(), &ec2.DescribeVpnConnectionsInput{})
 	if err != nil {
 		panic(err)
 	}
 	for _, vpn := range resp.VpnConnections {
-		result[*vpn.VpnConnectionId] = *vpn.VpnConnectionId
+		vpnID := aws.ToString(vpn.VpnConnectionId)
+		if vpnID == "" {
+			continue
+		}
+		result[vpnID] = vpnID
 		if name := getNameFromTags(vpn.Tags); name != "" {
-			result[*vpn.VpnConnectionId] = name
+			result[vpnID] = name
 		}
 	}
 	return result
@@ -269,30 +277,43 @@ type VPCHolder struct {
 	AccountID string
 }
 
-// GetAllVpcPeers returns the peerings that are present in this region of this account
+// GetAllVpcPeers returns the peerings that are present in this region of this
+// account. It paginates through every page of DescribeVpcPeeringConnections so
+// accounts with more peerings than fit in a single response are fully
+// enumerated.
 func GetAllVpcPeers(svc *ec2.Client) []VpcPeering {
+	return getAllVpcPeers(svc)
+}
+
+// getAllVpcPeers implements GetAllVpcPeers against the minimal
+// DescribeVpcPeeringConnectionsAPIClient interface so the pagination logic can
+// be unit tested without a real *ec2.Client.
+func getAllVpcPeers(svc ec2.DescribeVpcPeeringConnectionsAPIClient) []VpcPeering {
 	var result []VpcPeering
-	resp, err := svc.DescribeVpcPeeringConnections(context.TODO(), &ec2.DescribeVpcPeeringConnectionsInput{})
-	if err != nil {
-		panic(err)
-	}
-	for _, connection := range resp.VpcPeeringConnections {
-		peering := VpcPeering{
-			PeeringID: aws.ToString(connection.VpcPeeringConnectionId),
+	paginator := ec2.NewDescribeVpcPeeringConnectionsPaginator(svc, &ec2.DescribeVpcPeeringConnectionsInput{})
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(context.TODO())
+		if err != nil {
+			panic(err)
 		}
-		if connection.RequesterVpcInfo != nil {
-			peering.RequesterVpc = VPCHolder{
-				ID:        aws.ToString(connection.RequesterVpcInfo.VpcId),
-				AccountID: aws.ToString(connection.RequesterVpcInfo.OwnerId),
+		for _, connection := range page.VpcPeeringConnections {
+			peering := VpcPeering{
+				PeeringID: aws.ToString(connection.VpcPeeringConnectionId),
 			}
-		}
-		if connection.AccepterVpcInfo != nil {
-			peering.AccepterVpc = VPCHolder{
-				ID:        aws.ToString(connection.AccepterVpcInfo.VpcId),
-				AccountID: aws.ToString(connection.AccepterVpcInfo.OwnerId),
+			if connection.RequesterVpcInfo != nil {
+				peering.RequesterVpc = VPCHolder{
+					ID:        aws.ToString(connection.RequesterVpcInfo.VpcId),
+					AccountID: aws.ToString(connection.RequesterVpcInfo.OwnerId),
+				}
 			}
+			if connection.AccepterVpcInfo != nil {
+				peering.AccepterVpc = VPCHolder{
+					ID:        aws.ToString(connection.AccepterVpcInfo.VpcId),
+					AccountID: aws.ToString(connection.AccepterVpcInfo.OwnerId),
+				}
+			}
+			result = append(result, peering)
 		}
-		result = append(result, peering)
 	}
 	return result
 }
@@ -423,28 +444,59 @@ type TransitGatewayAttachment struct {
 	ResourceID   string
 }
 
+// tgwInventoryAPIClient bundles the EC2 APIClient interfaces needed by the
+// TGW inventory helpers. *ec2.Client satisfies this composite interface so
+// production callers are unaffected; tests can pass a mock that implements
+// all four methods.
+type tgwInventoryAPIClient interface {
+	ec2.DescribeTransitGatewaysAPIClient
+	ec2.DescribeTransitGatewayRouteTablesAPIClient
+	ec2.GetTransitGatewayRouteTableAssociationsAPIClient
+	SearchTransitGatewayRoutes(ctx context.Context, params *ec2.SearchTransitGatewayRoutesInput, optFns ...func(*ec2.Options)) (*ec2.SearchTransitGatewayRoutesOutput, error)
+}
+
 // GetAllTransitGateways returns an array of all Transit Gateways in the account
 func GetAllTransitGateways(svc *ec2.Client) []TransitGateway {
+	return getAllTransitGateways(svc)
+}
+
+// getAllTransitGateways implements GetAllTransitGateways against the narrow
+// tgwInventoryAPIClient interface so the pagination logic can be unit tested
+// without a real *ec2.Client. It walks NewDescribeTransitGatewaysPaginator to
+// ensure accounts with more TGWs than a single page still get complete
+// results.
+func getAllTransitGateways(svc tgwInventoryAPIClient) []TransitGateway {
 	var result []TransitGateway
-	resp, err := svc.DescribeTransitGateways(context.TODO(), &ec2.DescribeTransitGatewaysInput{})
-	if err != nil {
-		panic(err)
-	}
-	for _, tgw := range resp.TransitGateways {
-		tgwID := aws.ToString(tgw.TransitGatewayId)
-		tgwobject := TransitGateway{
-			ID:          tgwID,
-			AccountID:   aws.ToString(tgw.OwnerId),
-			Name:        getNameFromTags(tgw.Tags),
-			RouteTables: GetRouteTablesForTransitGateway(tgwID, svc),
+	paginator := ec2.NewDescribeTransitGatewaysPaginator(svc, &ec2.DescribeTransitGatewaysInput{})
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(context.TODO())
+		if err != nil {
+			panic(err)
 		}
-		result = append(result, tgwobject)
+		for _, tgw := range page.TransitGateways {
+			tgwID := aws.ToString(tgw.TransitGatewayId)
+			tgwobject := TransitGateway{
+				ID:          tgwID,
+				AccountID:   aws.ToString(tgw.OwnerId),
+				Name:        getNameFromTags(tgw.Tags),
+				RouteTables: getRouteTablesForTransitGateway(tgwID, svc),
+			}
+			result = append(result, tgwobject)
+		}
 	}
 	return result
 }
 
 // GetRouteTablesForTransitGateway returns all route tables attached to a Transit Gateway
 func GetRouteTablesForTransitGateway(tgwID string, svc *ec2.Client) map[string]TransitGatewayRouteTable {
+	return getRouteTablesForTransitGateway(tgwID, svc)
+}
+
+// getRouteTablesForTransitGateway implements GetRouteTablesForTransitGateway
+// against the narrow tgwInventoryAPIClient interface. It walks
+// NewDescribeTransitGatewayRouteTablesPaginator so large TGWs with many route
+// tables aren't truncated.
+func getRouteTablesForTransitGateway(tgwID string, svc tgwInventoryAPIClient) map[string]TransitGatewayRouteTable {
 	result := make(map[string]TransitGatewayRouteTable)
 	params := &ec2.DescribeTransitGatewayRouteTablesInput{
 		Filters: []types.Filter{
@@ -454,20 +506,23 @@ func GetRouteTablesForTransitGateway(tgwID string, svc *ec2.Client) map[string]T
 			},
 		},
 	}
-	resp, err := svc.DescribeTransitGatewayRouteTables(context.TODO(), params)
-	if err != nil {
-		panic(err)
-	}
-	for _, table := range resp.TransitGatewayRouteTables {
-		routetable := TransitGatewayRouteTable{
-			ID:   *table.TransitGatewayRouteTableId,
-			Name: getNameFromTags(table.Tags),
+	paginator := ec2.NewDescribeTransitGatewayRouteTablesPaginator(svc, params)
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(context.TODO())
+		if err != nil {
+			panic(err)
 		}
-		result[routetable.ID] = routetable
+		for _, table := range page.TransitGatewayRouteTables {
+			routetable := TransitGatewayRouteTable{
+				ID:   aws.ToString(table.TransitGatewayRouteTableId),
+				Name: getNameFromTags(table.Tags),
+			}
+			result[routetable.ID] = routetable
+		}
 	}
 	for _, routetable := range result {
-		routetable.Routes = append(GetActiveRoutesForTransitGatewayRouteTable(routetable.ID, svc), GetBlackholeRoutesForTransitGatewayRouteTable(routetable.ID, svc)...)
-		routetable.SourceAttachments = GetSourceAttachmentsForTransitGatewayRouteTable(routetable.ID, svc)
+		routetable.Routes = append(getActiveRoutesForTransitGatewayRouteTable(routetable.ID, svc), getBlackholeRoutesForTransitGatewayRouteTable(routetable.ID, svc)...)
+		routetable.SourceAttachments = getSourceAttachmentsForTransitGatewayRouteTable(routetable.ID, svc)
 		result[routetable.ID] = routetable
 	}
 	return result
@@ -475,46 +530,103 @@ func GetRouteTablesForTransitGateway(tgwID string, svc *ec2.Client) map[string]T
 
 // GetSourceAttachmentsForTransitGatewayRouteTable returns all the source attachments attached to a Transit Gateway route table
 func GetSourceAttachmentsForTransitGatewayRouteTable(routetableID string, svc *ec2.Client) []TransitGatewayAttachment {
+	return getSourceAttachmentsForTransitGatewayRouteTable(routetableID, svc)
+}
+
+// getSourceAttachmentsForTransitGatewayRouteTable implements
+// GetSourceAttachmentsForTransitGatewayRouteTable against the narrow
+// tgwInventoryAPIClient interface. It walks
+// NewGetTransitGatewayRouteTableAssociationsPaginator.
+func getSourceAttachmentsForTransitGatewayRouteTable(routetableID string, svc tgwInventoryAPIClient) []TransitGatewayAttachment {
 	var result []TransitGatewayAttachment
 	params := &ec2.GetTransitGatewayRouteTableAssociationsInput{
 		TransitGatewayRouteTableId: &routetableID,
 	}
-	resp, err := svc.GetTransitGatewayRouteTableAssociations(context.TODO(), params)
-	if err != nil {
-		panic(err)
-	}
-	for _, attachment := range resp.Associations {
-		tgwattachment := TransitGatewayAttachment{
-			ID:           *attachment.TransitGatewayAttachmentId,
-			ResourceID:   *attachment.ResourceId,
-			ResourceType: string(attachment.ResourceType),
+	paginator := ec2.NewGetTransitGatewayRouteTableAssociationsPaginator(svc, params)
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(context.TODO())
+		if err != nil {
+			panic(err)
 		}
-		result = append(result, tgwattachment)
+		for _, attachment := range page.Associations {
+			tgwattachment := TransitGatewayAttachment{
+				ID:           aws.ToString(attachment.TransitGatewayAttachmentId),
+				ResourceID:   aws.ToString(attachment.ResourceId),
+				ResourceType: string(attachment.ResourceType),
+			}
+			result = append(result, tgwattachment)
+		}
 	}
 	return result
 }
 
+// tgwSearchRoutesMaxResults is the hard cap SearchTransitGatewayRoutes will
+// return in a single call. The AWS API does not support NextToken for this
+// operation, so the only way to retrieve more is to narrow the filter set.
+const tgwSearchRoutesMaxResults int32 = 1000
+
 // GetActiveRoutesForTransitGatewayRouteTable returns all routes that are currently active for a Transit Gateway route table
 func GetActiveRoutesForTransitGatewayRouteTable(routetableID string, svc *ec2.Client) []TransitGatewayRoute {
+	return getActiveRoutesForTransitGatewayRouteTable(routetableID, svc)
+}
+
+// getActiveRoutesForTransitGatewayRouteTable implements
+// GetActiveRoutesForTransitGatewayRouteTable against the narrow
+// tgwInventoryAPIClient interface.
+//
+// SearchTransitGatewayRoutes has no NextToken in the AWS API — the response
+// is capped at 1000 routes with an AdditionalRoutesAvailable flag. When that
+// flag is set we re-query per route type (propagated + static), which
+// doubles the effective ceiling to 2000 active routes per route table. If
+// even the narrower per-type queries overflow, we log a warning and return
+// what we have so the caller at least gets partial data instead of a panic.
+func getActiveRoutesForTransitGatewayRouteTable(routetableID string, svc tgwInventoryAPIClient) []TransitGatewayRoute {
+	stateFilter := types.Filter{Name: aws.String("state"), Values: []string{"active"}}
+	resp := searchTGWRoutes(svc, routetableID, []types.Filter{stateFilter})
+	if resp.AdditionalRoutesAvailable == nil || !*resp.AdditionalRoutesAvailable {
+		return parseActiveRoutes(resp.Routes)
+	}
+	// Overflow: fall back to per-type queries to widen the ceiling.
 	var result []TransitGatewayRoute
-	desiredState := "active"
+	for _, routeType := range []string{"propagated", "static"} {
+		filters := []types.Filter{
+			stateFilter,
+			{Name: aws.String("type"), Values: []string{routeType}},
+		}
+		typed := searchTGWRoutes(svc, routetableID, filters)
+		if typed.AdditionalRoutesAvailable != nil && *typed.AdditionalRoutesAvailable {
+			log.Printf("warning: transit gateway route table %s has more than %d active %s routes; output truncated", routetableID, tgwSearchRoutesMaxResults, routeType)
+		}
+		result = append(result, parseActiveRoutes(typed.Routes)...)
+	}
+	return result
+}
+
+// parseActiveRoutes converts a slice of SDK TGW routes into the internal
+// representation used by the inventory helpers.
+func parseActiveRoutes(routes []types.TransitGatewayRoute) []TransitGatewayRoute {
+	result := make([]TransitGatewayRoute, 0, len(routes))
+	for _, route := range routes {
+		result = append(result, parseActiveRoute(route))
+	}
+	return result
+}
+
+// searchTGWRoutes is a thin wrapper around SearchTransitGatewayRoutes that
+// sets MaxResults to the documented cap and panics on error, matching the
+// existing helpers' behaviour.
+func searchTGWRoutes(svc tgwInventoryAPIClient, routetableID string, filters []types.Filter) *ec2.SearchTransitGatewayRoutesOutput {
+	maxResults := tgwSearchRoutesMaxResults
 	params := &ec2.SearchTransitGatewayRoutesInput{
 		TransitGatewayRouteTableId: &routetableID,
-		Filters: []types.Filter{
-			{
-				Name:   aws.String("state"),
-				Values: []string{desiredState},
-			},
-		},
+		Filters:                    filters,
+		MaxResults:                 &maxResults,
 	}
 	resp, err := svc.SearchTransitGatewayRoutes(context.TODO(), params)
 	if err != nil {
 		panic(err)
 	}
-	for _, route := range resp.Routes {
-		result = append(result, parseActiveRoute(route))
-	}
-	return result
+	return resp
 }
 
 // tgwRouteDestination returns a human-readable destination for a Transit Gateway
@@ -563,21 +675,23 @@ func parseBlackholeRoute(route types.TransitGatewayRoute) TransitGatewayRoute {
 
 // GetBlackholeRoutesForTransitGatewayRouteTable returns all routes that are currently active for a Transit Gateway route table
 func GetBlackholeRoutesForTransitGatewayRouteTable(routetableID string, svc *ec2.Client) []TransitGatewayRoute {
-	var result []TransitGatewayRoute
-	desiredState := "blackhole"
-	params := &ec2.SearchTransitGatewayRoutesInput{
-		TransitGatewayRouteTableId: &routetableID,
-		Filters: []types.Filter{
-			{
-				Name:   aws.String("state"),
-				Values: []string{desiredState},
-			},
-		},
+	return getBlackholeRoutesForTransitGatewayRouteTable(routetableID, svc)
+}
+
+// getBlackholeRoutesForTransitGatewayRouteTable implements
+// GetBlackholeRoutesForTransitGatewayRouteTable against the narrow
+// tgwInventoryAPIClient interface. Blackhole routes share the 1000-result
+// cap of SearchTransitGatewayRoutes but tend to be far fewer than active
+// routes in practice, so a warning is logged if overflow is detected
+// rather than adding a split-by-type fallback.
+func getBlackholeRoutesForTransitGatewayRouteTable(routetableID string, svc tgwInventoryAPIClient) []TransitGatewayRoute {
+	resp := searchTGWRoutes(svc, routetableID, []types.Filter{
+		{Name: aws.String("state"), Values: []string{"blackhole"}},
+	})
+	if resp.AdditionalRoutesAvailable != nil && *resp.AdditionalRoutesAvailable {
+		log.Printf("warning: transit gateway route table %s has more than %d blackhole routes; output truncated", routetableID, tgwSearchRoutesMaxResults)
 	}
-	resp, err := svc.SearchTransitGatewayRoutes(context.TODO(), params)
-	if err != nil {
-		panic(err)
-	}
+	result := make([]TransitGatewayRoute, 0, len(resp.Routes))
 	for _, route := range resp.Routes {
 		result = append(result, parseBlackholeRoute(route))
 	}
@@ -663,6 +777,15 @@ func GetNetworkInterfaces(svc ec2.DescribeNetworkInterfacesAPIClient) []types.Ne
 
 // GetTransitGatewayFromNetworkInterface returns the Transit Gateway attachment ID for a network interface
 func GetTransitGatewayFromNetworkInterface(netinterface types.NetworkInterface, svc *ec2.Client) string {
+	return getTransitGatewayFromNetworkInterface(netinterface, svc)
+}
+
+// getTransitGatewayFromNetworkInterface implements GetTransitGatewayFromNetworkInterface
+// against the minimal DescribeTransitGatewayVpcAttachmentsAPIClient interface
+// so pagination can be unit tested without a real *ec2.Client. It walks every
+// page of DescribeTransitGatewayVpcAttachments (T-657 — a matching attachment
+// on page 2+ was previously missed).
+func getTransitGatewayFromNetworkInterface(netinterface types.NetworkInterface, svc ec2.DescribeTransitGatewayVpcAttachmentsAPIClient) string {
 	vpcID := aws.ToString(netinterface.VpcId)
 	if vpcID == "" {
 		return ""
@@ -675,11 +798,18 @@ func GetTransitGatewayFromNetworkInterface(netinterface types.NetworkInterface, 
 			},
 		},
 	}
-	resp, err := svc.DescribeTransitGatewayVpcAttachments(context.Background(), params)
-	if err != nil {
-		panic(err)
+	subnetID := aws.ToString(netinterface.SubnetId)
+	paginator := ec2.NewDescribeTransitGatewayVpcAttachmentsPaginator(svc, params)
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(context.Background())
+		if err != nil {
+			panic(err)
+		}
+		if id := matchTransitGatewayAttachment(page.TransitGatewayVpcAttachments, subnetID); id != "" {
+			return id
+		}
 	}
-	return matchTransitGatewayAttachment(resp.TransitGatewayVpcAttachments, aws.ToString(netinterface.SubnetId))
+	return ""
 }
 
 // matchTransitGatewayAttachment finds the attachment whose SubnetIds contain the given subnet.
@@ -695,8 +825,20 @@ func matchTransitGatewayAttachment(attachments []types.TransitGatewayVpcAttachme
 // GetVPCEndpointFromNetworkInterface returns the VPC endpoint associated with a network interface
 func GetVPCEndpointFromNetworkInterface(netinterface types.NetworkInterface, svc *ec2.Client) *types.VpcEndpoint {
 	// TODO: Consider caching this
+	return getVPCEndpointFromNetworkInterface(netinterface, svc)
+}
+
+// getVPCEndpointFromNetworkInterface implements GetVPCEndpointFromNetworkInterface
+// against the minimal DescribeVpcEndpointsAPIClient interface so pagination can
+// be unit tested. Walks every page of DescribeVpcEndpoints (T-657 — a matching
+// endpoint on page 2+ was previously missed).
+func getVPCEndpointFromNetworkInterface(netinterface types.NetworkInterface, svc ec2.DescribeVpcEndpointsAPIClient) *types.VpcEndpoint {
 	vpcID := aws.ToString(netinterface.VpcId)
 	if vpcID == "" {
+		return nil
+	}
+	eniID := aws.ToString(netinterface.NetworkInterfaceId)
+	if eniID == "" {
 		return nil
 	}
 	params := &ec2.DescribeVpcEndpointsInput{
@@ -707,13 +849,14 @@ func GetVPCEndpointFromNetworkInterface(netinterface types.NetworkInterface, svc
 			},
 		},
 	}
-	resp, err := svc.DescribeVpcEndpoints(context.Background(), params)
-	if err != nil {
-		panic(err)
-	}
-	eniID := aws.ToString(netinterface.NetworkInterfaceId)
-	if len(resp.VpcEndpoints) > 0 && eniID != "" {
-		for _, endpoint := range resp.VpcEndpoints {
+	paginator := ec2.NewDescribeVpcEndpointsPaginator(svc, params)
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(context.Background())
+		if err != nil {
+			panic(err)
+		}
+		for i := range page.VpcEndpoints {
+			endpoint := page.VpcEndpoints[i]
 			if slices.Contains(endpoint.NetworkInterfaceIds, eniID) {
 				return &endpoint
 			}
@@ -724,6 +867,14 @@ func GetVPCEndpointFromNetworkInterface(netinterface types.NetworkInterface, svc
 
 // GetNatGatewayFromNetworkInterface returns the NAT gateway associated with a network interface
 func GetNatGatewayFromNetworkInterface(netinterface types.NetworkInterface, svc *ec2.Client) *types.NatGateway {
+	return getNatGatewayFromNetworkInterface(netinterface, svc)
+}
+
+// getNatGatewayFromNetworkInterface implements GetNatGatewayFromNetworkInterface
+// against the minimal DescribeNatGatewaysAPIClient interface so pagination can
+// be unit tested. Walks every page of DescribeNatGateways (T-657 — a matching
+// gateway on page 2+ was previously missed).
+func getNatGatewayFromNetworkInterface(netinterface types.NetworkInterface, svc ec2.DescribeNatGatewaysAPIClient) *types.NatGateway {
 	vpcID := aws.ToString(netinterface.VpcId)
 	if vpcID == "" {
 		return nil
@@ -736,11 +887,18 @@ func GetNatGatewayFromNetworkInterface(netinterface types.NetworkInterface, svc 
 			},
 		},
 	}
-	resp, err := svc.DescribeNatGateways(context.Background(), params)
-	if err != nil {
-		panic(err)
+	eniID := aws.ToString(netinterface.NetworkInterfaceId)
+	paginator := ec2.NewDescribeNatGatewaysPaginator(svc, params)
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(context.Background())
+		if err != nil {
+			panic(err)
+		}
+		if match := matchNatGatewayByENI(page.NatGateways, eniID); match != nil {
+			return match
+		}
 	}
-	return matchNatGatewayByENI(resp.NatGateways, aws.ToString(netinterface.NetworkInterfaceId))
+	return nil
 }
 
 // matchNatGatewayByENI scans NAT gateways and returns the one whose addresses
