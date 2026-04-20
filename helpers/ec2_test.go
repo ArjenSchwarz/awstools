@@ -188,10 +188,31 @@ func TestIsLatestInstanceFamily(t *testing.T) {
 			instanceFamily: "invalid",
 			expected:       false,
 		},
+		// Malformed / short input — must not panic (regression tests for T-671)
+		{
+			name:           "empty string returns false without panic",
+			instanceFamily: "",
+			expected:       false,
+		},
+		{
+			name:           "single character returns false without panic",
+			instanceFamily: "c",
+			expected:       false,
+		},
+		{
+			name:           "single unknown character returns false without panic",
+			instanceFamily: "z",
+			expected:       false,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			defer func() {
+				if r := recover(); r != nil {
+					t.Errorf("IsLatestInstanceFamily(%q) panicked: %v", tt.instanceFamily, r)
+				}
+			}()
 			result := IsLatestInstanceFamily(tt.instanceFamily)
 			if result != tt.expected {
 				t.Errorf("IsLatestInstanceFamily(%q) = %v, want %v", tt.instanceFamily, result, tt.expected)

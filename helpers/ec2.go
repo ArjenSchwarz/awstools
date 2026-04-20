@@ -558,6 +558,12 @@ func GetBlackholeRoutesForTransitGatewayRouteTable(routetableID string, svc *ec2
 // test family is running in the latest instance family.
 // TODO: Automate this to work properly
 func IsLatestInstanceFamily(instanceFamily string) bool {
+	// Guard against empty or malformed input. A valid EC2 instance family
+	// identifier needs at least one family letter followed by one version
+	// character (e.g. "t2"). Anything shorter is treated as unknown.
+	if len(instanceFamily) < 2 {
+		return false
+	}
 	family := instanceFamily[0:1]
 	version := instanceFamily[1:]
 	switch family {
