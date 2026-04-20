@@ -494,6 +494,53 @@ func TestHasOpenACLs_NilGranteeURI(t *testing.T) {
 	}
 }
 
+// TestNormalizeBucketLocation is a regression test for T-690.
+// S3's GetBucketLocation returns the legacy value "EU" for buckets originally
+// created in eu-west-1, and an empty LocationConstraint for us-east-1. Both
+// must be normalised to their canonical region IDs.
+func TestNormalizeBucketLocation(t *testing.T) {
+	tests := []struct {
+		name       string
+		constraint string
+		expected   string
+	}{
+		{
+			name:       "empty constraint maps to us-east-1",
+			constraint: "",
+			expected:   "us-east-1",
+		},
+		{
+			name:       "legacy EU constraint maps to eu-west-1",
+			constraint: "EU",
+			expected:   "eu-west-1",
+		},
+		{
+			name:       "standard region passes through unchanged",
+			constraint: "eu-west-1",
+			expected:   "eu-west-1",
+		},
+		{
+			name:       "us-west-2 passes through unchanged",
+			constraint: "us-west-2",
+			expected:   "us-west-2",
+		},
+		{
+			name:       "ap-southeast-2 passes through unchanged",
+			constraint: "ap-southeast-2",
+			expected:   "ap-southeast-2",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := normalizeBucketLocation(types.BucketLocationConstraint(tt.constraint))
+			if result != tt.expected {
+				t.Errorf("normalizeBucketLocation(%q) = %q, want %q", tt.constraint, result, tt.expected)
+			}
+		})
+	}
+}
+
 func TestS3Bucket_PublicAccessBlockConfiguration(t *testing.T) {
 	bucket := S3Bucket{
 		PublicAccessBlockConfiguration: types.PublicAccessBlockConfiguration{

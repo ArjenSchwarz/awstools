@@ -32,6 +32,22 @@ type S3Bucket struct {
 	VersioningMFAEnabled           bool
 }
 
+// normalizeBucketLocation converts the LocationConstraint returned by
+// S3's GetBucketLocation API into a canonical AWS region identifier.
+// S3 returns an empty constraint for buckets in us-east-1 and the
+// legacy value "EU" for buckets originally created in eu-west-1; both
+// need to be mapped to their standard region IDs.
+func normalizeBucketLocation(constraint types.BucketLocationConstraint) string {
+	switch constraint {
+	case "":
+		return "us-east-1"
+	case "EU":
+		return "eu-west-1"
+	default:
+		return string(constraint)
+	}
+}
+
 // resolveOwnerName safely extracts a display name from an S3 Owner,
 // falling back to the Owner ID or empty string when fields are nil.
 func resolveOwnerName(owner *types.Owner) string {
@@ -88,11 +104,11 @@ func GetBucketDetails(svc *s3.Client) []S3Bucket {
 		}
 
 		locationresp, err := svc.GetBucketLocation(context.TODO(), &s3.GetBucketLocationInput{Bucket: bucket.Name})
-		region := "us-east-1"
+		var region string
 		if err != nil {
 			region = "ERROR"
-		} else if locationresp.LocationConstraint != "" {
-			region = string(locationresp.LocationConstraint)
+		} else {
+			region = normalizeBucketLocation(locationresp.LocationConstraint)
 		}
 		bucketObject := S3Bucket{
 			Name:         *bucket.Name,
