@@ -18,17 +18,18 @@ SSOInstance
 
 - **SSOAdminAPI interface**: Introduced in T-479 to enable mock-based testing. All SSO helper functions accept this interface rather than `*ssoadmin.Client`.
 - **Error returns (not panics)**: The helpers return errors. The cmd-layer callers currently use `panic(err)` to handle these, matching the pattern elsewhere in the cmd package.
-- **Manual pagination**: Uses `for { ... NextToken ... break }` loops, consistent with `helpers/role_discovery.go`.
+- **Pagination mix**: The four `List*` calls inside permission-set traversal use manual `for { ... NextToken ... break }` loops for backward compatibility with T-479. `ListInstances` uses the SDK's `ssoadmin.NewListInstancesPaginator` (added in T-891) — the SSO SDK's `ListInstancesAPIClient` interface is satisfied by `SSOAdminAPI` because it only requires a single `ListInstances` method with the standard signature.
 
 ## Pagination
 
-Four listing APIs require pagination:
-1. `ListPermissionSets` — in `getPermissionSets()`
-2. `ListAccountsForProvisionedPermissionSet` — in `addAccountInfo()`
-3. `ListAccountAssignments` — in `addAccountInfo()` (nested per account)
-4. `ListManagedPoliciesInPermissionSet` — in `getPermissionSetDetails()`
+Five listing APIs require pagination:
+1. `ListInstances` — in `getSSOInstance()`, via `ssoadmin.NewListInstancesPaginator`
+2. `ListPermissionSets` — in `getPermissionSets()`
+3. `ListAccountsForProvisionedPermissionSet` — in `addAccountInfo()`
+4. `ListAccountAssignments` — in `addAccountInfo()` (nested per account)
+5. `ListManagedPoliciesInPermissionSet` — in `getPermissionSetDetails()`
 
-All use `MaxResults: 100` (AWS default max page size) and follow the NextToken pattern.
+Calls 2-5 use `MaxResults: 100` (AWS default max page size) and manual NextToken loops. `ListInstances` relies on the SDK paginator's defaults because the call has no tunable parameters.
 
 ## Testing
 

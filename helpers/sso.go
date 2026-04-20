@@ -7,6 +7,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ssoadmin"
+	ssotypes "github.com/aws/aws-sdk-go-v2/service/ssoadmin/types"
 )
 
 // SSOAdminAPI defines the subset of the SSO Admin client used by this package.
@@ -76,17 +77,22 @@ type SSOAccountAssignment struct {
 }
 
 func getSSOInstance(svc SSOAdminAPI) (SSOInstance, error) {
-	instances, err := svc.ListInstances(context.TODO(), &ssoadmin.ListInstancesInput{})
-	if err != nil {
-		return SSOInstance{}, fmt.Errorf("failed to list SSO instances: %w", err)
+	paginator := ssoadmin.NewListInstancesPaginator(svc, &ssoadmin.ListInstancesInput{})
+	var collected []ssotypes.InstanceMetadata
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(context.TODO())
+		if err != nil {
+			return SSOInstance{}, fmt.Errorf("failed to list SSO instances: %w", err)
+		}
+		collected = append(collected, page.Instances...)
 	}
-	if len(instances.Instances) < 1 {
+	if len(collected) < 1 {
 		return SSOInstance{}, fmt.Errorf("no SSO instances found")
 	}
-	if len(instances.Instances) > 1 {
+	if len(collected) > 1 {
 		return SSOInstance{}, fmt.Errorf("found multiple SSO instances, expected exactly one")
 	}
-	inst := instances.Instances[0]
+	inst := collected[0]
 	if inst.IdentityStoreId == nil || inst.InstanceArn == nil {
 		return SSOInstance{}, fmt.Errorf("SSO instance has nil IdentityStoreId or InstanceArn")
 	}
