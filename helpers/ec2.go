@@ -696,13 +696,26 @@ func GetNatGatewayFromNetworkInterface(netinterface types.NetworkInterface, svc 
 	if err != nil {
 		panic(err)
 	}
-	eniID := aws.ToString(netinterface.NetworkInterfaceId)
-	if len(resp.NatGateways) > 0 && eniID != "" {
-		for _, natgw := range resp.NatGateways {
-			for _, address := range natgw.NatGatewayAddresses {
-				if aws.ToString(address.NetworkInterfaceId) == eniID {
-					return &natgw
-				}
+	return matchNatGatewayByENI(resp.NatGateways, aws.ToString(netinterface.NetworkInterfaceId))
+}
+
+// matchNatGatewayByENI scans NAT gateways and returns the one whose addresses
+// reference the given ENI ID. Addresses with a nil NetworkInterfaceId are
+// skipped so scanning continues past missing values instead of panicking.
+// An empty eniID short-circuits and returns nil — an unassigned ENI cannot
+// match any NAT gateway address.
+func matchNatGatewayByENI(natgateways []types.NatGateway, eniID string) *types.NatGateway {
+	if eniID == "" {
+		return nil
+	}
+	for i := range natgateways {
+		natgw := natgateways[i]
+		for _, address := range natgw.NatGatewayAddresses {
+			if address.NetworkInterfaceId == nil {
+				continue
+			}
+			if *address.NetworkInterfaceId == eniID {
+				return &natgw
 			}
 		}
 	}

@@ -24,3 +24,13 @@ All callers must pass the subnet's VPC ID. The VPC ID is available from:
 
 - `types.RouteTable` has a `VpcId` field — always use it when filtering by VPC
 - `DescribeRouteTables` without filters returns route tables across all VPCs
+- `types.NatGatewayAddress.NetworkInterfaceId` is `*string` and AWS may omit it (e.g. for addresses in transitional states). Always guard for nil or use `aws.ToString` before comparing.
+
+## ENI Matching Helpers
+
+Pure, testable helpers live alongside the AWS-client-taking wrappers. Each scans a slice of AWS objects for an ENI or subnet match so nil-safety can be tested without mocking.
+
+- `matchTransitGatewayAttachment(attachments, subnetID)` — T-397
+- `matchNatGatewayByENI(natgateways, eniID)` — T-656 (skips addresses with nil `NetworkInterfaceId`; empty `eniID` returns nil immediately)
+
+When adding a new `Get<Resource>FromNetworkInterface` style function, extract the matching logic into a helper following this pattern. Iterate with an index (`for i := range ...`) when returning a pointer into the slice, to avoid the loop-variable pointer reuse bug (T-456).
