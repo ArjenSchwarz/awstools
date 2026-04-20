@@ -70,3 +70,20 @@ the pagination logic lives in the unexported `getAllVPCRouteTables` which takes
 the narrower `ec2.DescribeRouteTablesAPIClient` interface. Unit tests mock that
 interface (see `helpers/vpc_routetable_pagination_test.go`) — this is the same
 split used for the IAM pagination tests.
+
+`GetAllVpcPeers` follows the same split: the exported function takes
+`*ec2.Client` while the unexported `getAllVpcPeers` takes
+`ec2.DescribeVpcPeeringConnectionsAPIClient` and walks
+`ec2.NewDescribeVpcPeeringConnectionsPaginator` (T-746). Before that fix the
+helper issued a single `DescribeVpcPeeringConnections` call and silently
+dropped peerings on subsequent pages.
+
+## VPN Connections API
+
+`DescribeVpnConnections` is **not** a paginated AWS API — the input/output
+structs have no `NextToken` or `MaxResults` and the SDK provides no paginator.
+A single call returns every VPN connection in the region. `addAllVpnNames`
+(`helpers/ec2.go`) therefore uses one call, but takes
+`ec2.DescribeVpnConnectionsAPIClient` instead of `*ec2.Client` so the helper
+is unit-testable (T-746). The same applies to `DescribeVpnGateways`, which is
+currently not used anywhere in the codebase.
