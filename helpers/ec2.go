@@ -1965,18 +1965,28 @@ func handleAWSAPIError(err error, apiName string) {
 	panic(fmt.Errorf("failed to call %s: %v", apiName, err))
 }
 
-// searchENIsByIP searches for ENIs with a specific IP address
-func searchENIsByIP(svc *ec2.Client, filters []types.Filter) []types.NetworkInterface {
+// searchENIsByIP searches for ENIs matching the given filters, walking every
+// page of DescribeNetworkInterfaces. Before T-757 this helper issued a single
+// unpaginated call, so in large accounts (and in multi-VPC environments where
+// the same private IP can legitimately appear on several ENIs) matches on
+// later pages were silently dropped. The parameter is the paginator's own
+// interface so *ec2.Client still satisfies it while tests can pass a mock.
+func searchENIsByIP(svc ec2.DescribeNetworkInterfacesAPIClient, filters []types.Filter) []types.NetworkInterface {
 	input := &ec2.DescribeNetworkInterfacesInput{
 		Filters: filters,
 	}
 
-	resp, err := svc.DescribeNetworkInterfaces(context.TODO(), input)
-	if err != nil {
-		handleAWSAPIError(err, "DescribeNetworkInterfaces")
+	var result []types.NetworkInterface
+	paginator := ec2.NewDescribeNetworkInterfacesPaginator(svc, input)
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(context.TODO())
+		if err != nil {
+			handleAWSAPIError(err, "DescribeNetworkInterfaces")
+		}
+		result = append(result, page.NetworkInterfaces...)
 	}
 
-	return resp.NetworkInterfaces
+	return result
 }
 
 // isSecondaryIP checks if the IP address is a secondary IP on the ENI
