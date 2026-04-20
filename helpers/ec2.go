@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math"
 	"net"
 	"os"
 	"regexp"
@@ -1003,16 +1004,43 @@ func GetVPCUsageOverview(svc *ec2.Client) VPCOverview {
 			if aws.ToString(subnet.VpcId) == vpcID {
 				subnetCidr := aws.ToString(subnet.CidrBlock)
 				subnetID := aws.ToString(subnet.SubnetId)
+
+				// IPv6-only subnets have no IPv4 CidrBlock. Fall back to the
+				// first associated IPv6 CIDR for display and stats so the
+				// subnet still appears in the overview. Per-address analysis
+				// is skipped for IPv6 because the address space is too large
+				// to enumerate (T-774).
+				statsCidr := subnetCidr
+				if statsCidr == "" {
+					statsCidr = firstIPv6CIDR(subnet)
+				}
+				if subnetCidr == "" {
+					subnetCidr = statsCidr
+				}
+
 				// Calculate total IPs
-				totalIPs, _, err := calculateSubnetStats(subnetCidr)
-				if err != nil {
-					panic(err)
+				var totalIPs int
+				if statsCidr != "" {
+					computedTotal, _, err := calculateSubnetStats(statsCidr)
+					if err != nil {
+						panic(err)
+					}
+					totalIPs = computedTotal
 				}
 
 				// Analyze detailed IP usage
 				ipDetails, usedIPs, availableIPs, awsReservedIPs, serviceIPs, err := analyzeSubnetIPUsage(subnet, networkInterfaces, svc)
 				if err != nil {
 					panic(err)
+				}
+
+				// For IPv6-only subnets analyzeSubnetIPUsage returns zero
+				// counts. Use the mathematically-computed available count so
+				// the summary reflects the subnet size rather than 0.
+				if aws.ToString(subnet.CidrBlock) == "" {
+					if _, computedAvailable, err := calculateSubnetStats(statsCidr); err == nil {
+						availableIPs = computedAvailable
+					}
 				}
 
 				subnetInfo := SubnetUsageInfo{
@@ -1205,11 +1233,39 @@ func parseCIDR(cidr string) (*net.IPNet, error) {
 	return ipnet, err
 }
 
-// generateIPRange generates all IP addresses in a subnet CIDR block
+// firstIPv6CIDR returns the first associated IPv6 CIDR block for the subnet,
+// or an empty string if none exists. Used as a fallback when a subnet has no
+// IPv4 CidrBlock (IPv6-only subnets).
+func firstIPv6CIDR(subnet types.Subnet) string {
+	for _, assoc := range subnet.Ipv6CidrBlockAssociationSet {
+		if assoc.Ipv6CidrBlock != nil && *assoc.Ipv6CidrBlock != "" {
+			return *assoc.Ipv6CidrBlock
+		}
+	}
+	return ""
+}
+
+// isIPv6CIDR reports whether the given parsed CIDR is IPv6. An IPv4 CIDR parsed
+// by net.ParseCIDR has a 4-byte IP; IPv6 CIDRs have 16-byte IPs and cannot be
+// reduced via To4.
+func isIPv6CIDR(ipnet *net.IPNet) bool {
+	if ipnet == nil {
+		return false
+	}
+	return ipnet.IP.To4() == nil
+}
+
+// generateIPRange generates all IP addresses in a subnet CIDR block.
+// IPv6 CIDRs are rejected: a default /64 contains 2^64 addresses which cannot
+// be materialized in memory. Callers that need to report IPv6 subnets should
+// do so without per-address enumeration (T-774).
 func generateIPRange(cidr string) ([]net.IP, error) {
 	ipnet, err := parseCIDR(cidr)
 	if err != nil {
 		return nil, err
+	}
+	if isIPv6CIDR(ipnet) {
+		return nil, fmt.Errorf("IPv6 CIDR enumeration is not supported: %s", cidr)
 	}
 
 	var ips []net.IP
@@ -1230,7 +1286,16 @@ func incrementIP(ip net.IP) {
 	}
 }
 
-// calculateSubnetStats calculates total and available IP counts for a subnet
+// calculateSubnetStats calculates total and available IP counts for a subnet.
+//
+// For IPv4 subnets AWS reserves the first 4 addresses (network, VPC router,
+// DNS, future use) and the broadcast address.
+//
+// For IPv6 subnets the address space is effectively unlimited (a /64 has 2^64
+// addresses, which does not fit in an int). Rather than overflow with a naive
+// `1 << uint(bits-ones)` shift, we cap the returned total at math.MaxInt and
+// compute available IPs via the same 5-address AWS reservation rule. The cap
+// signals "effectively unlimited" without panicking or returning 0 (T-774).
 func calculateSubnetStats(cidr string) (int, int, error) {
 	ipnet, err := parseCIDR(cidr)
 	if err != nil {
@@ -1238,9 +1303,20 @@ func calculateSubnetStats(cidr string) (int, int, error) {
 	}
 
 	ones, bits := ipnet.Mask.Size()
-	totalIPs := 1 << uint(bits-ones)
+	hostBits := bits - ones
 
-	// AWS reserves first 4 and last IP in each subnet
+	// For any prefix where 2^hostBits would overflow a signed int, cap at
+	// math.MaxInt. On 64-bit platforms int is 64-bit, so the overflow point
+	// is hostBits >= 63 (signed-bit).
+	var totalIPs int
+	if hostBits >= 63 {
+		totalIPs = math.MaxInt
+	} else {
+		totalIPs = 1 << uint(hostBits)
+	}
+
+	// AWS reserves 5 addresses per subnet. For a cap'd total, subtracting 5
+	// is still meaningful ("effectively unlimited minus reserved").
 	availableIPs := max(totalIPs-5, 0)
 
 	return totalIPs, availableIPs, nil
@@ -1517,12 +1593,21 @@ func getENIAttachmentDetailsOptimized(eni types.NetworkInterface, cache *ENILook
 //   - serviceIPs: Count of IPs allocated to AWS services or EC2 instances
 //   - error: Any error encountered during analysis
 //
+// IPv6-only subnets (Ipv6Native=true, no IPv4 CidrBlock) return empty results
+// without error: IPv6 per-address analysis is not supported because the default
+// /64 prefix contains 2^64 addresses. Dual-stack subnets are analysed using
+// their IPv4 CIDR only (T-774).
+//
 // Note: This function uses optimized batch API calls via ENILookupCache to avoid N+1 queries
 // when analyzing large numbers of network interfaces.
 func analyzeSubnetIPUsage(subnet types.Subnet, networkInterfaces []types.NetworkInterface, svc *ec2.Client) ([]IPAddressInfo, int, int, int, int, error) {
 	cidr := aws.ToString(subnet.CidrBlock)
 	if cidr == "" {
-		return nil, 0, 0, 0, 0, fmt.Errorf("subnet has no CIDR block")
+		// IPv6-only / IPv6-native subnet: no IPv4 CIDR to enumerate. Per-IP
+		// analysis is skipped because the IPv6 address space is too large to
+		// materialize. The subnet is still reported by the caller using its
+		// IPv6 CIDR.
+		return nil, 0, 0, 0, 0, nil
 	}
 
 	// Get all IPs in the subnet

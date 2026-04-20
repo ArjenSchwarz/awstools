@@ -125,6 +125,30 @@ table. The blackhole-route helper just logs a warning on overflow because
 blackhole routes are normally few. Never rely on a single unfiltered
 `SearchTransitGatewayRoutes` call in a large account.
 
+## VPC Overview IP Analysis (T-774)
+
+`GetVPCUsageOverview` and its `analyzeSubnetIPUsage` helper enumerate every
+IPv4 address in each subnet's CIDR for per-IP analysis. **Never call the
+underlying `generateIPRange` with an IPv6 CIDR** — a default /64 contains 2^64
+addresses. After T-774:
+
+- `generateIPRange` rejects IPv6 CIDRs with an explicit error.
+- `calculateSubnetStats` caps totals at `math.MaxInt` for prefixes where
+  `2^hostBits` would overflow a signed int (host bits >= 63).
+- `analyzeSubnetIPUsage` returns empty results without error when
+  `subnet.CidrBlock` is empty (IPv6-only subnets). The caller previously
+  panicked.
+- `GetVPCUsageOverview` uses `firstIPv6CIDR(subnet)` as a display fallback when
+  no IPv4 CIDR exists, so IPv6-only subnets still appear in the overview with
+  their CIDR but no per-address breakdown.
+
+Dual-stack subnets continue to have their IPv4 portion analysed; the IPv6
+block is shown separately by the caller logic only when no IPv4 CIDR exists.
+
+Tests live in `helpers/ec2_ipv6_subnet_test.go` and use a 2 s timeout guard so
+a regression that re-introduces IPv6 enumeration fails loudly rather than
+hanging the test process.
+
 ## VPN Connections API
 
 `DescribeVpnConnections` is **not** a paginated AWS API — the input/output
