@@ -118,7 +118,7 @@ func TestDefaultAwsConfig_ProfileHandling(t *testing.T) {
 }
 
 // Regression test for T-405: aws.profile was checked but not passed to WithSharedConfigProfile.
-// The bug was that GetLCString("profile") was used instead of GetLCString("aws.profile"),
+// The bug was that the wrong viper key ("profile" instead of "aws.profile") was used,
 // meaning the profile value was always empty and the default profile was loaded.
 func TestDefaultAwsConfig_ProfileKeyConsistency(t *testing.T) {
 	config := Config{}
@@ -127,11 +127,11 @@ func TestDefaultAwsConfig_ProfileKeyConsistency(t *testing.T) {
 	defer viper.Reset()
 
 	// "aws.profile" is the key set by the --profile flag and config file
-	assert.Equal(t, "my-test-profile", config.GetLCString("aws.profile"),
+	assert.Equal(t, "my-test-profile", config.GetString("aws.profile"),
 		"aws.profile should return the configured profile name")
 
 	// "profile" (without aws. prefix) is never set — using it was the bug
-	assert.Empty(t, config.GetLCString("profile"),
+	assert.Empty(t, config.GetString("profile"),
 		"profile (without aws. prefix) should be empty; using this key loses the profile value")
 }
 
@@ -156,6 +156,35 @@ func TestDefaultAwsConfig_NoProfileReturnsEmpty(t *testing.T) {
 	profile := resolveProfile(config)
 	assert.Empty(t, profile,
 		"resolveProfile should return empty when no profile is configured")
+}
+
+// Regression test for T-848: resolveProfile lowercased the profile name via
+// GetLCString, but AWS profile names are case-sensitive. A profile named
+// "MyCompany-prod" in ~/.aws/config is not the same as "mycompany-prod"
+// and lowering the case causes the shared config loader to miss the profile.
+func TestDefaultAwsConfig_ProfilePreservesCase(t *testing.T) {
+	cases := []struct {
+		name    string
+		profile string
+	}{
+		{"mixed case", "MyCompany-prod"},
+		{"upper case", "PROD"},
+		{"camel case", "ProdAccount"},
+		{"mixed with digits", "Team1-Dev"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			config := Config{}
+			viper.Reset()
+			viper.Set("aws.profile", tc.profile)
+			defer viper.Reset()
+
+			profile := resolveProfile(config)
+			assert.Equal(t, tc.profile, profile,
+				"resolveProfile must preserve the exact case of the configured profile name")
+		})
+	}
 }
 
 func TestDefaultAwsConfig_RegionHandling(t *testing.T) {

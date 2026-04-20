@@ -16,6 +16,10 @@ The same pattern applies to `helpers/sts.go:GetAccountID`, which uses `accountID
 
 `setAlias` uses `iam.ListAccountAliases` which is account-scoped (only returns the caller's own alias). If the call fails or returns no aliases, `AccountAlias` falls back to `AccountID`. For cross-account alias lookup see `docs/agent-notes/role-discovery.md` (uses SSO `ListAccounts` instead).
 
+## Profile Name Case Sensitivity
+
+AWS profile names are case-sensitive — they are matched verbatim against `[profile ...]` section headers in `~/.aws/config`. `resolveProfile` must read `aws.profile` via `Config.GetString`, never `Config.GetLCString`. `GetLCString` lowercases the value, which silently breaks mixed-case profile names (T-848). Same rule applies to any other case-sensitive identifier stored in viper (ARNs, resource IDs, file paths).
+
 ## Failure Modes
 
 - Invalid profile or missing credentials → `DefaultAwsConfig` panics (caught by CLI). Tests recover from this panic explicitly.
