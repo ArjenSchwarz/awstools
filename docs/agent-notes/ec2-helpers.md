@@ -87,6 +87,35 @@ walk every page via `NewDescribe*Paginator`. Tests live in
 helper issued a single `DescribeVpcPeeringConnections` call and silently
 dropped peerings on subsequent pages.
 
+## Transit Gateway Inventory (T-669)
+
+The TGW inventory helpers follow the same split pattern. Public wrappers take
+`*ec2.Client`; private implementations take the composite
+`tgwInventoryAPIClient` interface (bundles
+`ec2.DescribeTransitGatewaysAPIClient`,
+`ec2.DescribeTransitGatewayRouteTablesAPIClient`,
+`ec2.GetTransitGatewayRouteTableAssociationsAPIClient`, and
+`SearchTransitGatewayRoutes`). Mock against that composite interface — see
+`helpers/tgw_pagination_test.go`.
+
+- `GetAllTransitGateways` → `getAllTransitGateways` walks
+  `NewDescribeTransitGatewaysPaginator`.
+- `GetRouteTablesForTransitGateway` → `getRouteTablesForTransitGateway` walks
+  `NewDescribeTransitGatewayRouteTablesPaginator`.
+- `GetSourceAttachmentsForTransitGatewayRouteTable` →
+  `getSourceAttachmentsForTransitGatewayRouteTable` walks
+  `NewGetTransitGatewayRouteTableAssociationsPaginator`.
+
+**`SearchTransitGatewayRoutes` is the exception** — the AWS API has no
+`NextToken` for this operation. Results are capped at 1000 rows with an
+`AdditionalRoutesAvailable` flag. The active-route helper
+(`getActiveRoutesForTransitGatewayRouteTable`) sets `MaxResults: 1000`
+explicitly and, on overflow, re-queries per route type (`propagated` and
+`static`) to raise the effective ceiling to ~2000 active routes per route
+table. The blackhole-route helper just logs a warning on overflow because
+blackhole routes are normally few. Never rely on a single unfiltered
+`SearchTransitGatewayRoutes` call in a large account.
+
 ## VPN Connections API
 
 `DescribeVpnConnections` is **not** a paginated AWS API — the input/output
