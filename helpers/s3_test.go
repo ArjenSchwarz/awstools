@@ -3,6 +3,7 @@ package helpers
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"reflect"
 	"testing"
@@ -909,6 +910,95 @@ func TestComputeBucketIsPublic(t *testing.T) {
 				t.Fatalf("got=%v, want=%v", *got, *tt.expected)
 			}
 		})
+	}
+}
+
+// TestGetAllBuckets_Pagination is the regression test for T-835.
+// S3 ListBuckets supports ContinuationToken pagination, and accounts with
+// more buckets than fit on a single page must have every page walked.
+// Before this fix, GetAllBuckets issued a single call and silently dropped
+// any buckets on subsequent pages.
+func TestGetAllBuckets_Pagination(t *testing.T) {
+	// Build three pages worth of buckets, each served from the mock by
+	// using ContinuationToken as a decimal offset into the slice.
+	all := []types.Bucket{
+		{Name: aws.String("bucket-0")},
+		{Name: aws.String("bucket-1")},
+		{Name: aws.String("bucket-2")},
+		{Name: aws.String("bucket-3")},
+		{Name: aws.String("bucket-4")},
+	}
+	const pageSize = 2
+
+	calls := 0
+	mock := &mockS3Client{
+		listBuckets: func(ctx context.Context, params *s3.ListBucketsInput, optFns ...func(*s3.Options)) (*s3.ListBucketsOutput, error) {
+			calls++
+			start := 0
+			if params.ContinuationToken != nil {
+				if _, err := fmt.Sscanf(*params.ContinuationToken, "%d", &start); err != nil {
+					return nil, err
+				}
+			}
+			end := start + pageSize
+			if end > len(all) {
+				end = len(all)
+			}
+			out := &s3.ListBucketsOutput{
+				Buckets: all[start:end],
+				Owner:   &types.Owner{DisplayName: aws.String("owner"), ID: aws.String("owner-id")},
+			}
+			if end < len(all) {
+				tok := fmt.Sprintf("%d", end)
+				out.ContinuationToken = &tok
+			}
+			return out, nil
+		},
+	}
+
+	buckets, owner := GetAllBuckets(mock)
+
+	if owner != "owner" {
+		t.Errorf("owner = %q, want %q", owner, "owner")
+	}
+	if len(buckets) != len(all) {
+		t.Fatalf("expected %d buckets after pagination, got %d", len(all), len(buckets))
+	}
+	for i, b := range buckets {
+		want := fmt.Sprintf("bucket-%d", i)
+		if aws.ToString(b.Name) != want {
+			t.Errorf("buckets[%d].Name = %q, want %q", i, aws.ToString(b.Name), want)
+		}
+	}
+	if calls < 3 {
+		t.Errorf("expected at least 3 ListBuckets calls for pagination, got %d", calls)
+	}
+}
+
+// TestGetAllBuckets_SinglePage verifies that accounts with a single page
+// of buckets still work correctly after the pagination change — no
+// ContinuationToken means the loop stops after one call.
+func TestGetAllBuckets_SinglePage(t *testing.T) {
+	calls := 0
+	mock := &mockS3Client{
+		listBuckets: func(ctx context.Context, params *s3.ListBucketsInput, optFns ...func(*s3.Options)) (*s3.ListBucketsOutput, error) {
+			calls++
+			return &s3.ListBucketsOutput{
+				Buckets: []types.Bucket{{Name: aws.String("only-bucket")}},
+				Owner:   &types.Owner{DisplayName: aws.String("owner"), ID: aws.String("owner-id")},
+			}, nil
+		},
+	}
+
+	buckets, owner := GetAllBuckets(mock)
+	if owner != "owner" {
+		t.Errorf("owner = %q, want %q", owner, "owner")
+	}
+	if len(buckets) != 1 {
+		t.Fatalf("expected 1 bucket, got %d", len(buckets))
+	}
+	if calls != 1 {
+		t.Errorf("expected exactly 1 ListBuckets call, got %d", calls)
 	}
 }
 
