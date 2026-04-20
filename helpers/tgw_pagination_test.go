@@ -14,17 +14,17 @@ import (
 // by the TGW inventory helpers. It paginates each underlying slice with a
 // configurable page size so tests can force multi-page responses.
 type mockTGWPaginationClient struct {
-	transitGateways      []types.TransitGateway
-	routeTables          []types.TransitGatewayRouteTable
-	associations         []types.TransitGatewayRouteTableAssociation
-	activeRoutes         []types.TransitGatewayRoute
-	blackholeRoutes      []types.TransitGatewayRoute
-	pageSize             int
-	describeTGWCalls     int
-	describeRTCalls      int
-	associationCalls     int
-	searchRoutesCalls    int
-	searchRoutesFilters  [][]types.Filter
+	transitGateways     []types.TransitGateway
+	routeTables         []types.TransitGatewayRouteTable
+	associations        []types.TransitGatewayRouteTableAssociation
+	activeRoutes        []types.TransitGatewayRoute
+	blackholeRoutes     []types.TransitGatewayRoute
+	pageSize            int
+	describeTGWCalls    int
+	describeRTCalls     int
+	associationCalls    int
+	searchRoutesCalls   int
+	searchRoutesFilters [][]types.Filter
 }
 
 // DescribeTransitGateways paginates through the transit gateways slice. The
@@ -148,14 +148,14 @@ func (m *mockTGWPaginationClient) SearchTransitGatewayRoutes(_ context.Context, 
 		filtered = source
 	}
 
-	cap := int32(1000)
+	maxResults := int32(1000)
 	if input.MaxResults != nil {
-		cap = *input.MaxResults
+		maxResults = *input.MaxResults
 	}
 
 	out := &ec2.SearchTransitGatewayRoutesOutput{}
-	if int32(len(filtered)) > cap {
-		out.Routes = filtered[:cap]
+	if int32(len(filtered)) > maxResults {
+		out.Routes = filtered[:maxResults]
 		truthy := true
 		out.AdditionalRoutesAvailable = &truthy
 	} else {
