@@ -1,12 +1,9 @@
 package cmd
 
 import (
-	"context"
-
 	"github.com/ArjenSchwarz/awstools/config"
 	"github.com/ArjenSchwarz/awstools/helpers"
 	format "github.com/ArjenSchwarz/go-output"
-	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	"github.com/spf13/cobra"
 )
@@ -42,15 +39,13 @@ func vpcOverview(_ *cobra.Command, _ []string) {
 	awsConfig := config.DefaultAwsConfig(*settings)
 	accountName := getName(helpers.GetAccountID(awsConfig.StsClient()))
 
-	overview := helpers.GetVPCUsageOverview(awsConfig.Ec2Client())
-
-	// Get raw route tables for route information
 	ec2Client := awsConfig.Ec2Client()
-	routeTablesResp, err := ec2Client.DescribeRouteTables(context.TODO(), &ec2.DescribeRouteTablesInput{})
-	if err != nil {
-		panic(err)
-	}
-	routeTables := routeTablesResp.RouteTables
+	overview := helpers.GetVPCUsageOverview(ec2Client)
+
+	// Fetch the raw route tables used for display formatting. GetAllRouteTables
+	// walks every page of DescribeRouteTables so accounts with more route
+	// tables than fit in a single response still render correctly (T-805).
+	routeTables := helpers.GetAllRouteTables(ec2Client)
 
 	// Filter VPCs if vpc flag is provided
 	filteredVPCs := overview.VPCs
