@@ -1109,8 +1109,19 @@ func retrieveSubnetData(svc *ec2.Client) []types.Subnet {
 	return result
 }
 
-// retrieveRouteTables fetches all route tables using DescribeRouteTables API
-func retrieveRouteTables(svc *ec2.Client) []types.RouteTable {
+// GetAllRouteTables returns every route table in the account/region as the
+// raw AWS SDK type, walking all pages of DescribeRouteTables. Callers that
+// need the internal VPCRouteTable projection should use GetAllVPCRouteTables
+// instead; this helper exists for command-layer code that formats route
+// tables directly (e.g. the vpc overview display).
+func GetAllRouteTables(svc *ec2.Client) []types.RouteTable {
+	return getAllRouteTables(svc)
+}
+
+// getAllRouteTables implements GetAllRouteTables against the minimal
+// DescribeRouteTablesAPIClient interface so the pagination logic can be
+// unit tested without a real *ec2.Client.
+func getAllRouteTables(svc ec2.DescribeRouteTablesAPIClient) []types.RouteTable {
 	var result []types.RouteTable
 	paginator := ec2.NewDescribeRouteTablesPaginator(svc, &ec2.DescribeRouteTablesInput{})
 	for paginator.HasMorePages() {
@@ -1121,6 +1132,13 @@ func retrieveRouteTables(svc *ec2.Client) []types.RouteTable {
 		result = append(result, page.RouteTables...)
 	}
 	return result
+}
+
+// retrieveRouteTables fetches all route tables using DescribeRouteTables API.
+// Retained as a thin wrapper over getAllRouteTables so existing internal
+// callers keep their current signature.
+func retrieveRouteTables(svc *ec2.Client) []types.RouteTable {
+	return getAllRouteTables(svc)
 }
 
 // GetSubnetRouteTable finds the route table associated with a specific subnet.

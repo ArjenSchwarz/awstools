@@ -26,8 +26,17 @@ All callers must pass the subnet's VPC ID. The VPC ID is available from:
 - `DescribeRouteTables` without filters returns route tables across all VPCs
 - `DescribeRouteTables` is paginated (default page size 100). Always walk
   `ec2.NewDescribeRouteTablesPaginator`; a single `DescribeRouteTables` call
-  truncates results in large accounts. `GetAllVPCRouteTables`, `retrieveRouteTables`,
-  and `addAllRouteTableNames` all follow the paginator pattern.
+  truncates results in large accounts. `GetAllVPCRouteTables`,
+  `GetAllRouteTables`, `retrieveRouteTables`, and `addAllRouteTableNames` all
+  follow the paginator pattern.
+- `GetAllRouteTables(svc *ec2.Client) []types.RouteTable` (T-805) is the
+  exported entry point when you need the raw SDK type (e.g. for
+  `GetSubnetRouteTable` / `FormatRouteTableInfo` in display code). It wraps
+  the unexported `getAllRouteTables(ec2.DescribeRouteTablesAPIClient)` so
+  the pagination is unit-testable — `retrieveRouteTables` is now a thin
+  alias over the same implementation. Prefer this helper over an inline
+  `DescribeRouteTables` call in `cmd/` — the bug T-805 fixed was exactly
+  such a single-page call in `cmd/vpcoverview.go`.
 - `types.NatGatewayAddress.NetworkInterfaceId` is `*string` and AWS may omit it (e.g. for addresses in transitional states). Always guard for nil or use `aws.ToString` before comparing.
 
 ## Transit Gateway Route Parsing
