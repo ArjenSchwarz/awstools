@@ -21,6 +21,7 @@ import (
 type AWSConfig struct {
 	AccountAlias string
 	AccountID    string
+	Arn          string
 	Config       aws.Config
 	ProfileName  string
 	Region       string
@@ -65,8 +66,19 @@ func (config *AWSConfig) setCallerInfo() {
 	if err != nil {
 		panic(err)
 	}
-	config.AccountID = *result.Account
-	config.UserID = *result.UserId
+	config.AccountID, config.UserID, config.Arn = resolveCallerIdentity(result)
+}
+
+// resolveCallerIdentity safely extracts the Account, UserId, and Arn
+// fields from an STS GetCallerIdentity response. The AWS SDK returns
+// these as *string and in some edge cases (e.g. SSO sessions in
+// specific states) one or more may be nil; aws.ToString converts nil
+// pointers to empty strings rather than panicking.
+func resolveCallerIdentity(result *sts.GetCallerIdentityOutput) (accountID, userID, arn string) {
+	if result == nil {
+		return "", "", ""
+	}
+	return aws.ToString(result.Account), aws.ToString(result.UserId), aws.ToString(result.Arn)
 }
 
 func (config *AWSConfig) setAlias() {
