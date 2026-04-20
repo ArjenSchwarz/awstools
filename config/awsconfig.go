@@ -29,8 +29,11 @@ type AWSConfig struct {
 }
 
 // resolveProfile returns the AWS profile name from configuration, or empty if none is set.
+// AWS profile names are case-sensitive (they are matched verbatim against the
+// [profile ...] section headers in ~/.aws/config), so the raw value is returned
+// via GetString rather than the case-normalising GetLCString.
 func resolveProfile(config Config) string {
-	return config.GetLCString("aws.profile")
+	return config.GetString("aws.profile")
 }
 
 // DefaultAwsConfig loads default AWS Config
