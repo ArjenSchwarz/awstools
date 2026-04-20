@@ -105,7 +105,15 @@ func s3EncryptionToString(rules []types.ServerSideEncryptionRule) string {
 	return result
 }
 
-func parsePublicAccessBlock(config types.PublicAccessBlockConfiguration) string {
+// parsePublicAccessBlock renders a PublicAccessBlockConfiguration as a human
+// readable string. A nil config means the underlying GetPublicAccessBlock call
+// failed or returned no configuration (e.g. no PAB set, or access denied) and
+// is reported as "Unknown" so it is not confused with a bucket that has all
+// four flags explicitly set to false.
+func parsePublicAccessBlock(config *types.PublicAccessBlockConfiguration) string {
+	if config == nil {
+		return "Unknown"
+	}
 	if aws.ToBool(config.BlockPublicAcls) && aws.ToBool(config.BlockPublicPolicy) && aws.ToBool(config.IgnorePublicAcls) && aws.ToBool(config.RestrictPublicBuckets) {
 		return "All true"
 	}

@@ -23,4 +23,4 @@ Three functions use the cache for ENI detail resolution:
 
 - Pointer storage pattern: When storing pointers from range loops into maps, use `&slice[i]` (index-based) rather than `&loopVar`. The range value variable is a copy; while Go 1.22+ creates per-iteration copies, the index-based pattern is clearer and version-independent.
 - `batchFetchVPCEndpoints` and `batchFetchNATGateways` use `panic(err)` on API failure — these should eventually be converted to return errors.
-- No pagination is used for VPC endpoint and NAT gateway API calls. If a VPC has more resources than the default page size, results may be truncated.
+- Pagination: both the batch cache fetchers (`batchFetchVPCEndpoints`, `batchFetchNATGateways`, `batchFetchTransitGateways`) and the per-ENI helpers (`GetVPCEndpointFromNetworkInterface`, `GetNatGatewayFromNetworkInterface`, `GetTransitGatewayFromNetworkInterface`) walk every page via `NewDescribe*Paginator`. T-657 fixed the per-ENI helpers — a matching resource on page 2+ previously looked unattached.

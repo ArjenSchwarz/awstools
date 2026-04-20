@@ -34,6 +34,31 @@ func init() {
 	cfnCmd.AddCommand(resourcesCmd)
 }
 
+// buildCfnResource converts a CloudFormation StackResource into the local
+// cfnResource view used for output. It is nil-safe for every optional SDK
+// pointer field and falls back to the logical resource id (or an empty
+// string) when PhysicalResourceId is absent — AWS returns a nil
+// PhysicalResourceId for resources that have not been created yet and for
+// resource types that never emit one. See T-733.
+func buildCfnResource(resource types.StackResource, nameResolver func(string) string) cfnResource {
+	physicalID := aws.ToString(resource.PhysicalResourceId)
+	logicalID := aws.ToString(resource.LogicalResourceId)
+
+	resourceName := logicalID
+	if physicalID != "" {
+		resourceName = nameResolver(physicalID)
+	}
+
+	return cfnResource{
+		ResourceID:   physicalID,
+		Type:         aws.ToString(resource.ResourceType),
+		Stack:        aws.ToString(resource.StackName),
+		Status:       string(resource.ResourceStatus),
+		LogicalName:  logicalID,
+		ResourceName: resourceName,
+	}
+}
+
 func listResources(_ *cobra.Command, _ []string) {
 	awsConfig := config.DefaultAwsConfig(*settings)
 	resultTitle := "CloudFormation resources for stack " + *stackname
@@ -43,15 +68,7 @@ func listResources(_ *cobra.Command, _ []string) {
 	c := make(chan cfnResource)
 	for _, unparsedResource := range unparsedResources {
 		go func(resource types.StackResource) {
-			resourceStruct := cfnResource{
-				ResourceID:   aws.ToString(resource.PhysicalResourceId),
-				Type:         aws.ToString(resource.ResourceType),
-				Stack:        aws.ToString(resource.StackName),
-				Status:       string(resource.ResourceStatus),
-				LogicalName:  aws.ToString(resource.LogicalResourceId),
-				ResourceName: getName(*resource.PhysicalResourceId),
-			}
-			c <- resourceStruct
+			c <- buildCfnResource(resource, getName)
 		}(unparsedResource)
 	}
 	for i := range unparsedResources {
