@@ -23,7 +23,7 @@ type S3Bucket struct {
 	OpenACLs                       bool
 	Owner                          string
 	Policy                         string
-	PublicAccessBlockConfiguration types.PublicAccessBlockConfiguration
+	PublicAccessBlockConfiguration *types.PublicAccessBlockConfiguration
 	PublicPolicy                   bool
 	Region                         string
 	Replication                    types.ReplicationConfiguration
@@ -95,10 +95,18 @@ func GetBucketDetails(svc *s3.Client) []S3Bucket {
 		if openacls {
 			isPublic = true
 		}
-		// PublicAccessBlock overrides other public making settings
-		publicresp, _ := svc.GetPublicAccessBlock(context.TODO(), &s3.GetPublicAccessBlockInput{Bucket: bucket.Name})
-		if publicresp != nil {
-			if (aws.ToBool(publicresp.PublicAccessBlockConfiguration.IgnorePublicAcls) || !openacls) && aws.ToBool(publicresp.PublicAccessBlockConfiguration.RestrictPublicBuckets) {
+		// PublicAccessBlock overrides other public making settings. The error
+		// is intentionally tolerated: the call routinely fails with
+		// NoSuchPublicAccessBlockConfiguration for buckets that simply have
+		// no PAB set. When the call fails we leave pabConfig nil so callers
+		// can distinguish "unknown" from a real "all false" configuration.
+		publicresp, pabErr := svc.GetPublicAccessBlock(context.TODO(), &s3.GetPublicAccessBlockInput{Bucket: bucket.Name})
+		var pabConfig *types.PublicAccessBlockConfiguration
+		if pabErr == nil && publicresp != nil {
+			pabConfig = publicresp.PublicAccessBlockConfiguration
+		}
+		if pabConfig != nil {
+			if (aws.ToBool(pabConfig.IgnorePublicAcls) || !openacls) && aws.ToBool(pabConfig.RestrictPublicBuckets) {
 				isPublic = false
 			}
 		}
@@ -120,9 +128,7 @@ func GetBucketDetails(svc *s3.Client) []S3Bucket {
 			PublicPolicy: policyIsPublic,
 		}
 
-		if publicresp != nil {
-			bucketObject.PublicAccessBlockConfiguration = *publicresp.PublicAccessBlockConfiguration
-		}
+		bucketObject.PublicAccessBlockConfiguration = pabConfig
 
 		loggingresp, _ := svc.GetBucketLogging(context.TODO(), &s3.GetBucketLoggingInput{Bucket: bucket.Name})
 		if loggingresp != nil && loggingresp.LoggingEnabled != nil {
