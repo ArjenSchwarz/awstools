@@ -532,6 +532,47 @@ sso_role_name = ReadOnlyAccess
 	assert.Equal(t, "987654321098", legacyProfile.SSOAccountID)
 	assert.Equal(t, "ReadOnlyAccess", legacyProfile.SSORoleName)
 }
+
+// TestAWSConfigFile_ParseLongLine is a regression test for T-867: the parser
+// used bufio.Scanner with the default 64 KiB token size, so any AWS config line
+// larger than 64 KiB (for example a long credential_process or a large custom
+// property on an SSO session profile) made the scanner return
+// bufio.ErrTooLong, which caused LoadAWSConfigFile to fail outright instead of
+// recovering. The parser must now handle lines well beyond 64 KiB.
+func TestAWSConfigFile_ParseLongLine(t *testing.T) {
+	tempDir := t.TempDir()
+	configPath := filepath.Join(tempDir, "config")
+
+	// Build a property value that is comfortably larger than the default
+	// bufio.Scanner token size (64 KiB). 128 KiB is well past the old limit
+	// while still representative of realistic long credential_process entries.
+	longValue := strings.Repeat("a", 128*1024)
+
+	configContent := "[profile long-profile]\n" +
+		"region = us-east-1\n" +
+		"credential_process = " + longValue + "\n" +
+		"\n" +
+		"[profile trailing-profile]\n" +
+		"region = us-west-2\n"
+
+	require.NoError(t, os.WriteFile(configPath, []byte(configContent), 0600))
+
+	configFile, err := LoadAWSConfigFile(configPath)
+	require.NoError(t, err)
+	require.NotNil(t, configFile)
+
+	longProfile, exists := configFile.Profiles["long-profile"]
+	require.True(t, exists, "profile with long property must be parsed")
+	assert.Equal(t, "us-east-1", longProfile.Region)
+	assert.Equal(t, longValue, longProfile.OtherProperties["credential_process"])
+
+	// Profiles defined after the long line must still be parsed — this
+	// proves the scanner continues past the long line rather than aborting.
+	trailing, exists := configFile.Profiles["trailing-profile"]
+	require.True(t, exists, "profile after long line must be parsed")
+	assert.Equal(t, "us-west-2", trailing.Region)
+}
+
 func TestAWSConfigFile_FindProfilesByName(t *testing.T) {
 	configFile := &AWSConfigFile{
 		Profiles: map[string]Profile{

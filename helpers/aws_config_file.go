@@ -201,9 +201,19 @@ func LoadAWSConfigFile(filePath string) (*AWSConfigFile, error) {
 	return configFile, nil
 }
 
+// maxConfigLineSize bounds how long a single line in an AWS config file may be.
+// bufio.Scanner's default token size is 64 KiB, which is not enough for configs
+// that contain long credential_process commands or other large custom
+// properties. 1 MiB leaves plenty of headroom for realistic entries while
+// still bounding memory use. See T-867.
+const maxConfigLineSize = 1 << 20 // 1 MiB
+
 // parseConfigFileWithRecovery parses the AWS config file with malformed section recovery
 func (cf *AWSConfigFile) parseConfigFileWithRecovery(file *os.File) error {
 	scanner := bufio.NewScanner(file)
+	// Allow lines larger than bufio.MaxScanTokenSize (64 KiB). The initial
+	// buffer stays small; Scanner grows it up to maxConfigLineSize on demand.
+	scanner.Buffer(make([]byte, 0, 64*1024), maxConfigLineSize)
 	var currentProfile *Profile
 	var currentSession *SSOSession
 	var parseErrors []error
