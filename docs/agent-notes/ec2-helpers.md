@@ -24,3 +24,12 @@ All callers must pass the subnet's VPC ID. The VPC ID is available from:
 
 - `types.RouteTable` has a `VpcId` field — always use it when filtering by VPC
 - `DescribeRouteTables` without filters returns route tables across all VPCs
+
+## ENI Listing
+
+`GetNetworkInterfaces` (`helpers/ec2.go`) accepts
+`ec2.DescribeNetworkInterfacesAPIClient` rather than `*ec2.Client` directly.
+`*ec2.Client` satisfies the interface so real callers are unaffected, and
+tests can pass a mock. The helper uses `NewDescribeNetworkInterfacesPaginator`
+so large accounts don't get truncated output. `GetVPCUsageOverview` reuses
+this helper; there is no separate private `retrieveNetworkInterfaces`.

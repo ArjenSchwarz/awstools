@@ -607,14 +607,22 @@ func getNameFromTags(tags []types.Tag) string {
 	return ""
 }
 
-// GetNetworkInterfaces retrieves all network interfaces in the region
-func GetNetworkInterfaces(svc *ec2.Client) []types.NetworkInterface {
-	params := &ec2.DescribeNetworkInterfacesInput{}
-	resp, err := svc.DescribeNetworkInterfaces(context.TODO(), params)
-	if err != nil {
-		panic(err)
+// GetNetworkInterfaces retrieves all network interfaces in the region, paging
+// through every response so accounts with more ENIs than a single
+// DescribeNetworkInterfaces page still get complete results. The parameter
+// type is the AWS SDK paginator's own interface so tests can supply a mock
+// while real callers continue to pass an *ec2.Client.
+func GetNetworkInterfaces(svc ec2.DescribeNetworkInterfacesAPIClient) []types.NetworkInterface {
+	var result []types.NetworkInterface
+	paginator := ec2.NewDescribeNetworkInterfacesPaginator(svc, &ec2.DescribeNetworkInterfacesInput{})
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(context.TODO())
+		if err != nil {
+			panic(err)
+		}
+		result = append(result, page.NetworkInterfaces...)
 	}
-	return resp.NetworkInterfaces
+	return result
 }
 
 // GetTransitGatewayFromNetworkInterface returns the Transit Gateway attachment ID for a network interface
@@ -762,7 +770,7 @@ type VPCUsageSummary struct {
 func GetVPCUsageOverview(svc *ec2.Client) VPCOverview {
 	vpcs := retrieveVPCData(svc)
 	subnets := retrieveSubnetData(svc)
-	networkInterfaces := retrieveNetworkInterfaces(svc)
+	networkInterfaces := GetNetworkInterfaces(svc)
 	routeTables := retrieveRouteTables(svc)
 
 	var vpcUsageInfos []VPCUsageInfo
@@ -856,20 +864,6 @@ func retrieveSubnetData(svc *ec2.Client) []types.Subnet {
 			panic(err)
 		}
 		result = append(result, page.Subnets...)
-	}
-	return result
-}
-
-// retrieveNetworkInterfaces fetches all network interfaces using DescribeNetworkInterfaces API
-func retrieveNetworkInterfaces(svc *ec2.Client) []types.NetworkInterface {
-	var result []types.NetworkInterface
-	paginator := ec2.NewDescribeNetworkInterfacesPaginator(svc, &ec2.DescribeNetworkInterfacesInput{})
-	for paginator.HasMorePages() {
-		page, err := paginator.NextPage(context.TODO())
-		if err != nil {
-			panic(err)
-		}
-		result = append(result, page.NetworkInterfaces...)
 	}
 	return result
 }
