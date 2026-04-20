@@ -24,3 +24,15 @@ All callers must pass the subnet's VPC ID. The VPC ID is available from:
 
 - `types.RouteTable` has a `VpcId` field — always use it when filtering by VPC
 - `DescribeRouteTables` without filters returns route tables across all VPCs
+- `DescribeRouteTables` is paginated (default page size 100). Always walk
+  `ec2.NewDescribeRouteTablesPaginator`; a single `DescribeRouteTables` call
+  truncates results in large accounts. `GetAllVPCRouteTables`, `retrieveRouteTables`,
+  and `addAllRouteTableNames` all follow the paginator pattern.
+
+## Testing Pattern
+
+`GetAllVPCRouteTables` takes `*ec2.Client` so callers don't have to change, but
+the pagination logic lives in the unexported `getAllVPCRouteTables` which takes
+the narrower `ec2.DescribeRouteTablesAPIClient` interface. Unit tests mock that
+interface (see `helpers/vpc_routetable_pagination_test.go`) — this is the same
+split used for the IAM pagination tests.
