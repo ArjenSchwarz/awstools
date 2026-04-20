@@ -32,18 +32,26 @@ func GetAllRdsResourceNames(svc *rds.Client) map[string]string {
 	return result
 }
 
-func addAllInstanceNames(svc *rds.Client, result map[string]string) map[string]string {
-	resp, err := svc.DescribeDBInstances(context.TODO(), &rds.DescribeDBInstancesInput{})
-	if err != nil {
-		panic(err)
-	}
-	for _, dbinstance := range resp.DBInstances {
-		result[*dbinstance.DbiResourceId] = *dbinstance.DBInstanceIdentifier
-		if dbinstance.TagList != nil {
-			for _, tag := range dbinstance.TagList {
-				if *tag.Key == "Name" {
-					result[*dbinstance.DbiResourceId] = *tag.Value
-					break
+// addAllInstanceNames adds every DB instance's display name to the result map.
+// AWS's DescribeDBInstances API paginates at 100 instances per page by default,
+// so this helper walks NewDescribeDBInstancesPaginator until every page is
+// consumed. Accepting the narrow rds.DescribeDBInstancesAPIClient interface
+// lets the pagination logic be unit tested without a real *rds.Client.
+func addAllInstanceNames(svc rds.DescribeDBInstancesAPIClient, result map[string]string) map[string]string {
+	paginator := rds.NewDescribeDBInstancesPaginator(svc, &rds.DescribeDBInstancesInput{})
+	for paginator.HasMorePages() {
+		resp, err := paginator.NextPage(context.TODO())
+		if err != nil {
+			panic(err)
+		}
+		for _, dbinstance := range resp.DBInstances {
+			result[*dbinstance.DbiResourceId] = *dbinstance.DBInstanceIdentifier
+			if dbinstance.TagList != nil {
+				for _, tag := range dbinstance.TagList {
+					if *tag.Key == "Name" {
+						result[*dbinstance.DbiResourceId] = *tag.Value
+						break
+					}
 				}
 			}
 		}
