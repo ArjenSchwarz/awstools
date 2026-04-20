@@ -68,6 +68,20 @@ vet:
 
 lint:
 	@echo "Running linters..."
+	@command -v golangci-lint >/dev/null 2>&1 || { \
+		echo "Error: golangci-lint is not installed."; \
+		echo "This repository's .golangci.yml uses the v2 config schema, so v2 is required."; \
+		echo "Install it from https://golangci-lint.run/welcome/install/"; \
+		exit 1; \
+	}
+	@major=$$(golangci-lint --version 2>/dev/null | sed -n 's/.*has version \([0-9][0-9]*\)\..*/\1/p'); \
+	if [ "$$major" != "2" ]; then \
+		version_line=$$(golangci-lint --version 2>/dev/null | head -n 1); \
+		echo "Error: golangci-lint v2 is required (detected: $${version_line:-unknown version})."; \
+		echo "This repository's .golangci.yml uses the v2 config schema."; \
+		echo "Install v2 from https://golangci-lint.run/welcome/install/"; \
+		exit 1; \
+	fi
 	golangci-lint run --timeout 5m
 
 modernize:
