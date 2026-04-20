@@ -22,29 +22,35 @@ type AppMeshAPI interface {
 	DescribeVirtualService(ctx context.Context, params *appmesh.DescribeVirtualServiceInput, optFns ...func(*appmesh.Options)) (*appmesh.DescribeVirtualServiceOutput, error)
 }
 
-// getAllAppMeshRoutes retrieves all of the routes in the mesh
+// getAllAppMeshRoutes retrieves all of the routes in the mesh. Both
+// ListVirtualRouters and ListRoutes paginate via NextToken; the SDK
+// paginators are used so large meshes do not get truncated.
 func getAllAppMeshRoutes(meshName *string, svc AppMeshAPI) []types.RouteRef {
-	routersInput := &appmesh.ListVirtualRoutersInput{
+	routersPaginator := appmesh.NewListVirtualRoutersPaginator(svc, &appmesh.ListVirtualRoutersInput{
 		MeshName: meshName,
-	}
+	})
 
-	routers, err := svc.ListVirtualRouters(context.TODO(), routersInput)
-	if err != nil {
-		fmt.Print(err)
-		return nil
-	}
 	var routeslist = []types.RouteRef{}
-	for _, routers := range routers.VirtualRouters {
-		routesInput := &appmesh.ListRoutesInput{
-			MeshName:          meshName,
-			VirtualRouterName: routers.VirtualRouterName,
-		}
-		routes, err := svc.ListRoutes(context.TODO(), routesInput)
+	for routersPaginator.HasMorePages() {
+		routersPage, err := routersPaginator.NextPage(context.TODO())
 		if err != nil {
 			fmt.Print(err)
-			continue
+			return nil
 		}
-		routeslist = append(routeslist, routes.Routes...)
+		for _, router := range routersPage.VirtualRouters {
+			routesPaginator := appmesh.NewListRoutesPaginator(svc, &appmesh.ListRoutesInput{
+				MeshName:          meshName,
+				VirtualRouterName: router.VirtualRouterName,
+			})
+			for routesPaginator.HasMorePages() {
+				routesPage, err := routesPaginator.NextPage(context.TODO())
+				if err != nil {
+					fmt.Print(err)
+					break
+				}
+				routeslist = append(routeslist, routesPage.Routes...)
+			}
+		}
 	}
 
 	return routeslist
@@ -70,54 +76,62 @@ func getAppMeshRouteDescriptions(meshName *string, svc AppMeshAPI) []*types.Rout
 	return routedetails
 }
 
-// getAllAppMeshNodes retrieves all of the VirtualNodes in the mesh
+// getAllAppMeshNodes retrieves all of the VirtualNodes in the mesh. The
+// SDK paginator is walked so meshes with many virtual nodes are not
+// truncated at the first page.
 func getAllAppMeshNodes(meshName *string, svc AppMeshAPI) []*types.VirtualNodeData {
-	nodesInput := &appmesh.ListVirtualNodesInput{
+	paginator := appmesh.NewListVirtualNodesPaginator(svc, &appmesh.ListVirtualNodesInput{
 		MeshName: meshName,
-	}
-	nodes, err := svc.ListVirtualNodes(context.TODO(), nodesInput)
-	if err != nil {
-		fmt.Print(err)
-		return nil
-	}
+	})
 	var nodelist = []*types.VirtualNodeData{}
-	for _, node := range nodes.VirtualNodes {
-		input := &appmesh.DescribeVirtualNodeInput{
-			MeshName:        node.MeshName,
-			VirtualNodeName: node.VirtualNodeName,
-		}
-		nodetails, err := svc.DescribeVirtualNode(context.TODO(), input)
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(context.TODO())
 		if err != nil {
 			fmt.Print(err)
-			continue
+			return nil
 		}
-		nodelist = append(nodelist, nodetails.VirtualNode)
+		for _, node := range page.VirtualNodes {
+			input := &appmesh.DescribeVirtualNodeInput{
+				MeshName:        node.MeshName,
+				VirtualNodeName: node.VirtualNodeName,
+			}
+			nodetails, err := svc.DescribeVirtualNode(context.TODO(), input)
+			if err != nil {
+				fmt.Print(err)
+				continue
+			}
+			nodelist = append(nodelist, nodetails.VirtualNode)
+		}
 	}
 	return nodelist
 }
 
-// getAllAppMeshVirtualServices retrieves all of the VirtualServices in the mesh
+// getAllAppMeshVirtualServices retrieves all of the VirtualServices in
+// the mesh. The SDK paginator is walked so meshes with many virtual
+// services are not truncated at the first page.
 func getAllAppMeshVirtualServices(meshName *string, svc AppMeshAPI) []*types.VirtualServiceData {
-	servicesInput := &appmesh.ListVirtualServicesInput{
+	paginator := appmesh.NewListVirtualServicesPaginator(svc, &appmesh.ListVirtualServicesInput{
 		MeshName: meshName,
-	}
-	services, err := svc.ListVirtualServices(context.TODO(), servicesInput)
-	if err != nil {
-		fmt.Print(err)
-		return nil
-	}
+	})
 	var servicelist = []*types.VirtualServiceData{}
-	for _, service := range services.VirtualServices {
-		input := &appmesh.DescribeVirtualServiceInput{
-			MeshName:           service.MeshName,
-			VirtualServiceName: service.VirtualServiceName,
-		}
-		servicedetails, err := svc.DescribeVirtualService(context.TODO(), input)
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(context.TODO())
 		if err != nil {
 			fmt.Print(err)
-			continue
+			return nil
 		}
-		servicelist = append(servicelist, servicedetails.VirtualService)
+		for _, service := range page.VirtualServices {
+			input := &appmesh.DescribeVirtualServiceInput{
+				MeshName:           service.MeshName,
+				VirtualServiceName: service.VirtualServiceName,
+			}
+			servicedetails, err := svc.DescribeVirtualService(context.TODO(), input)
+			if err != nil {
+				fmt.Print(err)
+				continue
+			}
+			servicelist = append(servicelist, servicedetails.VirtualService)
+		}
 	}
 	return servicelist
 }
