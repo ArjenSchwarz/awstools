@@ -1872,6 +1872,86 @@ func TestFormatRouteTableInfo_PrefixListRoute(t *testing.T) {
 	}
 }
 
+// Regression tests for T-656: GetNatGatewayFromNetworkInterface must tolerate
+// NAT gateway address entries and network interfaces where NetworkInterfaceId
+// is nil without panicking. Scanning must continue past missing values and
+// match the correct NAT gateway when a later address has a non-nil matching ID.
+
+func TestMatchNatGatewayByENI_NilAddressNetworkInterfaceID(t *testing.T) {
+	natgateways := []types.NatGateway{
+		{
+			NatGatewayId: aws.String("nat-aaa"),
+			NatGatewayAddresses: []types.NatGatewayAddress{
+				{NetworkInterfaceId: nil},
+				{NetworkInterfaceId: aws.String("eni-match")},
+			},
+		},
+	}
+
+	result := matchNatGatewayByENI(natgateways, "eni-match")
+	if result == nil {
+		t.Fatal("expected matching NAT gateway, got nil (nil address NetworkInterfaceId aborted scan)")
+	}
+	if aws.ToString(result.NatGatewayId) != "nat-aaa" {
+		t.Errorf("expected nat-aaa, got %s", aws.ToString(result.NatGatewayId))
+	}
+}
+
+func TestMatchNatGatewayByENI_EmptyENIID(t *testing.T) {
+	natgateways := []types.NatGateway{
+		{
+			NatGatewayId: aws.String("nat-aaa"),
+			NatGatewayAddresses: []types.NatGatewayAddress{
+				{NetworkInterfaceId: nil},
+			},
+		},
+	}
+
+	if result := matchNatGatewayByENI(natgateways, ""); result != nil {
+		t.Errorf("expected nil for empty eniID, got %s", aws.ToString(result.NatGatewayId))
+	}
+}
+
+func TestMatchNatGatewayByENI_NoMatch(t *testing.T) {
+	natgateways := []types.NatGateway{
+		{
+			NatGatewayId: aws.String("nat-aaa"),
+			NatGatewayAddresses: []types.NatGatewayAddress{
+				{NetworkInterfaceId: aws.String("eni-other")},
+			},
+		},
+	}
+
+	if result := matchNatGatewayByENI(natgateways, "eni-missing"); result != nil {
+		t.Errorf("expected nil when no match, got %s", aws.ToString(result.NatGatewayId))
+	}
+}
+
+func TestMatchNatGatewayByENI_MatchOnLaterGateway(t *testing.T) {
+	natgateways := []types.NatGateway{
+		{
+			NatGatewayId: aws.String("nat-first"),
+			NatGatewayAddresses: []types.NatGatewayAddress{
+				{NetworkInterfaceId: nil},
+			},
+		},
+		{
+			NatGatewayId: aws.String("nat-second"),
+			NatGatewayAddresses: []types.NatGatewayAddress{
+				{NetworkInterfaceId: aws.String("eni-target")},
+			},
+		},
+	}
+
+	result := matchNatGatewayByENI(natgateways, "eni-target")
+	if result == nil {
+		t.Fatal("expected match on second gateway, got nil")
+	}
+	if aws.ToString(result.NatGatewayId) != "nat-second" {
+		t.Errorf("expected nat-second, got %s", aws.ToString(result.NatGatewayId))
+	}
+}
+
 func TestFormatRouteTableInfo_MixedRoutes(t *testing.T) {
 	// A route table with all three destination types: IPv4 CIDR,
 	// IPv6 CIDR, and prefix list.
