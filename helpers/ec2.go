@@ -314,28 +314,40 @@ type VPCRoute struct {
 	DestinationTarget string
 }
 
-// GetAllVPCRouteTables returns all the Routetables in the account and region
+// GetAllVPCRouteTables returns all the Routetables in the account and region.
+// It paginates through every page of DescribeRouteTables so accounts with more
+// route tables than fit in a single response are fully enumerated.
 func GetAllVPCRouteTables(svc *ec2.Client) []VPCRouteTable {
+	return getAllVPCRouteTables(svc)
+}
+
+// getAllVPCRouteTables implements GetAllVPCRouteTables against the minimal
+// DescribeRouteTablesAPIClient interface so the pagination logic can be unit
+// tested without a real *ec2.Client.
+func getAllVPCRouteTables(svc ec2.DescribeRouteTablesAPIClient) []VPCRouteTable {
 	var result []VPCRouteTable
-	resp, err := svc.DescribeRouteTables(context.TODO(), &ec2.DescribeRouteTablesInput{})
-	if err != nil {
-		panic(err)
-	}
-	for _, routetable := range resp.RouteTables {
-		var subnets []string
-		for _, assocs := range routetable.Associations {
-			if assocs.SubnetId != nil {
-				subnets = append(subnets, *assocs.SubnetId)
+	paginator := ec2.NewDescribeRouteTablesPaginator(svc, &ec2.DescribeRouteTablesInput{})
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(context.TODO())
+		if err != nil {
+			panic(err)
+		}
+		for _, routetable := range page.RouteTables {
+			var subnets []string
+			for _, assocs := range routetable.Associations {
+				if assocs.SubnetId != nil {
+					subnets = append(subnets, *assocs.SubnetId)
+				}
 			}
+			table := VPCRouteTable{
+				Vpc: VPCHolder{ID: aws.ToString(routetable.VpcId),
+					AccountID: aws.ToString(routetable.OwnerId)},
+				ID:      aws.ToString(routetable.RouteTableId),
+				Routes:  parseVPCRoutes(routetable.Routes),
+				Subnets: subnets,
+			}
+			result = append(result, table)
 		}
-		table := VPCRouteTable{
-			Vpc: VPCHolder{ID: aws.ToString(routetable.VpcId),
-				AccountID: aws.ToString(routetable.OwnerId)},
-			ID:      aws.ToString(routetable.RouteTableId),
-			Routes:  parseVPCRoutes(routetable.Routes),
-			Subnets: subnets,
-		}
-		result = append(result, table)
 	}
 	return result
 }
@@ -576,6 +588,12 @@ func GetBlackholeRoutesForTransitGatewayRouteTable(routetableID string, svc *ec2
 // test family is running in the latest instance family.
 // TODO: Automate this to work properly
 func IsLatestInstanceFamily(instanceFamily string) bool {
+	// Guard against empty or malformed input. A valid EC2 instance family
+	// identifier needs at least one family letter followed by one version
+	// character (e.g. "t2"). Anything shorter is treated as unknown.
+	if len(instanceFamily) < 2 {
+		return false
+	}
 	family := instanceFamily[0:1]
 	version := instanceFamily[1:]
 	switch family {
