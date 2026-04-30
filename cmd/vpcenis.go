@@ -12,19 +12,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// eniAttachmentLookupClient is the minimum EC2 API surface required by
-// getAttachment to resolve ENI attachment metadata. Combining the three
-// Describe* API client interfaces here keeps production callers passing a
-// single *ec2.Client while letting tests supply a mock that paginates.
-// Pagination for each underlying Describe call lives in helpers/ec2.go
-// (T-657); this interface just pins the command-side path to those
-// paginated helpers.
-type eniAttachmentLookupClient interface {
-	ec2.DescribeVpcEndpointsAPIClient
-	ec2.DescribeNatGatewaysAPIClient
-	ec2.DescribeTransitGatewayVpcAttachmentsAPIClient
-}
-
 // peeringsCmd represents the peerings command
 var enisCmd = &cobra.Command{
 	Use:   "enis",
@@ -63,7 +50,7 @@ func enis(_ *cobra.Command, _ []string) {
 	output.Write()
 }
 
-func printENIs(interfaces []types.NetworkInterface, names map[string]string, resultTitle string, split bool, svc eniAttachmentLookupClient) {
+func printENIs(interfaces []types.NetworkInterface, names map[string]string, resultTitle string, split bool, svc *ec2.Client) {
 	keys := []string{"ENI", "Type", "Attachment", "IPs", "VPC", "Subnet"}
 	output := format.OutputArray{Keys: keys, Settings: settings.NewOutputSettings()}
 	output.Settings.Title = resultTitle
@@ -74,6 +61,9 @@ func printENIs(interfaces []types.NetworkInterface, names map[string]string, res
 		output.Settings.SeparateTables = true
 		output.Settings.SortKey = "Attachment"
 	}
+
+	// Build cache once for all ENIs to avoid per-ENI API calls (T-727).
+	cache := helpers.NewENILookupCache(svc, interfaces)
 
 	for _, netinterface := range interfaces {
 		content := make(map[string]any)
@@ -88,7 +78,7 @@ func printENIs(interfaces []types.NetworkInterface, names map[string]string, res
 		}
 		content["ENI"] = aws.ToString(netinterface.NetworkInterfaceId)
 		content["Type"] = netinterface.InterfaceType
-		content["Attachment"] = getNameAndIDFromMap(getAttachment(netinterface, svc), names)
+		content["Attachment"] = getNameAndIDFromMap(helpers.GetAttachmentFromCache(netinterface, cache), names)
 		content["IPs"] = iparray
 		content["VPC"] = getNameAndIDFromMap(aws.ToString(netinterface.VpcId), names)
 		content["Subnet"] = getNameAndIDFromMap(aws.ToString(netinterface.SubnetId), names)
@@ -104,35 +94,6 @@ func splitBySubnet(interfaces []types.NetworkInterface) map[string][]types.Netwo
 		result[subnetID] = append(result[subnetID], netinterface)
 	}
 	return result
-}
-
-// getAttachment resolves the attachment label for a given ENI. For instance
-// ENIs it returns the instance ID directly; for TGW/NAT/VPC-endpoint ENIs it
-// dispatches to the matching paginated helper (T-657 fixed those helpers to
-// walk every page). The svc parameter is the composite client interface so
-// tests can supply a paginating mock without a real *ec2.Client.
-func getAttachment(netinterface types.NetworkInterface, svc eniAttachmentLookupClient) string {
-	if netinterface.Attachment != nil && netinterface.Attachment.InstanceId != nil {
-		return *netinterface.Attachment.InstanceId
-	}
-	if netinterface.InterfaceType == types.NetworkInterfaceTypeTransitGateway {
-		return helpers.GetTransitGatewayFromNetworkInterface(netinterface, svc)
-	}
-	if netinterface.InterfaceType == types.NetworkInterfaceTypeNatGateway || netinterface.InterfaceType == "nat_gateway" {
-		natgw := helpers.GetNatGatewayFromNetworkInterface(netinterface, svc)
-		if natgw != nil {
-			return aws.ToString(natgw.NatGatewayId)
-		}
-		return ""
-	}
-	if netinterface.InterfaceType == types.NetworkInterfaceTypeVpcEndpoint {
-		endpoint := helpers.GetVPCEndpointFromNetworkInterface(netinterface, svc)
-		if endpoint != nil {
-			return fmt.Sprintf("%s (%s)", aws.ToString(endpoint.ServiceName), aws.ToString(endpoint.VpcEndpointId))
-		}
-		return ""
-	}
-	return ""
 }
 
 func getNameAndIDFromMap(id string, names map[string]string) string {

@@ -1624,6 +1624,63 @@ func TestENILookupCache_NATGatewaysByENI_DistinctEntries(t *testing.T) {
 	}
 }
 
+func TestGetAttachmentFromCache_T727(t *testing.T) {
+	cache := &ENILookupCache{
+		VPCEndpoints:     make(map[string]*types.VpcEndpoint),
+		InstanceNames:    make(map[string]string),
+		TransitGateways:  map[string]string{"vpc-aaa": "tgw-attach-123"},
+		NATGateways:      make(map[string]*types.NatGateway),
+		EndpointsByENI:   map[string]*types.VpcEndpoint{"eni-ep": {VpcEndpointId: aws.String("vpce-456"), ServiceName: aws.String("com.amazonaws.region.s3")}},
+		NATGatewaysByENI: map[string]*types.NatGateway{"eni-nat": {NatGatewayId: aws.String("nat-789")}},
+	}
+
+	tests := []struct {
+		name string
+		eni  types.NetworkInterface
+		want string
+	}{
+		{
+			name: "instance attached",
+			eni:  types.NetworkInterface{Attachment: &types.NetworkInterfaceAttachment{InstanceId: aws.String("i-abc")}},
+			want: "i-abc",
+		},
+		{
+			name: "transit gateway",
+			eni:  types.NetworkInterface{NetworkInterfaceId: aws.String("eni-tgw"), VpcId: aws.String("vpc-aaa"), InterfaceType: types.NetworkInterfaceTypeTransitGateway},
+			want: "tgw-attach-123",
+		},
+		{
+			name: "nat gateway",
+			eni:  types.NetworkInterface{NetworkInterfaceId: aws.String("eni-nat"), VpcId: aws.String("vpc-aaa"), InterfaceType: types.NetworkInterfaceTypeNatGateway},
+			want: "nat-789",
+		},
+		{
+			name: "nat gateway legacy type",
+			eni:  types.NetworkInterface{NetworkInterfaceId: aws.String("eni-nat"), VpcId: aws.String("vpc-aaa"), InterfaceType: "nat_gateway"},
+			want: "nat-789",
+		},
+		{
+			name: "vpc endpoint",
+			eni:  types.NetworkInterface{NetworkInterfaceId: aws.String("eni-ep"), VpcId: aws.String("vpc-aaa"), InterfaceType: types.NetworkInterfaceTypeVpcEndpoint},
+			want: "com.amazonaws.region.s3 (vpce-456)",
+		},
+		{
+			name: "unknown returns empty",
+			eni:  types.NetworkInterface{NetworkInterfaceId: aws.String("eni-unknown"), InterfaceType: types.NetworkInterfaceTypeInterface},
+			want: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := GetAttachmentFromCache(tt.eni, cache)
+			if got != tt.want {
+				t.Errorf("GetAttachmentFromCache() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestGetSubnetRouteTable_ExplicitAssociation(t *testing.T) {
 	routeTables := []types.RouteTable{
 		{

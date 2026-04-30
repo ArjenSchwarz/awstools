@@ -1951,6 +1951,35 @@ func (cache *ENILookupCache) batchFetchTransitGateways(svc *ec2.Client, vpcIDs m
 	}
 }
 
+// GetAttachmentFromCache resolves the attachment label for an ENI using a
+// pre-populated cache. This avoids per-ENI API calls — the caller should build
+// the cache once via NewENILookupCache and reuse it for every ENI.
+// The returned string matches the format expected by the vpc enis command
+// (raw IDs/labels suitable for name-mapping).
+func GetAttachmentFromCache(eni types.NetworkInterface, cache *ENILookupCache) string {
+	if eni.Attachment != nil && eni.Attachment.InstanceId != nil {
+		return *eni.Attachment.InstanceId
+	}
+	eniID := aws.ToString(eni.NetworkInterfaceId)
+	switch eni.InterfaceType {
+	case types.NetworkInterfaceTypeTransitGateway:
+		if eni.VpcId != nil {
+			if tgwID, exists := cache.TransitGateways[*eni.VpcId]; exists {
+				return tgwID
+			}
+		}
+	case types.NetworkInterfaceTypeNatGateway, "nat_gateway":
+		if natgw, exists := cache.NATGatewaysByENI[eniID]; exists {
+			return aws.ToString(natgw.NatGatewayId)
+		}
+	case types.NetworkInterfaceTypeVpcEndpoint:
+		if endpoint, exists := cache.EndpointsByENI[eniID]; exists {
+			return fmt.Sprintf("%s (%s)", aws.ToString(endpoint.ServiceName), aws.ToString(endpoint.VpcEndpointId))
+		}
+	}
+	return ""
+}
+
 // IPFinderResult contains the result of IP address search
 type IPFinderResult struct {
 	IPAddress      string                  `json:"ip_address"`
