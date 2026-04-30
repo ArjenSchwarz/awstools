@@ -1759,6 +1759,7 @@ func (cache *ENILookupCache) batchFetchVPCEndpoints(svc *ec2.Client, vpcIDs map[
 	for paginator.HasMorePages() {
 		page, err := paginator.NextPage(context.TODO())
 		if err != nil {
+			log.Printf("Error fetching VPC endpoints: %v", err)
 			return
 		}
 		allEndpoints = append(allEndpoints, page.VpcEndpoints...)
@@ -1900,6 +1901,7 @@ func (cache *ENILookupCache) batchFetchNATGateways(svc *ec2.Client, vpcIDs map[s
 	for paginator.HasMorePages() {
 		page, err := paginator.NextPage(context.TODO())
 		if err != nil {
+			log.Printf("Error fetching NAT gateways: %v", err)
 			return
 		}
 		allGateways = append(allGateways, page.NatGateways...)
@@ -1941,6 +1943,7 @@ func (cache *ENILookupCache) batchFetchTransitGateways(svc *ec2.Client, vpcIDs m
 	for paginator.HasMorePages() {
 		page, err := paginator.NextPage(context.TODO())
 		if err != nil {
+			log.Printf("Error fetching transit gateway attachments: %v", err)
 			return
 		}
 		for _, attachment := range page.TransitGatewayVpcAttachments {
