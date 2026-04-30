@@ -47,12 +47,18 @@ func tgwoverview(_ *cobra.Command, _ []string) {
 	} else {
 		for _, gateway := range gateways {
 			for _, routetable := range gateway.RouteTables {
+				// Track which resources appear as route targets so we can
+				// identify source attachments that are otherwise invisible.
+				routeTargets := make(map[string]bool)
 				for _, route := range routetable.Routes {
 					if excludeRouteTarget == route.Attachment.ResourceID {
 						continue
 					}
 					if !includeBlackhole && route.State == "blackhole" {
 						continue
+					}
+					if route.Attachment.ResourceID != "" {
+						routeTargets[route.Attachment.ResourceID] = true
 					}
 					content := make(map[string]any)
 					content["Transit Gateway Account"] = getNameWithID(gateway.AccountID)
@@ -74,6 +80,23 @@ func tgwoverview(_ *cobra.Command, _ []string) {
 						}
 					}
 					content["State"] = state
+					holder := format.OutputHolder{Contents: content}
+					output.AddHolder(holder)
+				}
+				// Show source attachments (associations) that don't already
+				// appear as route targets so non-VPC attachments are visible.
+				for _, attachment := range routetable.SourceAttachments {
+					if attachment.ResourceID == "" || routeTargets[attachment.ResourceID] {
+						continue
+					}
+					content := make(map[string]any)
+					content["Transit Gateway Account"] = getNameWithID(gateway.AccountID)
+					content["Transit Gateway"] = getNameWithID(gateway.ID)
+					content["Route Table"] = getNameWithID(routetable.ID)
+					content["CIDR"] = "-"
+					content["Target"] = getNameWithID(attachment.ResourceID)
+					content["Target Type"] = attachment.ResourceType
+					content["State"] = "associated"
 					holder := format.OutputHolder{Contents: content}
 					output.AddHolder(holder)
 				}
@@ -129,6 +152,10 @@ func createTgwOverviewDrawIO(output *format.OutputArray, gateways []helpers.Tran
 				image = drawio.AWSShape("Network Content Delivery", "VPC")
 			case "vpn":
 				image = drawio.AWSShape("Network Content Delivery", "Site-to-Site VPN")
+			case "dxgw":
+				image = drawio.AWSShape("Network Content Delivery", "Direct Connect Gateway")
+			case tgwResourceType:
+				image = drawio.AWSShape("Network Content Delivery", "Transit Gateway")
 			}
 			targetTgwMapping[resourceid] = targetTgwMap{
 				ID:           resourceid,

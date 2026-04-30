@@ -16,12 +16,11 @@ var tgwroutetablesCmd = &cobra.Command{
 	Use:   "routetables",
 	Short: "Get an overview of connections between Transit Gateway Route Tables and attached resources",
 	Long: `Get an overview of connections between Transit Gateway Route Tables and attached resources
-	This is currently limited to showing VPC attachments only, but that will be fixed soon.
 
 	Using the --resource-id (-r) flag, you can limit the output to the provided resource.
-	For a route table that means all the VPCs it connects to,
+	For a route table that means all the resources it connects to,
 	while for a VPC that means all the route tables it connects
-	to and through them what other VPCs can reach it or it can reach.
+	to and through them what other resources can reach it or it can reach.
 
 	Supports a Draw.io output`,
 	Run: tgwroutes,
@@ -87,6 +86,10 @@ func tgwroutes(_ *cobra.Command, _ []string) {
 				content["Image"] = drawio.AWSShape("Network Content Delivery", "VPC")
 			case "vpn":
 				content["Image"] = drawio.AWSShape("Network Content Delivery", "Site-to-Site VPN")
+			case "dxgw":
+				content["Image"] = drawio.AWSShape("Network Content Delivery", "Direct Connect Gateway")
+			case tgwResourceType:
+				content["Image"] = drawio.AWSShape("Network Content Delivery", "Transit Gateway")
 			}
 		}
 		holder := format.OutputHolder{Contents: content}
@@ -136,7 +139,7 @@ func filterGateway(gateways []helpers.TransitGateway) (map[string]string, map[st
 
 	for _, gateway := range gateways {
 		// only add relevant gateway if filtered by gateway
-		if limitertype == "tgw" && gateway.ID != tgwresourceid {
+		if limitertype == tgwResourceType && gateway.ID != tgwresourceid {
 			continue
 		}
 		for _, routetable := range gateway.RouteTables {

@@ -10,4 +10,5 @@ const (
 // Resource type constants
 const (
 	vpcResourceType = "vpc"
+	tgwResourceType = "tgw"
 )
