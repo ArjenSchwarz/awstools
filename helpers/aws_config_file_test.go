@@ -2089,13 +2089,32 @@ func TestWithFileLock(t *testing.T) {
 		assert.Equal(t, testError, err)
 	})
 
-	t.Run("non-existent file", func(t *testing.T) {
+	t.Run("non-existent file in non-existent directory", func(t *testing.T) {
 		err := withFileLock("/non/existent/file", func(file *os.File) error {
 			return nil
 		})
 
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to open file for locking")
+	})
+
+	t.Run("non-existent file in existing directory", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		newFilePath := filepath.Join(tmpDir, "new-config")
+
+		executed := false
+		err := withFileLock(newFilePath, func(file *os.File) error {
+			executed = true
+			_, writeErr := file.WriteString("[profile test]\nregion = us-east-1\n")
+			return writeErr
+		})
+
+		assert.NoError(t, err)
+		assert.True(t, executed)
+
+		content, err := os.ReadFile(newFilePath)
+		require.NoError(t, err)
+		assert.Equal(t, "[profile test]\nregion = us-east-1\n", string(content))
 	})
 }
 
@@ -2185,6 +2204,34 @@ func TestAWSConfigFile_WriteToFileWithLocking(t *testing.T) {
 		err = configFile.WriteToFile()
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "not writable")
+	})
+
+	t.Run("write to new file that does not exist", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		newFilePath := filepath.Join(tmpDir, "new-aws-config")
+
+		configFile := &AWSConfigFile{
+			FilePath: newFilePath,
+			Profiles: map[string]Profile{
+				"new-profile": {
+					Name:         "new-profile",
+					Region:       "us-west-2",
+					SSOStartURL:  "https://example.awsapps.com/start",
+					SSORegion:    "us-east-1",
+					SSOAccountID: "123456789012",
+					SSORoleName:  "ReadOnly",
+				},
+			},
+			Sessions: make(map[string]SSOSession),
+		}
+
+		err := configFile.WriteToFile()
+		assert.NoError(t, err)
+
+		content, err := os.ReadFile(newFilePath)
+		require.NoError(t, err)
+		assert.Contains(t, string(content), "[profile new-profile]")
+		assert.Contains(t, string(content), "region = us-west-2")
 	})
 }
 

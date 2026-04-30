@@ -784,8 +784,8 @@ func (p *Profile) IsLegacySSO() bool {
 
 // withFileLock executes a function while holding an exclusive lock on the file
 func withFileLock(filePath string, fn func(*os.File) error) error {
-	// Open file for reading and writing
-	file, err := os.OpenFile(filePath, os.O_RDWR, 0600)
+	// Open file for reading and writing, creating it if it doesn't exist
+	file, err := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE, 0600)
 	if err != nil {
 		return NewFileSystemError("failed to open file for locking", err).
 			WithContext("file_path", filePath)
