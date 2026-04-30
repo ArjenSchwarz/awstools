@@ -589,6 +589,33 @@ region = us-east-1
 			expectedError:   true,
 			errorType:       ErrorTypeValidation,
 		},
+		{
+			name: "Valid sso_session profile without inline sso_start_url",
+			configContent: `[sso-session my-session]
+sso_start_url = https://example.awsapps.com/start
+sso_region = us-east-1
+
+[profile session-profile]
+region = us-east-1
+sso_session = my-session
+sso_account_id = 123456789012
+sso_role_name = PowerUserAccess
+`,
+			templateProfile: "session-profile",
+			expectedError:   false,
+		},
+		{
+			name: "sso_session profile with missing session definition",
+			configContent: `[profile session-profile]
+region = us-east-1
+sso_session = nonexistent-session
+sso_account_id = 123456789012
+sso_role_name = PowerUserAccess
+`,
+			templateProfile: "session-profile",
+			expectedError:   true,
+			errorType:       ErrorTypeValidation,
+		},
 	}
 
 	for _, tt := range tests {

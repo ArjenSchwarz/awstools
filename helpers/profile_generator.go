@@ -221,12 +221,30 @@ func (pg *ProfileGenerator) ValidateTemplateProfile() (*TemplateProfile, error) 
 			WithContext("available_profiles", configFile.GetProfileNames())
 	}
 
+	// Resolve SSO session properties if the profile uses sso_session format
+	ssoStartURL := profile.SSOStartURL
+	ssoRegion := profile.SSORegion
+	if profile.SSOSession != "" && (ssoStartURL == "" || ssoRegion == "") {
+		session, err := configFile.ResolveSSOSession(profile.SSOSession)
+		if err != nil {
+			return nil, NewValidationError("failed to resolve SSO session for template profile", err).
+				WithContext("profile_name", pg.templateProfile).
+				WithContext("sso_session", profile.SSOSession)
+		}
+		if ssoStartURL == "" {
+			ssoStartURL = session.SSOStartURL
+		}
+		if ssoRegion == "" {
+			ssoRegion = session.SSORegion
+		}
+	}
+
 	// Convert to TemplateProfile
 	templateProfile := &TemplateProfile{
 		Name:         profile.Name,
 		Region:       profile.Region,
-		SSOStartURL:  profile.SSOStartURL,
-		SSORegion:    profile.SSORegion,
+		SSOStartURL:  ssoStartURL,
+		SSORegion:    ssoRegion,
 		SSOAccountID: profile.SSOAccountID,
 		SSORoleName:  profile.SSORoleName,
 		SSOSession:   profile.SSOSession,
