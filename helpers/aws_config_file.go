@@ -742,14 +742,13 @@ func (p *Profile) ToConfigString() string {
 
 	if p.SSOSession != "" {
 		fmt.Fprintf(&config, "sso_session = %s\n", p.SSOSession)
-	} else {
-		// Legacy format
-		if p.SSOAccountID != "" {
-			fmt.Fprintf(&config, "sso_account_id = %s\n", p.SSOAccountID)
-		}
-		if p.SSORoleName != "" {
-			fmt.Fprintf(&config, "sso_role_name = %s\n", p.SSORoleName)
-		}
+	}
+
+	if p.SSOAccountID != "" {
+		fmt.Fprintf(&config, "sso_account_id = %s\n", p.SSOAccountID)
+	}
+	if p.SSORoleName != "" {
+		fmt.Fprintf(&config, "sso_role_name = %s\n", p.SSORoleName)
 	}
 
 	if p.Output != "" {

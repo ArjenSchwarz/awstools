@@ -189,6 +189,8 @@ func (gp *GeneratedProfile) Validate() error {
 //	sso_start_url = https://my-org.awsapps.com/start
 //	sso_region = us-east-1
 //	sso_session = my-session
+//	sso_account_id = 123456789012
+//	sso_role_name = AdministratorAccess
 //
 // The output includes a trailing newline for proper file formatting.
 func (gp *GeneratedProfile) ToConfigString() string {
@@ -208,6 +210,8 @@ func (gp *GeneratedProfile) ToConfigString() string {
 		fmt.Fprintf(&config, "sso_role_name = %s\n", gp.SSORoleName)
 	} else {
 		fmt.Fprintf(&config, "sso_session = %s\n", gp.SSOSession)
+		fmt.Fprintf(&config, "sso_account_id = %s\n", gp.SSOAccountID)
+		fmt.Fprintf(&config, "sso_role_name = %s\n", gp.SSORoleName)
 	}
 
 	return config.String()
