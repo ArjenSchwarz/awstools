@@ -512,3 +512,106 @@ func TestGetAppMeshRouteDescriptions_PartialError_SkipsFailed(t *testing.T) {
 		t.Errorf("Expected DescribeRoute to be called 2 times, got %d", callCount)
 	}
 }
+
+// Regression test: virtual services targeting a virtual node directly (bug T-984)
+func TestGetAllAppMeshPaths_VirtualNodeProvider(t *testing.T) {
+	mock := &mockAppMeshClient{
+		listVirtualServicesFunc: func(_ context.Context, _ *appmesh.ListVirtualServicesInput, _ ...func(*appmesh.Options)) (*appmesh.ListVirtualServicesOutput, error) {
+			return &appmesh.ListVirtualServicesOutput{
+				VirtualServices: []types.VirtualServiceRef{
+					{MeshName: aws.String("test-mesh"), VirtualServiceName: aws.String("direct-node-svc")},
+					{MeshName: aws.String("test-mesh"), VirtualServiceName: aws.String("router-svc")},
+				},
+			}, nil
+		},
+		describeVirtualServiceFunc: func(_ context.Context, params *appmesh.DescribeVirtualServiceInput, _ ...func(*appmesh.Options)) (*appmesh.DescribeVirtualServiceOutput, error) {
+			name := aws.ToString(params.VirtualServiceName)
+			if name == "direct-node-svc" {
+				return &appmesh.DescribeVirtualServiceOutput{
+					VirtualService: &types.VirtualServiceData{
+						MeshName:           params.MeshName,
+						VirtualServiceName: params.VirtualServiceName,
+						Spec: &types.VirtualServiceSpec{
+							Provider: &types.VirtualServiceProviderMemberVirtualNode{
+								Value: types.VirtualNodeServiceProvider{
+									VirtualNodeName: aws.String("my-node"),
+								},
+							},
+						},
+					},
+				}, nil
+			}
+			return &appmesh.DescribeVirtualServiceOutput{
+				VirtualService: &types.VirtualServiceData{
+					MeshName:           params.MeshName,
+					VirtualServiceName: params.VirtualServiceName,
+					Spec: &types.VirtualServiceSpec{
+						Provider: &types.VirtualServiceProviderMemberVirtualRouter{
+							Value: types.VirtualRouterServiceProvider{
+								VirtualRouterName: aws.String("my-router"),
+							},
+						},
+					},
+				},
+			}, nil
+		},
+		listVirtualRoutersFunc: func(_ context.Context, _ *appmesh.ListVirtualRoutersInput, _ ...func(*appmesh.Options)) (*appmesh.ListVirtualRoutersOutput, error) {
+			return &appmesh.ListVirtualRoutersOutput{
+				VirtualRouters: []types.VirtualRouterRef{
+					{MeshName: aws.String("test-mesh"), VirtualRouterName: aws.String("my-router")},
+				},
+			}, nil
+		},
+		listRoutesFunc: func(_ context.Context, _ *appmesh.ListRoutesInput, _ ...func(*appmesh.Options)) (*appmesh.ListRoutesOutput, error) {
+			return &appmesh.ListRoutesOutput{
+				Routes: []types.RouteRef{
+					{MeshName: aws.String("test-mesh"), RouteName: aws.String("route-1"), VirtualRouterName: aws.String("my-router")},
+				},
+			}, nil
+		},
+		describeRouteFunc: func(_ context.Context, _ *appmesh.DescribeRouteInput, _ ...func(*appmesh.Options)) (*appmesh.DescribeRouteOutput, error) {
+			return &appmesh.DescribeRouteOutput{
+				Route: &types.RouteData{
+					MeshName:          aws.String("test-mesh"),
+					RouteName:         aws.String("route-1"),
+					VirtualRouterName: aws.String("my-router"),
+					Spec: &types.RouteSpec{
+						HttpRoute: &types.HttpRoute{
+							Action: &types.HttpRouteAction{
+								WeightedTargets: []types.WeightedTarget{
+									{VirtualNode: aws.String("router-node"), Weight: 100},
+								},
+							},
+							Match: &types.HttpRouteMatch{Prefix: aws.String("/")},
+						},
+					},
+				},
+			}, nil
+		},
+	}
+
+	meshName := aws.String("test-mesh")
+	result := GetAllAppMeshPaths(meshName, mock)
+
+	if len(result) != 2 {
+		t.Fatalf("Expected 2 services, got %d", len(result))
+	}
+
+	// Find the direct-node service
+	var directNodeSvc *AppMeshVirtualService
+	for i := range result {
+		if result[i].VirtualServiceName == "direct-node-svc" {
+			directNodeSvc = &result[i]
+			break
+		}
+	}
+	if directNodeSvc == nil {
+		t.Fatal("Expected to find direct-node-svc in results")
+	}
+	if len(directNodeSvc.VirtualServiceRoutes) != 1 {
+		t.Fatalf("Expected 1 route for direct-node-svc, got %d", len(directNodeSvc.VirtualServiceRoutes))
+	}
+	if directNodeSvc.VirtualServiceRoutes[0].DestinationNode != "my-node" {
+		t.Errorf("Expected DestinationNode 'my-node', got '%s'", directNodeSvc.VirtualServiceRoutes[0].DestinationNode)
+	}
+}
