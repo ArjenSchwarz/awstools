@@ -934,6 +934,9 @@ func TestGetAllBuckets_Pagination(t *testing.T) {
 	mock := &mockS3Client{
 		listBuckets: func(ctx context.Context, params *s3.ListBucketsInput, optFns ...func(*s3.Options)) (*s3.ListBucketsOutput, error) {
 			calls++
+			if params.MaxBuckets == nil || *params.MaxBuckets != 10000 {
+				return nil, fmt.Errorf("expected MaxBuckets=10000 on every call, got %v", params.MaxBuckets)
+			}
 			start := 0
 			if params.ContinuationToken != nil {
 				if _, err := fmt.Sscanf(*params.ContinuationToken, "%d", &start); err != nil {

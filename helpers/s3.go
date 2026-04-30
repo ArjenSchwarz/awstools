@@ -107,6 +107,7 @@ func GetAllBuckets(svc S3API) ([]types.Bucket, string) {
 
 	for i := 0; ; i++ {
 		resp, err := svc.ListBuckets(context.TODO(), &s3.ListBucketsInput{
+			MaxBuckets:        aws.Int32(10000),
 			ContinuationToken: token,
 		})
 		if err != nil {
