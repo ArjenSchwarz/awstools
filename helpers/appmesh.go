@@ -204,6 +204,16 @@ func GetAllAppMeshPaths(meshName *string, svc AppMeshAPI) []AppMeshVirtualServic
 				VirtualServiceRoutes: routesholder[aws.ToString(v.Value.VirtualRouterName)],
 			}
 			result = append(result, serviceroutes)
+		case *types.VirtualServiceProviderMemberVirtualNode:
+			serviceroutes := AppMeshVirtualService{
+				VirtualServiceName: aws.ToString(service.VirtualServiceName),
+				VirtualServiceRoutes: []AppMeshVirtualServiceRoute{
+					{
+						DestinationNode: aws.ToString(v.Value.VirtualNodeName),
+					},
+				},
+			}
+			result = append(result, serviceroutes)
 		default:
 			fmt.Println("union is nil or unknown type")
 		}
