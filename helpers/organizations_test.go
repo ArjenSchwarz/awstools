@@ -384,3 +384,41 @@ func TestFindChildren_DescribeOUErrorDuringTraversal_ReturnsError(t *testing.T) 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "OU describe failed")
 }
+
+// Regression tests for T-901: formatChild must not panic on nil metadata
+
+func TestFormatChild_NilOUMetadata_ReturnsError(t *testing.T) {
+	mock := &mockOrganizationsClient{
+		DescribeOrganizationalUnitFunc: func(_ context.Context, _ *organizations.DescribeOrganizationalUnitInput, _ ...func(*organizations.Options)) (*organizations.DescribeOrganizationalUnitOutput, error) {
+			return &organizations.DescribeOrganizationalUnitOutput{
+				OrganizationalUnit: nil,
+			}, nil
+		},
+	}
+	child := orgtypes.Child{
+		Id:   aws.String("ou-abc123"),
+		Type: orgtypes.ChildType(orgtypes.TargetTypeOrganizationalUnit),
+	}
+
+	_, err := formatChild(child, mock)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "OU metadata is nil")
+}
+
+func TestFormatChild_NilAccountMetadata_ReturnsError(t *testing.T) {
+	mock := &mockOrganizationsClient{
+		DescribeAccountFunc: func(_ context.Context, _ *organizations.DescribeAccountInput, _ ...func(*organizations.Options)) (*organizations.DescribeAccountOutput, error) {
+			return &organizations.DescribeAccountOutput{
+				Account: nil,
+			}, nil
+		},
+	}
+	child := orgtypes.Child{
+		Id:   aws.String("123456789012"),
+		Type: orgtypes.ChildType(orgtypes.TargetTypeAccount),
+	}
+
+	_, err := formatChild(child, mock)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "account metadata is nil")
+}
