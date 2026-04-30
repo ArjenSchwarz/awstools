@@ -5,10 +5,48 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/ArjenSchwarz/awstools/helpers"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
 )
+
+// eniAttachmentLookupClient is the minimum EC2 API surface used by
+// getAttachment (below) to resolve ENI attachment metadata via the paginated
+// helpers. Kept in the test file after T-727 moved production code to use
+// ENILookupCache; these tests still validate the per-ENI paginated helpers.
+type eniAttachmentLookupClient interface {
+	ec2.DescribeVpcEndpointsAPIClient
+	ec2.DescribeNatGatewaysAPIClient
+	ec2.DescribeTransitGatewayVpcAttachmentsAPIClient
+}
+
+// getAttachment resolves the attachment label for a given ENI by dispatching
+// to the paginated helpers. Retained in the test file to validate those helpers
+// still paginate correctly (T-657/T-705 regression coverage).
+func getAttachment(netinterface types.NetworkInterface, svc eniAttachmentLookupClient) string {
+	if netinterface.Attachment != nil && netinterface.Attachment.InstanceId != nil {
+		return *netinterface.Attachment.InstanceId
+	}
+	if netinterface.InterfaceType == types.NetworkInterfaceTypeTransitGateway {
+		return helpers.GetTransitGatewayFromNetworkInterface(netinterface, svc)
+	}
+	if netinterface.InterfaceType == types.NetworkInterfaceTypeNatGateway || netinterface.InterfaceType == "nat_gateway" {
+		natgw := helpers.GetNatGatewayFromNetworkInterface(netinterface, svc)
+		if natgw != nil {
+			return aws.ToString(natgw.NatGatewayId)
+		}
+		return ""
+	}
+	if netinterface.InterfaceType == types.NetworkInterfaceTypeVpcEndpoint {
+		endpoint := helpers.GetVPCEndpointFromNetworkInterface(netinterface, svc)
+		if endpoint != nil {
+			return fmt.Sprintf("%s (%s)", aws.ToString(endpoint.ServiceName), aws.ToString(endpoint.VpcEndpointId))
+		}
+		return ""
+	}
+	return ""
+}
 
 // Regression tests for T-705: the vpc enis command resolves ENI attachment
 // labels via getAttachment, which dispatches to the paginated helpers fixed
