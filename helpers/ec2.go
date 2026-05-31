@@ -406,6 +406,42 @@ func getAllVPCRouteTables(svc ec2.DescribeRouteTablesAPIClient) []VPCRouteTable 
 	return result
 }
 
+// routeTarget returns the target identifier for an EC2 route, covering every
+// target field exposed by types.Route. AWS populates at most one target field
+// per route in practice; if more than one is set the first match in the order
+// below wins. The order lists the most common/specific targets first and is the
+// single source of truth shared by parseVPCRoutes and FormatRouteTableInfo so
+// both commands report targets identically. Returns an empty string when no
+// target field is set (callers decide on any fallback such as "local").
+func routeTarget(route types.Route) string {
+	switch {
+	case route.GatewayId != nil:
+		return *route.GatewayId
+	case route.NatGatewayId != nil:
+		return *route.NatGatewayId
+	case route.TransitGatewayId != nil:
+		return *route.TransitGatewayId
+	case route.VpcPeeringConnectionId != nil:
+		return *route.VpcPeeringConnectionId
+	case route.NetworkInterfaceId != nil:
+		return *route.NetworkInterfaceId
+	case route.InstanceId != nil:
+		return *route.InstanceId
+	case route.EgressOnlyInternetGatewayId != nil:
+		return *route.EgressOnlyInternetGatewayId
+	case route.CarrierGatewayId != nil:
+		return *route.CarrierGatewayId
+	case route.LocalGatewayId != nil:
+		return *route.LocalGatewayId
+	case route.CoreNetworkArn != nil:
+		return *route.CoreNetworkArn
+	case route.OdbNetworkArn != nil:
+		return *route.OdbNetworkArn
+	default:
+		return ""
+	}
+}
+
 func parseVPCRoutes(routes []types.Route) []VPCRoute {
 	var result []VPCRoute
 	for _, route := range routes {
@@ -421,24 +457,7 @@ func parseVPCRoutes(routes []types.Route) []VPCRoute {
 		if route.DestinationPrefixListId != nil {
 			rt.DestinationCIDR = *route.DestinationPrefixListId
 		}
-		if route.VpcPeeringConnectionId != nil {
-			rt.DestinationTarget = *route.VpcPeeringConnectionId
-		}
-		if route.GatewayId != nil {
-			rt.DestinationTarget = *route.GatewayId
-		}
-		if route.NatGatewayId != nil {
-			rt.DestinationTarget = *route.NatGatewayId
-		}
-		if route.NetworkInterfaceId != nil {
-			rt.DestinationTarget = *route.NetworkInterfaceId
-		}
-		if route.EgressOnlyInternetGatewayId != nil {
-			rt.DestinationTarget = *route.EgressOnlyInternetGatewayId
-		}
-		if route.TransitGatewayId != nil {
-			rt.DestinationTarget = *route.TransitGatewayId
-		}
+		rt.DestinationTarget = routeTarget(route)
 		result = append(result, rt)
 	}
 	return result
@@ -1226,21 +1245,10 @@ func FormatRouteTableInfo(routeTable *types.RouteTable) (string, []string) {
 			destCIDR = *route.DestinationPrefixListId
 		}
 
-		target := ""
-		switch {
-		case route.GatewayId != nil:
-			target = *route.GatewayId
-		case route.NatGatewayId != nil:
-			target = *route.NatGatewayId
-		case route.VpcPeeringConnectionId != nil:
-			target = *route.VpcPeeringConnectionId
-		case route.NetworkInterfaceId != nil:
-			target = *route.NetworkInterfaceId
-		case route.TransitGatewayId != nil:
-			target = *route.TransitGatewayId
-		case route.EgressOnlyInternetGatewayId != nil:
-			target = *route.EgressOnlyInternetGatewayId
-		default:
+		// Cover all EC2 route target fields (T-1196). Fall back to "local"
+		// only when the route carries no target field at all.
+		target := routeTarget(route)
+		if target == "" {
 			target = "local"
 		}
 
