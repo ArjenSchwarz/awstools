@@ -2049,3 +2049,74 @@ func TestFormatRouteTableInfo_MixedRoutes(t *testing.T) {
 		t.Errorf("routes mismatch:\n  got:  %v\n  want: %v", routes, expectedRoutes)
 	}
 }
+
+// TestGetResourceNameAndID_TransitGateway is regression coverage for T-1147:
+// Transit Gateway ENIs must populate the resolved Transit Gateway attachment ID
+// instead of leaving the resource ID empty. The attachment ID is keyed by VPC
+// ID in ENILookupCache.TransitGateways.
+func TestGetResourceNameAndID_TransitGateway(t *testing.T) {
+	const (
+		vpcID          = "vpc-0123456789abcdef0"
+		attachmentID   = "tgw-attach-0123456789abcdef0"
+		networkIfaceID = "eni-0123456789abcdef0"
+	)
+
+	tests := []struct {
+		name   string
+		eni    types.NetworkInterface
+		cache  *ENILookupCache
+		wantID string
+	}{
+		{
+			name: "resolves attachment ID from cache",
+			eni: types.NetworkInterface{
+				InterfaceType:      types.NetworkInterfaceTypeTransitGateway,
+				NetworkInterfaceId: aws.String(networkIfaceID),
+				VpcId:              aws.String(vpcID),
+			},
+			cache: &ENILookupCache{
+				EndpointsByENI:   map[string]*types.VpcEndpoint{},
+				NATGatewaysByENI: map[string]*types.NatGateway{},
+				TransitGateways:  map[string]string{vpcID: attachmentID},
+			},
+			wantID: attachmentID,
+		},
+		{
+			name: "nil VpcId returns empty ID without panic",
+			eni: types.NetworkInterface{
+				InterfaceType:      types.NetworkInterfaceTypeTransitGateway,
+				NetworkInterfaceId: aws.String(networkIfaceID),
+				VpcId:              nil,
+			},
+			cache: &ENILookupCache{
+				EndpointsByENI:   map[string]*types.VpcEndpoint{},
+				NATGatewaysByENI: map[string]*types.NatGateway{},
+				TransitGateways:  map[string]string{},
+			},
+			wantID: "",
+		},
+		{
+			name: "missing cache entry returns empty ID",
+			eni: types.NetworkInterface{
+				InterfaceType:      types.NetworkInterfaceTypeTransitGateway,
+				NetworkInterfaceId: aws.String(networkIfaceID),
+				VpcId:              aws.String(vpcID),
+			},
+			cache: &ENILookupCache{
+				EndpointsByENI:   map[string]*types.VpcEndpoint{},
+				NATGatewaysByENI: map[string]*types.NatGateway{},
+				TransitGateways:  map[string]string{},
+			},
+			wantID: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, gotID := getResourceNameAndID(tt.eni, tt.cache)
+			if gotID != tt.wantID {
+				t.Errorf("getResourceNameAndID() resource ID = %q, want %q", gotID, tt.wantID)
+			}
+		})
+	}
+}
