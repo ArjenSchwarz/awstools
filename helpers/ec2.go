@@ -1083,10 +1083,13 @@ func GetVPCUsageOverview(svc *ec2.Client) VPCOverview {
 				}
 				vpcSubnets = append(vpcSubnets, subnetInfo)
 
-				// Update summary
-				summary.TotalIPs += totalIPs
-				summary.UsedIPs += usedIPs
-				summary.AvailableIPs += availableIPs
+				// Update summary. Use saturating addition for the IP-count
+				// totals so two or more IPv6-only subnets (each reporting a
+				// math.MaxInt "effectively unlimited" sentinel) cannot overflow
+				// into a negative aggregate (T-1234).
+				summary.TotalIPs = saturatingAdd(summary.TotalIPs, totalIPs)
+				summary.UsedIPs = saturatingAdd(summary.UsedIPs, usedIPs)
+				summary.AvailableIPs = saturatingAdd(summary.AvailableIPs, availableIPs)
 				summary.AWSReservedIPs += awsReservedIPs
 				summary.ServiceIPs += serviceIPs
 			}
@@ -1363,6 +1366,51 @@ func calculateSubnetStats(cidr string) (int, int, error) {
 	availableIPs := max(totalIPs-5, 0)
 
 	return totalIPs, availableIPs, nil
+}
+
+// saturatingAdd adds two non-negative IP counts, clamping at math.MaxInt
+// instead of overflowing into a negative value. IPv6-only subnets report
+// math.MaxInt as an "effectively unlimited" sentinel (T-774); summing two or
+// more such values with naive integer addition wraps to a negative number,
+// producing nonsensical negative summary totals (T-1234). Saturating addition
+// keeps the aggregate at the sentinel, preserving its "effectively unlimited"
+// meaning.
+func saturatingAdd(a, b int) int {
+	if a > math.MaxInt-b {
+		return math.MaxInt
+	}
+	return a + b
+}
+
+// SummarizeVPCUsage computes aggregate usage statistics across the supplied
+// VPCs using saturating addition so that IPv6-only subnets (which report a
+// math.MaxInt "effectively unlimited" sentinel) cannot overflow the totals.
+//
+// AWS-reserved and service IP counts are derived from each subnet's per-address
+// IPDetails: any address classified as "RESERVED BY AWS" is counted as reserved
+// and every other detailed address is counted as a service IP. IPv6-only
+// subnets have no per-address details, so they contribute nothing to these two
+// counts.
+func SummarizeVPCUsage(vpcs []VPCUsageInfo) VPCUsageSummary {
+	var summary VPCUsageSummary
+	summary.TotalVPCs = len(vpcs)
+	for _, vpc := range vpcs {
+		for _, subnet := range vpc.Subnets {
+			summary.TotalSubnets++
+			summary.TotalIPs = saturatingAdd(summary.TotalIPs, subnet.TotalIPs)
+			summary.UsedIPs = saturatingAdd(summary.UsedIPs, subnet.UsedIPs)
+			summary.AvailableIPs = saturatingAdd(summary.AvailableIPs, subnet.AvailableIPs)
+
+			for _, ipDetail := range subnet.IPDetails {
+				if ipDetail.UsageType == "RESERVED BY AWS" {
+					summary.AWSReservedIPs++
+				} else {
+					summary.ServiceIPs++
+				}
+			}
+		}
+	}
+	return summary
 }
 
 // sortIPAddresses sorts IP addresses in ascending numerical order
