@@ -53,7 +53,7 @@ func GetPoliciesMap(svc IAMClient) map[string]types.Policy {
 			panic(err)
 		}
 		for _, policy := range page.Policies {
-			result[*policy.PolicyName] = policy
+			result[aws.ToString(policy.PolicyName)] = policy
 		}
 	}
 	return result
@@ -82,7 +82,7 @@ func GetUserPoliciesMapForUser(username *string, svc IAMClient) map[string]strin
 			if err != nil {
 				panic(err)
 			}
-			policyDocument, err := url.QueryUnescape(*resp.PolicyDocument)
+			policyDocument, err := url.QueryUnescape(aws.ToString(resp.PolicyDocument))
 			if err != nil {
 				panic(err)
 			}
@@ -115,7 +115,7 @@ func GetGroupPoliciesMapForGroup(groupname *string, svc IAMClient) map[string]st
 			if err != nil {
 				panic(err)
 			}
-			policyDocument, err := url.QueryUnescape(*resp.PolicyDocument)
+			policyDocument, err := url.QueryUnescape(aws.ToString(resp.PolicyDocument))
 			if err != nil {
 				panic(err)
 			}
@@ -152,7 +152,7 @@ func GetAttachedPoliciesMapForUser(username *string, svc IAMClient) map[string]s
 			panic(err)
 		}
 		for _, policy := range page.AttachedPolicies {
-			result[*policy.PolicyName] = getAttachedPolicy(policy.PolicyArn, svc)
+			result[aws.ToString(policy.PolicyName)] = getAttachedPolicy(policy.PolicyArn, svc)
 		}
 	}
 	return result
@@ -173,7 +173,7 @@ func GetAttachedPoliciesMapForGroup(groupname *string, svc IAMClient) map[string
 			panic(err)
 		}
 		for _, policy := range page.AttachedPolicies {
-			result[*policy.PolicyName] = getAttachedPolicy(policy.PolicyArn, svc)
+			result[aws.ToString(policy.PolicyName)] = getAttachedPolicy(policy.PolicyArn, svc)
 		}
 	}
 	return result
@@ -205,7 +205,7 @@ func GetGroupNameSliceForUser(username *string, svc IAMClient) []string {
 			panic(err)
 		}
 		for _, group := range page.Groups {
-			groups = append(groups, *group.GroupName)
+			groups = append(groups, aws.ToString(group.GroupName))
 		}
 	}
 	return groups
@@ -250,7 +250,7 @@ func GetUserDetails(svc IAMClient) []IAMUser {
 	for _, user := range users {
 		go func(user types.User) {
 			userStruct := IAMUser{
-				Name: *user.UserName,
+				Name: aws.ToString(user.UserName),
 				User: &user,
 			}
 			userStruct.Groups = GetGroupNameSliceForUser(user.UserName, svc)
@@ -279,7 +279,7 @@ func getAllUsersInGroup(groupname string, svc IAMClient) []string {
 			panic(err)
 		}
 		for _, user := range page.Users {
-			result = append(result, *user.UserName)
+			result = append(result, aws.ToString(user.UserName))
 		}
 	}
 	return result
@@ -303,13 +303,14 @@ func GetGroupDetails(svc IAMClient) []IAMGroup {
 	grouplist := make([]IAMGroup, len(allGroups))
 	for _, group := range allGroups {
 		go func(group types.Group) {
+			groupName := aws.ToString(group.GroupName)
 			groupStruct := IAMGroup{
-				Name:  *group.GroupName,
+				Name:  groupName,
 				Group: &group,
 			}
-			groupStruct.InlinePolicies = GetGroupPoliciesMapForGroups([]string{*group.GroupName}, svc)
-			groupStruct.AttachedPolicies = GetAttachedPoliciesMapForGroups([]string{*group.GroupName}, svc)
-			groupStruct.Users = getAllUsersInGroup(*group.GroupName, svc)
+			groupStruct.InlinePolicies = GetGroupPoliciesMapForGroups([]string{groupName}, svc)
+			groupStruct.AttachedPolicies = GetAttachedPoliciesMapForGroups([]string{groupName}, svc)
+			groupStruct.Users = getAllUsersInGroup(groupName, svc)
 			c <- groupStruct
 		}(group)
 	}
@@ -354,15 +355,23 @@ func getAttachedPolicy(policyArn *string, svc IAMClient) string {
 	if err != nil {
 		panic(err)
 	}
+	var defaultVersionID *string
+	if resp.Policy != nil {
+		defaultVersionID = resp.Policy.DefaultVersionId
+	}
 	params2 := &iam.GetPolicyVersionInput{
-		PolicyArn: policyArn,                    // Required
-		VersionId: resp.Policy.DefaultVersionId, // Required
+		PolicyArn: policyArn,        // Required
+		VersionId: defaultVersionID, // Required
 	}
 	resp2, err := svc.GetPolicyVersion(context.TODO(), params2)
 	if err != nil {
 		panic(err)
 	}
-	policyDocument, err := url.QueryUnescape(*resp2.PolicyVersion.Document)
+	var document *string
+	if resp2.PolicyVersion != nil {
+		document = resp2.PolicyVersion.Document
+	}
+	policyDocument, err := url.QueryUnescape(aws.ToString(document))
 	if err != nil {
 		panic(err)
 	}
