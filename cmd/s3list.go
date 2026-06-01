@@ -136,12 +136,24 @@ func negatedTriState(v *bool) any {
 	return !*v
 }
 
+// s3EncryptionToString renders the default encryption algorithm of the first
+// encryption rule. A malformed or partial GetBucketEncryption response can
+// return a rule without the default encryption block, so guard against a nil
+// ApplyServerSideEncryptionByDefault (and an empty algorithm) rather than
+// dereferencing it directly, which would panic (see T-1176). When no algorithm
+// can be read the rule's state is reported as s3StateUnknown.
 func s3EncryptionToString(rules []types.ServerSideEncryptionRule) string {
-	result := ""
-	for _, rule := range rules {
-		return string(rule.ApplyServerSideEncryptionByDefault.SSEAlgorithm)
+	if len(rules) == 0 {
+		return ""
 	}
-	return result
+	rule := rules[0]
+	if rule.ApplyServerSideEncryptionByDefault == nil {
+		return s3StateUnknown
+	}
+	if algorithm := string(rule.ApplyServerSideEncryptionByDefault.SSEAlgorithm); algorithm != "" {
+		return algorithm
+	}
+	return s3StateUnknown
 }
 
 // parsePublicAccessBlock renders a PublicAccessBlockConfiguration as a human

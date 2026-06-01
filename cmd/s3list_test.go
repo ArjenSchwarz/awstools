@@ -62,3 +62,60 @@ func TestParsePublicAccessBlock(t *testing.T) {
 		})
 	}
 }
+
+// TestS3EncryptionToString verifies that s3EncryptionToString tolerates rules
+// with a nil ApplyServerSideEncryptionByDefault block. A malformed or partial
+// GetBucketEncryption response can return a rule without the default
+// encryption block; before the fix this dereferenced a nil pointer and
+// panicked while rendering `awstools s3 list`. Regression test for T-1176.
+func TestS3EncryptionToString(t *testing.T) {
+	tests := []struct {
+		name  string
+		rules []types.ServerSideEncryptionRule
+		want  string
+	}{
+		{
+			name:  "no rules",
+			rules: nil,
+			want:  "",
+		},
+		{
+			name: "nil default rule does not panic",
+			rules: []types.ServerSideEncryptionRule{
+				{ApplyServerSideEncryptionByDefault: nil},
+			},
+			want: s3StateUnknown,
+		},
+		{
+			name: "aes256 algorithm",
+			rules: []types.ServerSideEncryptionRule{
+				{
+					ApplyServerSideEncryptionByDefault: &types.ServerSideEncryptionByDefault{
+						SSEAlgorithm: types.ServerSideEncryptionAes256,
+					},
+				},
+			},
+			want: string(types.ServerSideEncryptionAes256),
+		},
+		{
+			name: "kms algorithm",
+			rules: []types.ServerSideEncryptionRule{
+				{
+					ApplyServerSideEncryptionByDefault: &types.ServerSideEncryptionByDefault{
+						SSEAlgorithm: types.ServerSideEncryptionAwsKms,
+					},
+				},
+			},
+			want: string(types.ServerSideEncryptionAwsKms),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := s3EncryptionToString(tt.rules)
+			if got != tt.want {
+				t.Errorf("s3EncryptionToString() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
