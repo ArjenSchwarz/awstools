@@ -53,18 +53,10 @@ func s3List(_ *cobra.Command, _ []string) {
 	output := format.OutputArray{Keys: keys, Settings: settings.NewOutputSettings()}
 	output.Settings.Title = resultTitle
 	for _, bucket := range buckets {
-		// --public-only excludes buckets that are confirmed private.
-		// Buckets with an unknown public state are kept so the user
-		// still sees them (and the rendered "Unknown" makes the state
-		// visible); exclude only those we know to be private.
-		if publicBucketsOnly && bucket.IsPublic != nil && !*bucket.IsPublic {
+		if publicBucketsOnly && skipForPublicOnly(bucket.IsPublic) {
 			continue
 		}
-		// --unencrypted-only excludes buckets that are confirmed
-		// encrypted. Buckets whose encryption state could not be
-		// determined are also excluded so we do not falsely flag them
-		// as unencrypted.
-		if unencryptedBucketsOnly && (bucket.HasEncryption == nil || *bucket.HasEncryption) {
+		if unencryptedBucketsOnly && skipForUnencryptedOnly(bucket.HasEncryption) {
 			continue
 		}
 		content := make(map[string]any)
@@ -114,6 +106,24 @@ func s3List(_ *cobra.Command, _ []string) {
 		output.AddHolder(holder)
 	}
 	output.Write()
+}
+
+// skipForPublicOnly reports whether a bucket should be skipped under the
+// --public-only filter. It excludes only buckets confirmed private; buckets
+// with an unknown public state (nil) are kept so the user still sees them and
+// the rendered "Unknown" makes the state visible.
+func skipForPublicOnly(isPublic *bool) bool {
+	return isPublic != nil && !*isPublic
+}
+
+// skipForUnencryptedOnly reports whether a bucket should be skipped under the
+// --unencrypted-only filter. It excludes only buckets confirmed encrypted
+// (HasEncryption is non-nil and true). Buckets whose encryption state could
+// not be determined (nil) are kept so the unknown state stays visible for
+// investigation (see T-714); previously these were hidden from the security
+// view (T-1090).
+func skipForUnencryptedOnly(hasEncryption *bool) bool {
+	return hasEncryption != nil && *hasEncryption
 }
 
 // triState renders an optional boolean for the bucket listing output.
