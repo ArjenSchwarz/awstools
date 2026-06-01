@@ -315,45 +315,52 @@ func boolPtr(v bool) *bool {
 
 // computeBucketIsPublic returns the bucket's overall public state
 // based on policy status, ACL state, and Public Access Block
-// configuration. The result is nil ("unknown") whenever a contributing
-// input is unknown and could flip the answer:
+// configuration. The PAB fields are modelled by their effect on
+// CURRENT access, not on future writes:
+//   - RestrictPublicBuckets restricts access granted by public bucket
+//     policies, so it neutralises an existing public policy.
+//   - IgnorePublicAcls causes S3 to ignore existing public ACLs, so it
+//     neutralises a public ACL.
+//   - BlockPublicAcls and BlockPublicPolicy only reject FUTURE public
+//     ACL/policy writes; they do not affect existing exposure and are
+//     therefore intentionally ignored here.
+//
+// The result is nil ("unknown") whenever a contributing input is
+// unknown and could flip the answer:
 //   - If either the policy status or ACL state is unknown, the only
-//     way to claim "not public" is if the Public Access Block both
-//     restricts public buckets AND either ignores public ACLs or is
-//     irrelevant because the ACLs are known-clean.
-//   - A confirmed public input (policy or ACL) always makes the
-//     bucket public unless the PAB restricts public buckets AND
-//     blocks the corresponding path (IgnorePublicAcls for ACLs,
-//     BlockPublicPolicy for the policy).
+//     way to claim "not public" is if the PAB neutralises both paths
+//     (RestrictPublicBuckets for policies AND IgnorePublicAcls for
+//     ACLs).
+//   - A confirmed public input (policy or ACL) makes the bucket public
+//     unless the PAB neutralises the corresponding path.
 func computeBucketIsPublic(policyIsPublic, openACLs *bool, pab *types.PublicAccessBlockConfiguration) *bool {
 	// Extract the PAB booleans once. A missing PAB means "no block
 	// applied" for the purposes of this computation.
 	restrictPublicBuckets := false
 	ignorePublicAcls := false
-	blockPublicPolicy := false
 	if pab != nil {
 		restrictPublicBuckets = aws.ToBool(pab.RestrictPublicBuckets)
 		ignorePublicAcls = aws.ToBool(pab.IgnorePublicAcls)
-		blockPublicPolicy = aws.ToBool(pab.BlockPublicPolicy)
 	}
 
-	// When PAB fully locks the bucket down we can answer "not public"
-	// regardless of policy/ACL state, even if they are unknown.
-	if restrictPublicBuckets && ignorePublicAcls && blockPublicPolicy {
+	// When PAB neutralises both the policy and ACL paths we can answer
+	// "not public" regardless of policy/ACL state, even if they are
+	// unknown.
+	if restrictPublicBuckets && ignorePublicAcls {
 		return boolPtr(false)
 	}
 
 	// Otherwise, evaluate each source and factor in the PAB.
 	policyContribution := policyIsPublic
-	if policyContribution != nil && *policyContribution && restrictPublicBuckets && blockPublicPolicy {
-		// PAB neutralises a public policy.
+	if policyContribution != nil && *policyContribution && restrictPublicBuckets {
+		// RestrictPublicBuckets neutralises a public policy.
 		f := false
 		policyContribution = &f
 	}
 
 	aclContribution := openACLs
-	if aclContribution != nil && *aclContribution && restrictPublicBuckets && ignorePublicAcls {
-		// PAB neutralises public ACLs.
+	if aclContribution != nil && *aclContribution && ignorePublicAcls {
+		// IgnorePublicAcls neutralises public ACLs.
 		f := false
 		aclContribution = &f
 	}

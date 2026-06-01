@@ -896,6 +896,59 @@ func TestComputeBucketIsPublic(t *testing.T) {
 			},
 			expected: aws.Bool(false),
 		},
+		{
+			// Regression for T-1391: RestrictPublicBuckets restricts access
+			// granted by a public bucket policy, so it neutralises an existing
+			// public policy on its own. BlockPublicPolicy only blocks FUTURE
+			// public-policy writes and is irrelevant here (set to false).
+			name:   "restrict public buckets neutralises policy without block policy",
+			policy: aws.Bool(true),
+			acls:   aws.Bool(false),
+			pab: &types.PublicAccessBlockConfiguration{
+				BlockPublicPolicy:     aws.Bool(false),
+				RestrictPublicBuckets: aws.Bool(true),
+			},
+			expected: aws.Bool(false),
+		},
+		{
+			// Regression for T-1391: IgnorePublicAcls causes S3 to ignore
+			// existing public ACLs, so it neutralises a public ACL on its own.
+			// RestrictPublicBuckets is not required (set to false).
+			name:   "ignore public acls neutralises acl without restrict buckets",
+			policy: aws.Bool(false),
+			acls:   aws.Bool(true),
+			pab: &types.PublicAccessBlockConfiguration{
+				IgnorePublicAcls:      aws.Bool(true),
+				RestrictPublicBuckets: aws.Bool(false),
+			},
+			expected: aws.Bool(false),
+		},
+		{
+			// Regression for T-1391: BlockPublicPolicy alone does NOT
+			// neutralise an existing public policy; it only blocks future
+			// writes. The bucket remains public.
+			name:   "block public policy alone does not neutralise existing policy",
+			policy: aws.Bool(true),
+			acls:   aws.Bool(false),
+			pab: &types.PublicAccessBlockConfiguration{
+				BlockPublicPolicy:     aws.Bool(true),
+				RestrictPublicBuckets: aws.Bool(false),
+			},
+			expected: aws.Bool(true),
+		},
+		{
+			// Regression for T-1391: BlockPublicAcls alone does NOT neutralise
+			// an existing public ACL; it only blocks future writes. The bucket
+			// remains public.
+			name:   "block public acls alone does not neutralise existing acl",
+			policy: aws.Bool(false),
+			acls:   aws.Bool(true),
+			pab: &types.PublicAccessBlockConfiguration{
+				BlockPublicAcls:  aws.Bool(true),
+				IgnorePublicAcls: aws.Bool(false),
+			},
+			expected: aws.Bool(true),
+		},
 	}
 
 	for _, tt := range tests {
