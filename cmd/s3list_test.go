@@ -7,6 +7,80 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 )
 
+// TestUnencryptedOnlyFilter verifies that the --unencrypted-only filter
+// excludes only buckets that are confirmed encrypted, while keeping both
+// confirmed-unencrypted and unknown-encryption buckets visible. Unknown
+// states must stay visible so users can investigate them (see T-714).
+// Regression test for T-1090.
+func TestUnencryptedOnlyFilter(t *testing.T) {
+	tests := []struct {
+		name          string
+		hasEncryption *bool
+		wantSkip      bool
+	}{
+		{
+			name:          "confirmed encrypted is excluded",
+			hasEncryption: aws.Bool(true),
+			wantSkip:      true,
+		},
+		{
+			name:          "confirmed unencrypted is kept",
+			hasEncryption: aws.Bool(false),
+			wantSkip:      false,
+		},
+		{
+			name:          "unknown encryption state is kept",
+			hasEncryption: nil,
+			wantSkip:      false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := skipForUnencryptedOnly(tt.hasEncryption)
+			if got != tt.wantSkip {
+				t.Errorf("skipForUnencryptedOnly(%v) = %v, want %v", tt.hasEncryption, got, tt.wantSkip)
+			}
+		})
+	}
+}
+
+// TestPublicOnlyFilter verifies that the --public-only filter excludes only
+// buckets confirmed private, while keeping confirmed-public and
+// unknown-public buckets visible. Companion coverage for T-1090.
+func TestPublicOnlyFilter(t *testing.T) {
+	tests := []struct {
+		name     string
+		isPublic *bool
+		wantSkip bool
+	}{
+		{
+			name:     "confirmed private is excluded",
+			isPublic: aws.Bool(false),
+			wantSkip: true,
+		},
+		{
+			name:     "confirmed public is kept",
+			isPublic: aws.Bool(true),
+			wantSkip: false,
+		},
+		{
+			name:     "unknown public state is kept",
+			isPublic: nil,
+			wantSkip: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := skipForPublicOnly(tt.isPublic)
+			if got != tt.wantSkip {
+				t.Errorf("skipForPublicOnly(%v) = %v, want %v", tt.isPublic, got, tt.wantSkip)
+			}
+		})
+	}
+}
+
 // TestParsePublicAccessBlock verifies that parsePublicAccessBlock distinguishes
 // between "unknown" (no PAB configured or GetPublicAccessBlock failed) and the
 // legitimate "all four flags false" state. Regression test for T-693.
