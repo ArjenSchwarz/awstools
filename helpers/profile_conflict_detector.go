@@ -319,15 +319,18 @@ func (pcd *ProfileConflictDetector) AnalyzeRole(role DiscoveredRole) (*ProfileCo
 // - Same Role: Existing "prod-admin" profile points to same role as discovered "production-AdministratorAccess"
 // - Same Name: Existing "prod-admin" profile points to different role than discovered "prod-admin"
 func (pcd *ProfileConflictDetector) ClassifyConflict(existingProfiles []Profile, proposedName string, role DiscoveredRole) ConflictType {
-	// Check if any existing profile matches the same role (SSO configuration)
+	// Check if any existing profile matches the same role (SSO configuration).
+	// The comparison includes the SSO start URL (and region) when the discovered
+	// role carries them, so a profile belonging to a different SSO start URL with
+	// the same account ID and role name is not misclassified as a same-role conflict.
 	for _, profile := range existingProfiles {
-		matches, err := pcd.configFile.MatchesRole(profile, role.AccountID, role.RoleName, "")
+		resolvedConfig, err := pcd.configFile.ResolveProfileSSOConfig(profile)
 		if err != nil {
 			pcd.logger.Printf("Warning: failed to match profile %s against role: %v", profile.Name, err)
 			continue
 		}
 
-		if matches {
+		if resolvedConfigMatchesRole(resolvedConfig, role) {
 			return ConflictSameRole
 		}
 	}
@@ -379,6 +382,26 @@ func (pcd *ProfileConflictDetector) GenerateConflictSummary(conflicts []ProfileC
 	return summary.String()
 }
 
+// resolvedConfigMatchesRole reports whether a resolved SSO config refers to the
+// same role as the discovered role. It always compares account ID and role name,
+// and additionally compares the SSO start URL (and SSO region) when the discovered
+// role carries them. This prevents profiles belonging to a different SSO start URL
+// from being treated as the same role when they happen to share an account ID and
+// role name. When the role has no SSO start URL (legacy/unspecified), only account
+// ID and role name are compared, preserving the previous behaviour.
+func resolvedConfigMatchesRole(resolvedConfig *ResolvedSSOConfig, role DiscoveredRole) bool {
+	if resolvedConfig.AccountID != role.AccountID || resolvedConfig.RoleName != role.RoleName {
+		return false
+	}
+	if role.SSOStartURL != "" && resolvedConfig.StartURL != role.SSOStartURL {
+		return false
+	}
+	if role.SSORegion != "" && resolvedConfig.Region != role.SSORegion {
+		return false
+	}
+	return true
+}
+
 // findMatchingProfiles finds existing profiles that match the discovered role's SSO configuration
 func (pcd *ProfileConflictDetector) findMatchingProfiles(role DiscoveredRole) ([]Profile, error) {
 	// Use profile index for efficient lookup if available
@@ -390,7 +413,7 @@ func (pcd *ProfileConflictDetector) findMatchingProfiles(role DiscoveredRole) ([
 		for _, profile := range accountProfiles {
 			// Use cached resolved SSO config
 			if resolvedConfig, exists := pcd.resolvedSSOConfigs[profile.Name]; exists {
-				if resolvedConfig.AccountID == role.AccountID && resolvedConfig.RoleName == role.RoleName {
+				if resolvedConfigMatchesRole(resolvedConfig, role) {
 					matchingProfiles = append(matchingProfiles, profile)
 				}
 			}
@@ -409,7 +432,7 @@ func (pcd *ProfileConflictDetector) findMatchingProfiles(role DiscoveredRole) ([
 
 		// Use cached resolved SSO config
 		if resolvedConfig, exists := pcd.resolvedSSOConfigs[profileName]; exists {
-			if resolvedConfig.AccountID == role.AccountID && resolvedConfig.RoleName == role.RoleName {
+			if resolvedConfigMatchesRole(resolvedConfig, role) {
 				matchingProfiles = append(matchingProfiles, profile)
 			}
 		}
