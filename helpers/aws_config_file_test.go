@@ -2282,6 +2282,49 @@ func TestAWSConfigFile_AppendToFileWithLocking(t *testing.T) {
 		os.Remove(backupFiles[0])
 	})
 
+	t.Run("append when file has no trailing newline (T-1314)", func(t *testing.T) {
+		tmpFile, err := os.CreateTemp("", "aws-config-test-*.conf")
+		require.NoError(t, err)
+		defer os.Remove(tmpFile.Name())
+
+		// Initial content ends on a property line with NO trailing newline.
+		initialContent := "[profile initial]\nregion = us-east-1"
+		_, err = tmpFile.WriteString(initialContent)
+		require.NoError(t, err)
+		tmpFile.Close()
+
+		configFile := &AWSConfigFile{
+			FilePath: tmpFile.Name(),
+			Profiles: make(map[string]Profile),
+			Sessions: make(map[string]SSOSession),
+		}
+
+		profiles := []GeneratedProfile{
+			{
+				Name:   "test-profile",
+				Region: "us-west-2",
+			},
+		}
+
+		err = configFile.AppendToFile(profiles)
+		assert.NoError(t, err)
+
+		content, err := os.ReadFile(tmpFile.Name())
+		require.NoError(t, err)
+
+		// The appended profile header must not be concatenated onto the
+		// previous property line.
+		assert.NotContains(t, string(content), "region = us-east-1[profile test-profile]")
+		assert.Contains(t, string(content), "region = us-east-1\n[profile test-profile]")
+
+		// Cleanup backup
+		backupFiles, err := filepath.Glob(tmpFile.Name() + ".backup.*")
+		require.NoError(t, err)
+		for _, bf := range backupFiles {
+			os.Remove(bf)
+		}
+	})
+
 	t.Run("append failure with permission error", func(t *testing.T) {
 		tmpFile, err := os.CreateTemp("", "aws-config-test-*.conf")
 		require.NoError(t, err)
