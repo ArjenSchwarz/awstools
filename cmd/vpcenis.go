@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/ArjenSchwarz/awstools/config"
 	"github.com/ArjenSchwarz/awstools/helpers"
@@ -12,16 +13,16 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// peeringsCmd represents the peerings command
+// enisCmd represents the enis command
 var enisCmd = &cobra.Command{
 	Use:   "enis",
 	Short: "Get ENIs overview",
-	Long: `Get an overview of ENIs in a VPC. For a graphical option consider using
-	the dot or drawio output formats.
+	Long: `Get an overview of ENIs in a VPC.
 
-	awstools vpc peerings -o dot | dot -Tpng  -o peerings.png
-	awstools vpc peerings -o drawio | pbcopy`,
-	Run: enis,
+	Supported output formats are json, csv, table, and html. The graph formats
+	(dot and drawio) are not supported for this command because ENIs are leaf
+	resources without a meaningful from/to relationship to diagram.`,
+	RunE: enis,
 }
 
 var vpceenisSplit bool
@@ -31,7 +32,24 @@ func init() {
 	enisCmd.Flags().BoolVar(&vpceenisSplit, "split", false, "Split the result by subnet")
 }
 
-func enis(_ *cobra.Command, _ []string) {
+// enisGraphFormatError reports whether the requested output format is a graph
+// format the enis command cannot produce. ENIs have no from/to relationship to
+// diagram, so dot and drawio are rejected with a clear error instead of letting
+// go-output log.Fatal (non-split) or silently emit nothing (split). The
+// comparison is case-insensitive to match the format normalisation in config.
+func enisGraphFormatError(format string) error {
+	switch strings.ToLower(format) {
+	case "dot", "drawio":
+		return fmt.Errorf("the %s output format is not supported by 'vpc enis'; supported formats are json, csv, table, and html", strings.ToLower(format))
+	default:
+		return nil
+	}
+}
+
+func enis(_ *cobra.Command, _ []string) error {
+	if err := enisGraphFormatError(settings.GetOutputFormat()); err != nil {
+		return err
+	}
 	awsConfig := config.DefaultAwsConfig(*settings)
 	ec2Client := awsConfig.Ec2Client()
 	names := helpers.GetAllEC2ResourceNames(ec2Client, awsConfig.DirectConnectClient())
@@ -48,6 +66,7 @@ func enis(_ *cobra.Command, _ []string) {
 		printENIs(interfaces, names, resultTitle, false, ec2Client)
 	}
 	output.Write()
+	return nil
 }
 
 func printENIs(interfaces []types.NetworkInterface, names map[string]string, resultTitle string, split bool, svc *ec2.Client) {
