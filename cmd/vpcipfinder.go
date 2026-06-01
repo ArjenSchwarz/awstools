@@ -21,10 +21,14 @@ var ipFinderCmd = &cobra.Command{
 	and return comprehensive information about the resource associated with that IP address.
 	
 	The search includes both primary and secondary IP addresses on ENIs.
-	
+
+	The search is limited to a single region. Use the --region flag to target a
+	specific region. Searching across all regions is not yet supported.
+
 	Examples:
 	  awstools vpc ip-finder 10.0.1.100
-	  awstools vpc ip-finder 10.0.1.100 --output json`,
+	  awstools vpc ip-finder 10.0.1.100 --output json
+	  awstools vpc ip-finder 10.0.1.100 --region eu-west-1`,
 	Args: cobra.ExactArgs(1),
 	Run:  findIPAddress,
 }
@@ -35,15 +39,34 @@ var (
 
 func init() {
 	vpcCmd.AddCommand(ipFinderCmd)
-	ipFinderCmd.Flags().BoolVar(&searchAllRegions, "search-all-regions", false, "Search across all regions (future enhancement)")
+	ipFinderCmd.Flags().BoolVar(&searchAllRegions, "search-all-regions", false, "Search across all regions (not yet supported)")
+}
+
+// validateIPFinderFlags validates the command arguments and flags before any
+// AWS calls are made. It is kept separate from findIPAddress so the flag logic
+// can be unit tested without AWS configuration or credentials.
+//
+// The --search-all-regions flag is rejected because multi-region search is not
+// implemented. Previously the flag was accepted and silently ignored, so the
+// single-region search would run anyway and a user could receive a false
+// "not found" result that looked like an all-region search had been performed
+// (T-1222).
+func validateIPFinderFlags(ipAddress string, allRegions bool) error {
+	if !helpers.IsValidIPAddress(ipAddress) {
+		return fmt.Errorf("invalid IP address format: %s\n\nPlease provide a valid IPv4 or IPv6 address.\nExamples:\n  - IPv4: 192.168.1.1\n  - IPv6: 2001:db8::1", ipAddress)
+	}
+	if allRegions {
+		return fmt.Errorf("--search-all-regions is not yet supported\n\nThe search is limited to a single region. Use the --region flag to target a specific region instead")
+	}
+	return nil
 }
 
 func findIPAddress(_ *cobra.Command, args []string) {
 	ipAddress := args[0]
 
-	// Validate IP address format with helpful error message
-	if !helpers.IsValidIPAddress(ipAddress) {
-		panic(fmt.Errorf("invalid IP address format: %s\n\nPlease provide a valid IPv4 or IPv6 address.\nExamples:\n  - IPv4: 192.168.1.1\n  - IPv6: 2001:db8::1", ipAddress))
+	// Validate arguments and flags before any AWS calls.
+	if err := validateIPFinderFlags(ipAddress, searchAllRegions); err != nil {
+		panic(err)
 	}
 
 	// Load AWS configuration
