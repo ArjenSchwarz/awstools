@@ -148,6 +148,9 @@ func (instance *SSOInstance) getPermissionSetDetails(permissionsetarn string, sv
 		return SSOPermissionSet{}, fmt.Errorf("failed to describe permission set %s: %w", permissionsetarn, err)
 	}
 	ps := permissionsetdescription.PermissionSet
+	if ps == nil {
+		return SSOPermissionSet{}, fmt.Errorf("DescribePermissionSet returned no metadata for permission set %s", permissionsetarn)
+	}
 	permissionset := SSOPermissionSet{
 		Arn:             permissionsetarn,
 		Name:            aws.ToString(ps.Name),
