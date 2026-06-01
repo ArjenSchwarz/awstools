@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/ArjenSchwarz/awstools/helpers"
+	"github.com/stretchr/testify/assert"
 )
 
 // TestFilterGatewaySkipsBlackholeRoutes is the regression test for T-1124.
@@ -81,5 +82,45 @@ func TestFilterGatewaySkipsBlackholeRoutes(t *testing.T) {
 	}
 	if _, exists := attachedresources[activeVPCID]; !exists {
 		t.Errorf("attached resources should contain the active VPC %q; got %#v", activeVPCID, attachedresources)
+	}
+}
+
+// TestValidateSimpleListResourceID is the regression test for T-1255.
+//
+// Bug: simplelistOnly used the global tgwresourceid value directly as a
+// Transit Gateway route table ID and passed it to
+// GetActiveRoutesForTransitGatewayRouteTable /
+// GetBlackholeRoutesForTransitGatewayRouteTable without validating it. Running
+// `awstools tgw routetables --list` without --resource-id, or with a VPC/TGW
+// ID, would call SearchTransitGatewayRoutes with an empty or wrong route table
+// ID instead of rejecting the input with a clear usage error.
+//
+// Expected: validation requires a non-empty tgw-rtb-* route table ID and
+// rejects everything else with an error.
+func TestValidateSimpleListResourceID(t *testing.T) {
+	tests := []struct {
+		name       string
+		resourceID string
+		wantErr    bool
+	}{
+		{name: "empty rejected", resourceID: "", wantErr: true},
+		{name: "whitespace rejected", resourceID: "   ", wantErr: true},
+		{name: "vpc id rejected", resourceID: "vpc-00000001", wantErr: true},
+		{name: "tgw id rejected", resourceID: "tgw-00000001", wantErr: true},
+		{name: "tgw attachment rejected", resourceID: "tgw-attach-00000001", wantErr: true},
+		{name: "multiple ids rejected", resourceID: "tgw-rtb-1,tgw-rtb-2", wantErr: true},
+		{name: "valid route table accepted", resourceID: "tgw-rtb-00000001", wantErr: false},
+		{name: "valid route table with surrounding whitespace accepted", resourceID: "  tgw-rtb-00000001  ", wantErr: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateSimpleListResourceID(tt.resourceID)
+			if tt.wantErr {
+				assert.Error(t, err, "expected validation error for %q", tt.resourceID)
+			} else {
+				assert.NoError(t, err, "expected no validation error for %q", tt.resourceID)
+			}
+		})
 	}
 }

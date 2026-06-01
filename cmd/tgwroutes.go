@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"log"
 	"slices"
 	"strings"
 
@@ -41,7 +42,7 @@ type attachedResourceInfo struct {
 func init() {
 	tgwCmd.AddCommand(tgwroutetablesCmd)
 	tgwroutetablesCmd.Flags().StringVarP(&tgwresourceid, "resource-id", "r", "", "The id(s) of the resource you want to limit to (comma-separated for multiple)")
-	tgwroutetablesCmd.Flags().BoolVarP(&simplelist, "list", "l", false, "Only show a simple list of routes")
+	tgwroutetablesCmd.Flags().BoolVarP(&simplelist, "list", "l", false, "Only show a simple list of routes for a single route table; requires --resource-id with a tgw-rtb-* ID")
 }
 
 func tgwroutes(_ *cobra.Command, _ []string) {
@@ -129,14 +130,39 @@ func tgwroutes(_ *cobra.Command, _ []string) {
 	output.Write()
 }
 
+// validateSimpleListResourceID checks that the resource ID supplied for the
+// --list output is a single Transit Gateway route table ID (tgw-rtb-*).
+//
+// The simple list queries SearchTransitGatewayRoutes for one route table, so
+// an empty value, a non-route-table resource (VPC, TGW, attachment, ...), or a
+// comma-separated list must be rejected with a clear usage error rather than
+// silently calling the AWS API with an empty or wrong ID.
+func validateSimpleListResourceID(resourceID string) error {
+	trimmed := strings.TrimSpace(resourceID)
+	if trimmed == "" {
+		return fmt.Errorf("the --list output requires a Transit Gateway route table ID; pass one with --resource-id (e.g. -r tgw-rtb-0123456789abcdef0)")
+	}
+	if strings.Contains(trimmed, ",") {
+		return fmt.Errorf("the --list output supports a single Transit Gateway route table ID, not a list: %q", resourceID)
+	}
+	if helpers.TypeByResourceID(trimmed) != "tgw-rtb" {
+		return fmt.Errorf("the --list output requires a Transit Gateway route table ID (tgw-rtb-*), got %q", trimmed)
+	}
+	return nil
+}
+
 func simplelistOnly(awsConfig config.AWSConfig) {
+	if err := validateSimpleListResourceID(tgwresourceid); err != nil {
+		log.Fatal(err)
+	}
+	routetableID := strings.TrimSpace(tgwresourceid)
 	keys := []string{cidrColumn, "Target", "Route Type", "State"}
 	output := format.OutputArray{Keys: keys, Settings: settings.NewOutputSettings()}
-	output.Settings.Title = fmt.Sprintf("Simple route list for %s", tgwresourceid)
+	output.Settings.Title = fmt.Sprintf("Simple route list for %s", routetableID)
 	output.Settings.SortKey = cidrColumn
 
-	activeroutes := helpers.GetActiveRoutesForTransitGatewayRouteTable(tgwresourceid, awsConfig.Ec2Client())
-	blackholeroutes := helpers.GetBlackholeRoutesForTransitGatewayRouteTable(tgwresourceid, awsConfig.Ec2Client())
+	activeroutes := helpers.GetActiveRoutesForTransitGatewayRouteTable(routetableID, awsConfig.Ec2Client())
+	blackholeroutes := helpers.GetBlackholeRoutesForTransitGatewayRouteTable(routetableID, awsConfig.Ec2Client())
 
 	for _, route := range activeroutes {
 		content := make(map[string]any)
