@@ -7,7 +7,6 @@ import (
 	"log"
 	"math"
 	"net"
-	"os"
 	"regexp"
 	"slices"
 	"sort"
@@ -2061,9 +2060,15 @@ func IsValidCIDR(cidr string) bool {
 	return err == nil
 }
 
-// FindIPAddressDetails searches for an IP address across ENIs and returns detailed information
-// Searches both primary and secondary IP addresses on all ENIs
-func FindIPAddressDetails(svc *ec2.Client, ipAddress string) IPFinderResult {
+// FindIPAddressDetails searches for an IP address across ENIs and returns
+// detailed information for every matching ENI. A single private IP can
+// legitimately appear on more than one ENI — duplicate RFC1918 ranges are
+// common across unrelated VPCs in the same account/region — so all matches are
+// returned rather than silently collapsing to the first one (T-1413).
+//
+// When no ENI matches, a single result with Found=false is returned so callers
+// can report the IP as not found. Searches both primary and secondary IPs.
+func FindIPAddressDetails(svc *ec2.Client, ipAddress string) []IPFinderResult {
 	// Create filter for IP address search
 	// Note: addresses.private-ip-address filter includes both primary and secondary IPs
 	filters := []types.Filter{
@@ -2077,43 +2082,47 @@ func FindIPAddressDetails(svc *ec2.Client, ipAddress string) IPFinderResult {
 	enis := searchENIsByIP(svc, filters)
 
 	if len(enis) == 0 {
-		return IPFinderResult{
+		return []IPFinderResult{{
 			IPAddress: ipAddress,
 			Found:     false,
-		}
+		}}
 	}
 
-	// Handle multiple ENIs with the same IP (rare but possible)
-	if len(enis) > 1 {
-		// Log warning about multiple matches - following awstools pattern of using panic for warnings
-		// This is a rare scenario but can happen in some edge cases
-		fmt.Fprintf(os.Stderr, "Warning: Multiple ENIs found with IP %s. Returning details for first ENI (%s)\n",
-			ipAddress, aws.ToString(enis[0].NetworkInterfaceId))
+	// Build a base result per matching ENI, then enrich each with resource
+	// details. A shared cache covering every matching ENI keeps the lookups
+	// efficient even when the IP is reused across multiple VPCs.
+	results := buildBaseIPFinderResults(ipAddress, enis)
+	cache := NewENILookupCache(svc, enis)
+
+	for i := range results {
+		eni := *results[i].ENI
+		results[i].ResourceType = getENIUsageTypeOptimized(eni, cache)
+		results[i].ResourceName, results[i].ResourceID = getResourceNameAndID(eni, cache)
+		results[i].VPC = getVPCInfo(svc, aws.ToString(eni.VpcId))
+		results[i].Subnet = getSubnetInfo(svc, aws.ToString(eni.SubnetId))
+		results[i].SecurityGroups = getSecurityGroupInfo(svc, eni.Groups)
+		results[i].RouteTable = getRouteTableInfo(svc, aws.ToString(eni.SubnetId), aws.ToString(eni.VpcId))
 	}
 
-	// Process the first matching ENI
-	eni := enis[0]
+	return results
+}
 
-	// Create ENI cache for efficient resource lookup
-	cache := NewENILookupCache(svc, []types.NetworkInterface{eni})
-
-	// Build detailed result
-	result := IPFinderResult{
-		IPAddress:     ipAddress,
-		ENI:           &eni,
-		Found:         true,
-		IsSecondaryIP: isSecondaryIP(eni, ipAddress),
+// buildBaseIPFinderResults creates one IPFinderResult per matching ENI,
+// populating only the fields that can be derived from the ENI itself (IP, ENI
+// pointer, Found, IsSecondaryIP). Client-dependent fields are filled in by the
+// caller. Extracted so the multi-match collection can be tested without AWS.
+func buildBaseIPFinderResults(ipAddress string, enis []types.NetworkInterface) []IPFinderResult {
+	results := make([]IPFinderResult, 0, len(enis))
+	for i := range enis {
+		eni := enis[i]
+		results = append(results, IPFinderResult{
+			IPAddress:     ipAddress,
+			ENI:           &eni,
+			Found:         true,
+			IsSecondaryIP: isSecondaryIP(eni, ipAddress),
+		})
 	}
-
-	// Populate resource information
-	result.ResourceType = getENIUsageTypeOptimized(eni, cache)
-	result.ResourceName, result.ResourceID = getResourceNameAndID(eni, cache)
-	result.VPC = getVPCInfo(svc, aws.ToString(eni.VpcId))
-	result.Subnet = getSubnetInfo(svc, aws.ToString(eni.SubnetId))
-	result.SecurityGroups = getSecurityGroupInfo(svc, eni.Groups)
-	result.RouteTable = getRouteTableInfo(svc, aws.ToString(eni.SubnetId), aws.ToString(eni.VpcId))
-
-	return result
+	return results
 }
 
 // handleAWSAPIError provides better error messages for common AWS API errors

@@ -49,16 +49,24 @@ func findIPAddress(_ *cobra.Command, args []string) {
 	// Load AWS configuration
 	awsConfig := config.DefaultAwsConfig(*settings)
 
-	// Call helper function
-	result := helpers.FindIPAddressDetails(awsConfig.Ec2Client(), ipAddress)
+	// Call helper function. A single private IP can match more than one ENI
+	// (e.g. duplicate RFC1918 ranges across unrelated VPCs), so every match is
+	// returned and rendered.
+	results := helpers.FindIPAddressDetails(awsConfig.Ec2Client(), ipAddress)
 
 	// Format and output results
-	formatIPFinderOutput(result)
+	formatIPFinderOutput(results)
 }
 
-func formatIPFinderOutput(result helpers.IPFinderResult) {
-	if !result.Found {
-		fmt.Fprintf(os.Stderr, "IP address %s not found in any ENI in the current region\n", result.IPAddress)
+func formatIPFinderOutput(results []helpers.IPFinderResult) {
+	// The helper always returns at least one result. When nothing matched it is
+	// a single result with Found=false.
+	if len(results) == 0 || !results[0].Found {
+		ipAddress := ""
+		if len(results) > 0 {
+			ipAddress = results[0].IPAddress
+		}
+		fmt.Fprintf(os.Stderr, "IP address %s not found in any ENI in the current region\n", ipAddress)
 		fmt.Fprintf(os.Stderr, "\nTroubleshooting suggestions:\n")
 		fmt.Fprintf(os.Stderr, "  - Verify the IP address is correct\n")
 		fmt.Fprintf(os.Stderr, "  - Check if the IP is in a different AWS region using --region flag\n")
@@ -66,6 +74,18 @@ func formatIPFinderOutput(result helpers.IPFinderResult) {
 		fmt.Fprintf(os.Stderr, "  - Consider that the IP might be associated with a different AWS account\n")
 		return
 	}
+
+	if len(results) > 1 {
+		fmt.Fprintf(os.Stderr, "Note: IP address %s matched %d ENIs (duplicate private IPs across VPCs). Showing all matches.\n",
+			results[0].IPAddress, len(results))
+	}
+
+	for _, result := range results {
+		formatSingleIPFinderResult(result)
+	}
+}
+
+func formatSingleIPFinderResult(result helpers.IPFinderResult) {
 
 	keys := []string{fieldColumn, valueColumn}
 	output := format.OutputArray{
