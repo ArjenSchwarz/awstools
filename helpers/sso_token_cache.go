@@ -4,6 +4,7 @@ import (
 	"crypto/sha1"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -12,6 +13,10 @@ import (
 
 	"github.com/mitchellh/go-homedir"
 )
+
+// tokenCacheNotFoundMessage is the error message used when an SSO token cache
+// file does not exist. It is shared so callers can detect the not-found case.
+const tokenCacheNotFoundMessage = "SSO token cache not found"
 
 // SSOTokenCache handles access to AWS SSO token cache
 type SSOTokenCache struct {
@@ -57,13 +62,46 @@ func (stc *SSOTokenCache) SetLogger(logger Logger) {
 	stc.logger = logger
 }
 
-// LoadTokenForProfile loads cached token for a specific SSO profile
+// LoadTokenForTemplateProfile loads the cached SSO token for a template profile.
+//
+// Modern profiles (sso_session) and legacy profiles (sso_start_url only) store
+// their tokens under different cache filenames. For modern profiles the AWS CLI
+// hashes the session name; for legacy profiles it hashes the start URL. This
+// method tries the session-name cache first when a session is present and falls
+// back to the start-url cache so that caches written by older tooling still
+// resolve.
+func (stc *SSOTokenCache) LoadTokenForTemplateProfile(profile *TemplateProfile) (*CachedToken, error) {
+	// Modern profiles cache the token under the SHA1 of the session name.
+	if profile.SSOSession != "" {
+		token, err := stc.LoadTokenForKey(profile.SSOSession, profile.SSORegion)
+		if err == nil {
+			return token, nil
+		}
+		// Fall back to the legacy start-url cache (e.g. caches written by an
+		// older AWS CLI) only when the session-name cache is absent.
+		if !isTokenCacheNotFound(err) {
+			return nil, err
+		}
+	}
+
+	return stc.LoadTokenForKey(profile.SSOStartURL, profile.SSORegion)
+}
+
+// LoadTokenForProfile loads cached token for a specific SSO profile keyed by its
+// start URL. Retained for legacy callers; prefer LoadTokenForTemplateProfile so
+// modern sso_session profiles resolve correctly.
 func (stc *SSOTokenCache) LoadTokenForProfile(startURL, region string) (*CachedToken, error) {
-	tokenFile := stc.getTokenFilePath(startURL)
+	return stc.LoadTokenForKey(startURL, region)
+}
+
+// LoadTokenForKey loads and validates the cached token whose filename is derived
+// from the SHA1 hash of cacheKey (either an SSO session name or an SSO start URL).
+func (stc *SSOTokenCache) LoadTokenForKey(cacheKey, region string) (*CachedToken, error) {
+	tokenFile := stc.getTokenFilePath(cacheKey)
 
 	if _, err := os.Stat(tokenFile); os.IsNotExist(err) {
-		return nil, NewAuthError("SSO token cache not found", err).
-			WithContext("start_url", startURL).
+		return nil, NewAuthError(tokenCacheNotFoundMessage, err).
+			WithContext("cache_key", cacheKey).
 			WithContext("region", region).
 			WithContext("suggestion", "Run 'aws sso login' to authenticate")
 	}
@@ -95,13 +133,25 @@ func (stc *SSOTokenCache) LoadTokenForProfile(startURL, region string) (*CachedT
 	return &token, nil
 }
 
-// getTokenFilePath generates the cache file path for a given start URL
-func (stc *SSOTokenCache) getTokenFilePath(startURL string) string {
+// isTokenCacheNotFound reports whether err indicates the token cache file was
+// absent (as opposed to being present but expired or unreadable).
+func isTokenCacheNotFound(err error) bool {
+	var pgErr ProfileGeneratorError
+	if errors.As(err, &pgErr) {
+		return pgErr.Type == ErrorTypeAuth && pgErr.Message == tokenCacheNotFoundMessage
+	}
+	return false
+}
+
+// getTokenFilePath generates the cache file path for a given cache key (an SSO
+// session name for modern profiles or an SSO start URL for legacy profiles).
+func (stc *SSOTokenCache) getTokenFilePath(cacheKey string) string {
 	// NOTE: SHA1 is used here for compatibility with AWS CLI cache file naming conventions.
 	// This is NOT for security purposes. SHA1 is cryptographically weak and should not be used
-	// for integrity or authentication. AWS CLI uses SHA1 hash of the start URL to generate
-	// cache file names, and we follow the same convention to maintain compatibility.
-	hash := sha1.Sum([]byte(startURL))
+	// for integrity or authentication. AWS CLI uses a SHA1 hash of the session name (modern
+	// sso_session profiles) or the start URL (legacy profiles) to generate cache file names,
+	// and we follow the same convention to maintain compatibility.
+	hash := sha1.Sum([]byte(cacheKey))
 	hashStr := hex.EncodeToString(hash[:])
 
 	return filepath.Join(stc.cacheDir, hashStr+".json")
@@ -159,7 +209,7 @@ func (stc *SSOTokenCache) ValidateProfileToken(profile *TemplateProfile) error {
 		return NewValidationError("profile is not an SSO profile", nil)
 	}
 
-	token, err := stc.LoadTokenForProfile(profile.SSOStartURL, profile.SSORegion)
+	token, err := stc.LoadTokenForTemplateProfile(profile)
 	if err != nil {
 		return err
 	}

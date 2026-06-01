@@ -74,7 +74,7 @@ func (rd *RoleDiscovery) DiscoverAccessibleRoles(templateProfile *TemplateProfil
 	ctx := context.TODO()
 
 	// Load cached token for the template profile
-	cachedToken, err := rd.tokenCache.LoadTokenForProfile(templateProfile.SSOStartURL, templateProfile.SSORegion)
+	cachedToken, err := rd.tokenCache.LoadTokenForTemplateProfile(templateProfile)
 	if err != nil {
 		return nil, err
 	}
@@ -389,7 +389,7 @@ func (rd *RoleDiscovery) TestConnection(templateProfile *TemplateProfile) error 
 	ctx := context.TODO()
 
 	// Load cached token
-	cachedToken, err := rd.tokenCache.LoadTokenForProfile(templateProfile.SSOStartURL, templateProfile.SSORegion)
+	cachedToken, err := rd.tokenCache.LoadTokenForTemplateProfile(templateProfile)
 	if err != nil {
 		return err
 	}
