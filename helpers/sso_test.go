@@ -475,6 +475,21 @@ func TestGetSSOAccountInstance_DescribePermissionSetError_ReturnsError(t *testin
 	assert.Contains(t, err.Error(), "failed to describe permission set")
 }
 
+// Regression test for T-1155: a partial DescribePermissionSet response with
+// PermissionSet == nil must return a contextual error rather than panicking
+// when getPermissionSetDetails dereferences the nil pointer for Name,
+// SessionDuration, CreatedDate, and Description.
+func TestGetSSOAccountInstance_NilPermissionSet_ReturnsError(t *testing.T) {
+	mock := newBasicMock()
+	mock.DescribePermissionSetFunc = func(ctx context.Context, params *ssoadmin.DescribePermissionSetInput, optFns ...func(*ssoadmin.Options)) (*ssoadmin.DescribePermissionSetOutput, error) {
+		return &ssoadmin.DescribePermissionSetOutput{PermissionSet: nil}, nil
+	}
+	_, err := GetSSOAccountInstance(mock)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "arn:aws:sso:::permissionSet/ps-001",
+		"error should reference the permission set ARN")
+}
+
 func TestGetSSOAccountInstance_ListAccountsError_ReturnsError(t *testing.T) {
 	mock := newBasicMock()
 	mock.ListAccountsForProvisionedPermissionSetFunc = func(ctx context.Context, params *ssoadmin.ListAccountsForProvisionedPermissionSetInput, optFns ...func(*ssoadmin.Options)) (*ssoadmin.ListAccountsForProvisionedPermissionSetOutput, error) {
