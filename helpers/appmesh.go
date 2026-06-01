@@ -71,6 +71,11 @@ func getAppMeshRouteDescriptions(meshName *string, svc AppMeshAPI) []*types.Rout
 			fmt.Print(err)
 			continue
 		}
+		if output.Route == nil {
+			// A successful response can still omit the route payload; skip it
+			// so downstream processing does not dereference a nil pointer.
+			continue
+		}
 		routedetails = append(routedetails, output.Route)
 	}
 	return routedetails
@@ -98,6 +103,11 @@ func getAllAppMeshNodes(meshName *string, svc AppMeshAPI) []*types.VirtualNodeDa
 			nodetails, err := svc.DescribeVirtualNode(context.TODO(), input)
 			if err != nil {
 				fmt.Print(err)
+				continue
+			}
+			if nodetails.VirtualNode == nil {
+				// Skip incomplete payloads so callers that dereference the
+				// virtual node (e.g. VirtualNodeName) do not panic.
 				continue
 			}
 			nodelist = append(nodelist, nodetails.VirtualNode)
@@ -130,6 +140,11 @@ func getAllAppMeshVirtualServices(meshName *string, svc AppMeshAPI) []*types.Vir
 				fmt.Print(err)
 				continue
 			}
+			if servicedetails.VirtualService == nil {
+				// Skip incomplete payloads so callers that dereference the
+				// service spec (e.g. Spec.Provider) do not panic.
+				continue
+			}
 			servicelist = append(servicelist, servicedetails.VirtualService)
 		}
 	}
@@ -141,6 +156,11 @@ func getAllAppMeshVirtualServices(meshName *string, svc AppMeshAPI) []*types.Vir
 func buildRoutesHolder(routes []*types.RouteData) map[string][]AppMeshVirtualServiceRoute {
 	routesholder := make(map[string][]AppMeshVirtualServiceRoute)
 	for _, route := range routes {
+		if route == nil || route.Spec == nil {
+			// A partial Describe payload may omit the route or its spec.
+			continue
+		}
+
 		var targets []types.WeightedTarget
 		var path string
 
@@ -197,6 +217,11 @@ func GetAllAppMeshPaths(meshName *string, svc AppMeshAPI) []AppMeshVirtualServic
 	routes := getAppMeshRouteDescriptions(meshName, svc)
 	routesholder := buildRoutesHolder(routes)
 	for _, service := range services {
+		if service.Spec == nil {
+			// A partial Describe payload may omit the spec; skip rather than
+			// dereferencing service.Spec.Provider.
+			continue
+		}
 		switch v := service.Spec.Provider.(type) {
 		case *types.VirtualServiceProviderMemberVirtualRouter:
 			serviceroutes := AppMeshVirtualService{
@@ -301,6 +326,10 @@ func getAppMeshVirtualNodeBackendServices2(meshname *string, nodename *string, s
 	if err != nil {
 		fmt.Print(err)
 		return nil
+	}
+	if nodetails.VirtualNode == nil || nodetails.VirtualNode.Spec == nil {
+		// A partial Describe payload may omit the virtual node or its spec.
+		return backendlists
 	}
 	for _, backend := range nodetails.VirtualNode.Spec.Backends {
 		switch v := backend.(type) {

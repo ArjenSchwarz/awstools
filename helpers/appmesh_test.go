@@ -615,3 +615,193 @@ func TestGetAllAppMeshPaths_VirtualNodeProvider(t *testing.T) {
 		t.Errorf("Expected DestinationNode 'my-node', got '%s'", directNodeSvc.VirtualServiceRoutes[0].DestinationNode)
 	}
 }
+
+// --- Regression tests for partial Describe payloads (T-1207) ---
+//
+// AWS Describe APIs can return a successful (non-error) response whose nested
+// payload is incomplete: a nil Route/VirtualNode/VirtualService pointer, or a
+// nil nested Spec. The helpers previously appended these payloads unguarded and
+// later dereferenced them, panicking instead of skipping the incomplete item.
+
+// TestGetAppMeshRouteDescriptions_NilRoutePayload_Skipped covers a DescribeRoute
+// response with Route == nil. Such an entry must be skipped, otherwise the nil
+// is appended and buildRoutesHolder panics on route.Spec.
+func TestGetAppMeshRouteDescriptions_NilRoutePayload_Skipped(t *testing.T) {
+	mock := &mockAppMeshClient{
+		listVirtualRoutersFunc: func(_ context.Context, _ *appmesh.ListVirtualRoutersInput, _ ...func(*appmesh.Options)) (*appmesh.ListVirtualRoutersOutput, error) {
+			return &appmesh.ListVirtualRoutersOutput{
+				VirtualRouters: []types.VirtualRouterRef{
+					{MeshName: aws.String("test-mesh"), VirtualRouterName: aws.String("router-1")},
+				},
+			}, nil
+		},
+		listRoutesFunc: func(_ context.Context, _ *appmesh.ListRoutesInput, _ ...func(*appmesh.Options)) (*appmesh.ListRoutesOutput, error) {
+			return &appmesh.ListRoutesOutput{
+				Routes: []types.RouteRef{
+					{MeshName: aws.String("test-mesh"), RouteName: aws.String("route-1"), VirtualRouterName: aws.String("router-1")},
+				},
+			}, nil
+		},
+		describeRouteFunc: func(_ context.Context, _ *appmesh.DescribeRouteInput, _ ...func(*appmesh.Options)) (*appmesh.DescribeRouteOutput, error) {
+			// Successful response, but the Route payload is missing.
+			return &appmesh.DescribeRouteOutput{Route: nil}, nil
+		},
+	}
+
+	meshName := aws.String("test-mesh")
+	result := getAppMeshRouteDescriptions(meshName, mock)
+	if len(result) != 0 {
+		t.Errorf("Expected 0 route descriptions when Route payload is nil, got %d", len(result))
+	}
+	// buildRoutesHolder must not panic on whatever getAppMeshRouteDescriptions returns.
+	_ = buildRoutesHolder(result)
+}
+
+// TestBuildRoutesHolder_NilRoute_NoPanic ensures buildRoutesHolder tolerates a
+// nil RouteData pointer in its input slice.
+func TestBuildRoutesHolder_NilRoute_NoPanic(t *testing.T) {
+	routes := []*types.RouteData{nil}
+	result := buildRoutesHolder(routes)
+	if len(result) != 0 {
+		t.Errorf("Expected empty result for nil route, got %d", len(result))
+	}
+}
+
+// TestBuildRoutesHolder_NilSpec_NoPanic ensures buildRoutesHolder tolerates a
+// RouteData with a nil Spec (a partial Describe payload).
+func TestBuildRoutesHolder_NilSpec_NoPanic(t *testing.T) {
+	routes := []*types.RouteData{
+		{VirtualRouterName: aws.String("router-1"), Spec: nil},
+	}
+	result := buildRoutesHolder(routes)
+	if len(result["router-1"]) != 0 {
+		t.Errorf("Expected 0 routes for nil-spec route, got %d", len(result["router-1"]))
+	}
+}
+
+// TestGetAllAppMeshNodes_NilNodePayload_Skipped covers a DescribeVirtualNode
+// response with VirtualNode == nil. The nil must be skipped so downstream
+// consumers (GetAllAppMeshNodeConnections) do not panic on node.VirtualNodeName.
+func TestGetAllAppMeshNodes_NilNodePayload_Skipped(t *testing.T) {
+	mock := &mockAppMeshClient{
+		listVirtualNodesFunc: func(_ context.Context, _ *appmesh.ListVirtualNodesInput, _ ...func(*appmesh.Options)) (*appmesh.ListVirtualNodesOutput, error) {
+			return &appmesh.ListVirtualNodesOutput{
+				VirtualNodes: []types.VirtualNodeRef{
+					{MeshName: aws.String("test-mesh"), VirtualNodeName: aws.String("node-1")},
+				},
+			}, nil
+		},
+		describeVirtualNodeFunc: func(_ context.Context, _ *appmesh.DescribeVirtualNodeInput, _ ...func(*appmesh.Options)) (*appmesh.DescribeVirtualNodeOutput, error) {
+			return &appmesh.DescribeVirtualNodeOutput{VirtualNode: nil}, nil
+		},
+	}
+
+	meshName := aws.String("test-mesh")
+	result := getAllAppMeshNodes(meshName, mock)
+	if len(result) != 0 {
+		t.Errorf("Expected 0 nodes when VirtualNode payload is nil, got %d", len(result))
+	}
+	// Dereferencing the returned nodes must be safe.
+	for _, node := range result {
+		_ = aws.ToString(node.VirtualNodeName)
+	}
+}
+
+// TestGetAllAppMeshVirtualServices_NilServicePayload_Skipped covers a
+// DescribeVirtualService response with VirtualService == nil. The nil must be
+// skipped so GetAllAppMeshPaths does not panic on service.Spec.Provider.
+func TestGetAllAppMeshVirtualServices_NilServicePayload_Skipped(t *testing.T) {
+	mock := &mockAppMeshClient{
+		listVirtualServicesFunc: func(_ context.Context, _ *appmesh.ListVirtualServicesInput, _ ...func(*appmesh.Options)) (*appmesh.ListVirtualServicesOutput, error) {
+			return &appmesh.ListVirtualServicesOutput{
+				VirtualServices: []types.VirtualServiceRef{
+					{MeshName: aws.String("test-mesh"), VirtualServiceName: aws.String("svc-1")},
+				},
+			}, nil
+		},
+		describeVirtualServiceFunc: func(_ context.Context, _ *appmesh.DescribeVirtualServiceInput, _ ...func(*appmesh.Options)) (*appmesh.DescribeVirtualServiceOutput, error) {
+			return &appmesh.DescribeVirtualServiceOutput{VirtualService: nil}, nil
+		},
+	}
+
+	meshName := aws.String("test-mesh")
+	result := getAllAppMeshVirtualServices(meshName, mock)
+	if len(result) != 0 {
+		t.Errorf("Expected 0 services when VirtualService payload is nil, got %d", len(result))
+	}
+}
+
+// TestGetAllAppMeshPaths_NilServiceSpec_NoPanic covers a DescribeVirtualService
+// response whose VirtualService is present but Spec is nil. GetAllAppMeshPaths
+// switches on service.Spec.Provider and must not panic.
+func TestGetAllAppMeshPaths_NilServiceSpec_NoPanic(t *testing.T) {
+	mock := &mockAppMeshClient{
+		listVirtualServicesFunc: func(_ context.Context, _ *appmesh.ListVirtualServicesInput, _ ...func(*appmesh.Options)) (*appmesh.ListVirtualServicesOutput, error) {
+			return &appmesh.ListVirtualServicesOutput{
+				VirtualServices: []types.VirtualServiceRef{
+					{MeshName: aws.String("test-mesh"), VirtualServiceName: aws.String("svc-1")},
+				},
+			}, nil
+		},
+		describeVirtualServiceFunc: func(_ context.Context, params *appmesh.DescribeVirtualServiceInput, _ ...func(*appmesh.Options)) (*appmesh.DescribeVirtualServiceOutput, error) {
+			return &appmesh.DescribeVirtualServiceOutput{
+				VirtualService: &types.VirtualServiceData{
+					MeshName:           params.MeshName,
+					VirtualServiceName: params.VirtualServiceName,
+					Spec:               nil,
+				},
+			}, nil
+		},
+		listVirtualRoutersFunc: func(_ context.Context, _ *appmesh.ListVirtualRoutersInput, _ ...func(*appmesh.Options)) (*appmesh.ListVirtualRoutersOutput, error) {
+			return &appmesh.ListVirtualRoutersOutput{}, nil
+		},
+	}
+
+	meshName := aws.String("test-mesh")
+	// Must not panic; service with nil spec is simply skipped.
+	result := GetAllAppMeshPaths(meshName, mock)
+	if len(result) != 0 {
+		t.Errorf("Expected 0 paths for service with nil spec, got %d", len(result))
+	}
+}
+
+// TestGetAppMeshVirtualNodeBackendServices2_NilNodePayload_NoPanic covers a
+// DescribeVirtualNode success response with VirtualNode == nil (or nil Spec).
+// The helper dereferences nodetails.VirtualNode.Spec.Backends and must not panic.
+func TestGetAppMeshVirtualNodeBackendServices2_NilNodePayload_NoPanic(t *testing.T) {
+	mock := &mockAppMeshClient{
+		describeVirtualNodeFunc: func(_ context.Context, _ *appmesh.DescribeVirtualNodeInput, _ ...func(*appmesh.Options)) (*appmesh.DescribeVirtualNodeOutput, error) {
+			return &appmesh.DescribeVirtualNodeOutput{VirtualNode: nil}, nil
+		},
+	}
+
+	meshName := aws.String("test-mesh")
+	nodeName := aws.String("node-1")
+	result := getAppMeshVirtualNodeBackendServices2(meshName, nodeName, mock)
+	if len(result) != 0 {
+		t.Errorf("Expected empty result when VirtualNode payload is nil, got %v", result)
+	}
+}
+
+// TestGetAppMeshVirtualNodeBackendServices2_NilSpec_NoPanic covers a present
+// VirtualNode with a nil Spec.
+func TestGetAppMeshVirtualNodeBackendServices2_NilSpec_NoPanic(t *testing.T) {
+	mock := &mockAppMeshClient{
+		describeVirtualNodeFunc: func(_ context.Context, params *appmesh.DescribeVirtualNodeInput, _ ...func(*appmesh.Options)) (*appmesh.DescribeVirtualNodeOutput, error) {
+			return &appmesh.DescribeVirtualNodeOutput{
+				VirtualNode: &types.VirtualNodeData{
+					MeshName:        params.MeshName,
+					VirtualNodeName: params.VirtualNodeName,
+					Spec:            nil,
+				},
+			}, nil
+		},
+	}
+
+	meshName := aws.String("test-mesh")
+	nodeName := aws.String("node-1")
+	result := getAppMeshVirtualNodeBackendServices2(meshName, nodeName, mock)
+	if len(result) != 0 {
+		t.Errorf("Expected empty result when VirtualNode.Spec is nil, got %v", result)
+	}
+}
