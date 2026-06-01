@@ -131,35 +131,11 @@ func vpcOverview(_ *cobra.Command, _ []string) {
 	summaryOutput := format.OutputArray{Keys: summaryKeys, Settings: settings.NewOutputSettings()}
 	summaryOutput.Settings.SeparateTables = true
 
-	// Calculate summary for filtered VPCs
-	var filteredSummary struct {
-		totalVPCs      int
-		totalSubnets   int
-		totalIPs       int
-		usedIPs        int
-		awsReservedIPs int
-		serviceIPs     int
-		availableIPs   int
-	}
-
-	for _, vpc := range filteredVPCs {
-		filteredSummary.totalVPCs++
-		for _, subnet := range vpc.Subnets {
-			filteredSummary.totalSubnets++
-			filteredSummary.totalIPs += subnet.TotalIPs
-			filteredSummary.usedIPs += subnet.UsedIPs
-			filteredSummary.availableIPs += subnet.AvailableIPs
-
-			// Count AWS reserved IPs and service IPs from IP details
-			for _, ipDetail := range subnet.IPDetails {
-				if ipDetail.UsageType == "RESERVED BY AWS" {
-					filteredSummary.awsReservedIPs++
-				} else {
-					filteredSummary.serviceIPs++
-				}
-			}
-		}
-	}
+	// Calculate summary for filtered VPCs. SummarizeVPCUsage uses saturating
+	// addition so VPCs with multiple IPv6-only subnets (each reporting a
+	// math.MaxInt "effectively unlimited" sentinel) cannot overflow the totals
+	// into negative values (T-1234).
+	filteredSummary := helpers.SummarizeVPCUsage(filteredVPCs)
 
 	// Set title based on filter
 	if vpcIDFilter != "" {
@@ -176,13 +152,13 @@ func vpcOverview(_ *cobra.Command, _ []string) {
 		metric string
 		count  int
 	}{
-		{"Total VPCs", filteredSummary.totalVPCs},
-		{"Total Subnets", filteredSummary.totalSubnets},
-		{"Total IP Addresses", filteredSummary.totalIPs},
-		{"Used IP Addresses", filteredSummary.usedIPs},
-		{"  - AWS Reserved IPs", filteredSummary.awsReservedIPs},
-		{"  - Service IPs", filteredSummary.serviceIPs},
-		{"Available IP Addresses", filteredSummary.availableIPs},
+		{"Total VPCs", filteredSummary.TotalVPCs},
+		{"Total Subnets", filteredSummary.TotalSubnets},
+		{"Total IP Addresses", filteredSummary.TotalIPs},
+		{"Used IP Addresses", filteredSummary.UsedIPs},
+		{"  - AWS Reserved IPs", filteredSummary.AWSReservedIPs},
+		{"  - Service IPs", filteredSummary.ServiceIPs},
+		{"Available IP Addresses", filteredSummary.AvailableIPs},
 	}
 
 	for _, item := range summaryData {
