@@ -87,3 +87,54 @@ func TestGetAllVPCRouteTables_Pagination(t *testing.T) {
 		}
 	}
 }
+
+// TestGetAllVPCRouteTables_MainAssociationSetsDefault verifies that a route
+// table whose only association is the implicit/main association (Main == true,
+// no SubnetId) is mapped with Default == true and no Subnets. EC2 represents a
+// VPC's main route table this way; before the fix the mapper only looked at
+// Association.SubnetId, so the main route table came back with Default == false
+// and an empty Subnets slice, hiding that it applies to all unassociated
+// subnets (T-1270).
+func TestGetAllVPCRouteTables_MainAssociationSetsDefault(t *testing.T) {
+	mock := &mockDescribeRouteTablesClient{
+		routeTables: []types.RouteTable{
+			{
+				RouteTableId: aws.String("rtb-main0001"),
+				VpcId:        aws.String("vpc-00000001"),
+				OwnerId:      aws.String("123456789012"),
+				Associations: []types.RouteTableAssociation{
+					{Main: aws.Bool(true)},
+				},
+			},
+			{
+				RouteTableId: aws.String("rtb-explicit1"),
+				VpcId:        aws.String("vpc-00000001"),
+				OwnerId:      aws.String("123456789012"),
+				Associations: []types.RouteTableAssociation{
+					{Main: aws.Bool(false), SubnetId: aws.String("subnet-11111111")},
+				},
+			},
+		},
+	}
+
+	result := getAllVPCRouteTables(mock)
+	if len(result) != 2 {
+		t.Fatalf("getAllVPCRouteTables() returned %d route tables, want 2", len(result))
+	}
+
+	main := result[0]
+	if !main.Default {
+		t.Errorf("main route table %q: Default = false, want true (main association not detected)", main.ID)
+	}
+	if len(main.Subnets) != 0 {
+		t.Errorf("main route table %q: Subnets = %v, want empty (main association has no SubnetId)", main.ID, main.Subnets)
+	}
+
+	explicit := result[1]
+	if explicit.Default {
+		t.Errorf("explicit route table %q: Default = true, want false (no main association)", explicit.ID)
+	}
+	if len(explicit.Subnets) != 1 || explicit.Subnets[0] != "subnet-11111111" {
+		t.Errorf("explicit route table %q: Subnets = %v, want [subnet-11111111]", explicit.ID, explicit.Subnets)
+	}
+}

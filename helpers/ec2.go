@@ -380,9 +380,17 @@ func getAllVPCRouteTables(svc ec2.DescribeRouteTablesAPIClient) []VPCRouteTable 
 		}
 		for _, routetable := range page.RouteTables {
 			var subnets []string
+			var isDefault bool
 			for _, assocs := range routetable.Associations {
 				if assocs.SubnetId != nil {
 					subnets = append(subnets, *assocs.SubnetId)
+				}
+				// EC2 represents a VPC's main route table as an implicit
+				// association with Main == true and no SubnetId. Flag it so
+				// callers can show that it applies to all subnets without an
+				// explicit association (T-1270).
+				if aws.ToBool(assocs.Main) {
+					isDefault = true
 				}
 			}
 			table := VPCRouteTable{
@@ -391,6 +399,7 @@ func getAllVPCRouteTables(svc ec2.DescribeRouteTablesAPIClient) []VPCRouteTable 
 				ID:      aws.ToString(routetable.RouteTableId),
 				Routes:  parseVPCRoutes(routetable.Routes),
 				Subnets: subnets,
+				Default: isDefault,
 			}
 			result = append(result, table)
 		}
