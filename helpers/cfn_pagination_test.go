@@ -102,7 +102,10 @@ func TestGetResourcesByStackName_Pagination(t *testing.T) {
 	mock.pages[stack] = makeStackResourceSummaries(total)
 
 	name := stack
-	result := getResourcesByStackName(&name, mock)
+	result, err := getResourcesByStackName(&name, mock)
+	if err != nil {
+		t.Fatalf("getResourcesByStackName() returned unexpected error: %v", err)
+	}
 
 	if len(result) != total {
 		t.Fatalf("getResourcesByStackName() returned %d resources, want %d (pagination bug: only first page returned)", len(result), total)
@@ -153,7 +156,10 @@ func TestGetNestedCloudFormationResources_PaginatesNested(t *testing.T) {
 	mock.pages[nested] = makeStackResourceSummaries(150)
 
 	name := parent
-	result := getNestedCloudFormationResources(&name, mock)
+	result, err := getNestedCloudFormationResources(&name, mock)
+	if err != nil {
+		t.Fatalf("getNestedCloudFormationResources() returned unexpected error: %v", err)
+	}
 
 	// Expect every resource from both levels: 150 + 1 (nested marker) + 150.
 	wantTotal := 150 + 1 + 150
@@ -200,7 +206,10 @@ func TestGetNestedCloudFormationResources_SkipsNestedWithoutPhysicalID(t *testin
 	}
 
 	name := parent
-	result := getNestedCloudFormationResources(&name, mock)
+	result, err := getNestedCloudFormationResources(&name, mock)
+	if err != nil {
+		t.Fatalf("getNestedCloudFormationResources() returned unexpected error: %v", err)
+	}
 
 	if len(result) != 1 {
 		t.Fatalf("expected only the orphan nested entry, got %d resources", len(result))

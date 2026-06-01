@@ -18,7 +18,7 @@ var resourcesCmd = &cobra.Command{
 Return values are the ResourceID, Type, and Stack of the resource. You can use the --namefile flag to show names instead of resource ids.
 
 --verbose will add the status and logicalname (the nme within the stack) to the output`,
-	Run: listResources,
+	RunE: listResources,
 }
 
 type cfnResource struct {
@@ -59,10 +59,13 @@ func buildCfnResource(resource types.StackResource, nameResolver func(string) st
 	}
 }
 
-func listResources(_ *cobra.Command, _ []string) {
+func listResources(_ *cobra.Command, _ []string) error {
 	awsConfig := config.DefaultAwsConfig(*settings)
 	resultTitle := "CloudFormation resources for stack " + *stackname
-	unparsedResources := helpers.GetNestedCloudFormationResources(stackname, awsConfig.CloudformationClient())
+	unparsedResources, err := helpers.GetNestedCloudFormationResources(stackname, awsConfig.CloudformationClient())
+	if err != nil {
+		return err
+	}
 	resources := make([]cfnResource, len(unparsedResources))
 
 	c := make(chan cfnResource)
@@ -95,4 +98,5 @@ func listResources(_ *cobra.Command, _ []string) {
 		output.AddHolder(holder)
 	}
 	output.Write()
+	return nil
 }
