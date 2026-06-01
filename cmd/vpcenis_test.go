@@ -3,12 +3,16 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/ArjenSchwarz/awstools/helpers"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
+	"github.com/spf13/viper"
 )
 
 // eniAttachmentLookupClient is the minimum EC2 API surface used by
@@ -334,5 +338,101 @@ func TestGetAttachment_VpcEndpoint_NoMatch_T705(t *testing.T) {
 	}
 	if mock.describeVpcEndpointsCalls != 2 {
 		t.Errorf("expected exhaustive pagination (2 calls), got %d", mock.describeVpcEndpointsCalls)
+	}
+}
+
+// sampleENIs returns a small fixed set of ENIs for output-path tests. Two
+// subnets are represented so the --split path produces more than one group.
+func sampleENIs() []types.NetworkInterface {
+	return []types.NetworkInterface{
+		{
+			NetworkInterfaceId: aws.String("eni-aaa111"),
+			InterfaceType:      types.NetworkInterfaceTypeInterface,
+			VpcId:              aws.String("vpc-111"),
+			SubnetId:           aws.String("subnet-a"),
+			PrivateIpAddresses: []types.NetworkInterfacePrivateIpAddress{
+				{PrivateIpAddress: aws.String("10.0.0.10")},
+			},
+		},
+		{
+			NetworkInterfaceId: aws.String("eni-bbb222"),
+			InterfaceType:      types.NetworkInterfaceTypeInterface,
+			VpcId:              aws.String("vpc-111"),
+			SubnetId:           aws.String("subnet-b"),
+			PrivateIpAddresses: []types.NetworkInterfacePrivateIpAddress{
+				{PrivateIpAddress: aws.String("10.0.1.20")},
+			},
+		},
+	}
+}
+
+// configureOutput sets the viper-backed output settings consumed by
+// settings.NewOutputSettings() and resets them when the test finishes.
+func configureOutput(t *testing.T, format, file string) {
+	t.Helper()
+	viper.Set("output.format", format)
+	viper.Set("output.file", file)
+	t.Cleanup(func() {
+		viper.Set("output.format", "")
+		viper.Set("output.file", "")
+	})
+}
+
+// noAttachment is a stub resolver so output-path tests do not need AWS clients.
+func noAttachment(types.NetworkInterface) string { return "" }
+
+// TestEnisFileOutput_NonSplit_NotEmpty_T1294 is the regression test for
+// T-1294: `awstools vpc enis --file <path>` wrote empty/incorrect content to
+// the file because the ENI rows were routed through the shared package buffer
+// while Write() was called on an empty outer OutputArray. Write() prints the
+// buffer to stdout and resets it before the --file branch runs, so the file
+// branch serialized the empty array.
+//
+// The fix builds a populated OutputArray and calls Write() on it directly. This
+// test drives that exact path: build the non-split ENI output and write it to a
+// temp file, then assert the file contains the ENI rows (not an empty JSON
+// array).
+func TestEnisFileOutput_NonSplit_NotEmpty_T1294(t *testing.T) {
+	dir := t.TempDir()
+	outFile := filepath.Join(dir, "enis.json")
+	configureOutput(t, "json", outFile)
+
+	writeENIs(sampleENIs(), map[string]string{}, "VPC ENIs", noAttachment)
+
+	data, err := os.ReadFile(outFile)
+	if err != nil {
+		t.Fatalf("reading output file: %v", err)
+	}
+	contents := strings.TrimSpace(string(data))
+	if contents == "" || contents == "[]" || contents == "null" {
+		t.Fatalf("output file is empty/has no ENI rows: %q", contents)
+	}
+	if !strings.Contains(contents, "eni-aaa111") || !strings.Contains(contents, "eni-bbb222") {
+		t.Fatalf("output file missing expected ENI rows, got: %q", contents)
+	}
+}
+
+// TestEnisFileOutput_Split_NotEmpty_T1294 covers the --split path: every
+// subnet group must reach the --file output. The split path accumulates real
+// OutputArray data for the final Write() so the file branch has content even
+// after the buffer is reset following the stdout pass (T-1294).
+func TestEnisFileOutput_Split_NotEmpty_T1294(t *testing.T) {
+	dir := t.TempDir()
+	outFile := filepath.Join(dir, "enis-split.json")
+	configureOutput(t, "json", outFile)
+
+	writeENIsBySubnet(sampleENIs(), map[string]string{}, "VPC ENIs", noAttachment)
+
+	data, err := os.ReadFile(outFile)
+	if err != nil {
+		t.Fatalf("reading output file: %v", err)
+	}
+	contents := strings.TrimSpace(string(data))
+	if contents == "" || contents == "[]" || contents == "null" {
+		t.Fatalf("split output file is empty/has no ENI rows: %q", contents)
+	}
+	// Both subnet groups' ENIs must be present in the file output.
+	if !strings.Contains(contents, "eni-aaa111") || !strings.Contains(contents, "eni-bbb222") {
+		t.Fatalf("split output file missing ENI rows from one or more subnet groups, got: %q", contents)
 	}
 }

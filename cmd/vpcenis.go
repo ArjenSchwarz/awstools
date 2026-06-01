@@ -7,7 +7,6 @@ import (
 	"github.com/ArjenSchwarz/awstools/helpers"
 	format "github.com/ArjenSchwarz/go-output"
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	"github.com/spf13/cobra"
 )
@@ -37,33 +36,79 @@ func enis(_ *cobra.Command, _ []string) {
 	names := helpers.GetAllEC2ResourceNames(ec2Client, awsConfig.DirectConnectClient())
 	resultTitle := "VPC ENIs for account " + getName(helpers.GetAccountID(awsConfig.StsClient()))
 	interfaces := helpers.GetNetworkInterfaces(ec2Client)
-	output := format.OutputArray{Settings: settings.NewOutputSettings()}
-	if vpceenisSplit {
-		output.Settings.SeparateTables = true
-		groups := splitBySubnet(interfaces)
-		for subnet, group := range groups {
-			printENIs(group, names, fmt.Sprintf("%s - %s: %s", resultTitle, getNameAndIDFromMap(aws.ToString(group[0].VpcId), names), getNameAndIDFromMap(subnet, names)), true, ec2Client)
-		}
-	} else {
-		printENIs(interfaces, names, resultTitle, false, ec2Client)
+
+	// Build cache once for all ENIs to avoid per-ENI API calls (T-727).
+	cache := helpers.NewENILookupCache(ec2Client, interfaces)
+	attachmentFor := func(eni types.NetworkInterface) string {
+		return helpers.GetAttachmentFromCache(eni, cache)
 	}
+
+	if vpceenisSplit {
+		writeENIsBySubnet(interfaces, names, resultTitle, attachmentFor)
+		return
+	}
+
+	writeENIs(interfaces, names, resultTitle, attachmentFor)
+}
+
+// writeENIs renders the single (non-split) ENI table. It writes the populated
+// OutputArray directly so both stdout and --file serialize the same ENI rows
+// (T-1294). Routing through the shared package buffer would leave --file empty
+// because Write() resets the buffer after the stdout pass and before the file
+// pass.
+func writeENIs(interfaces []types.NetworkInterface, names map[string]string, resultTitle string, attachmentFor func(types.NetworkInterface) string) {
+	output := buildENIOutput(interfaces, names, resultTitle, false, attachmentFor)
 	output.Write()
 }
 
-func printENIs(interfaces []types.NetworkInterface, names map[string]string, resultTitle string, split bool, svc *ec2.Client) {
-	keys := []string{"ENI", typeColumn, attachmentColumn, "IPs", vpcColumn, subnetColumn}
+// writeENIsBySubnet renders one separate table per subnet group. Each group is
+// pushed to the shared buffer for stdout fidelity (separate, per-subnet titled
+// tables). The final Write() is called on a populated OutputArray that holds
+// every row across all groups so the --file branch has real data to serialize
+// even after Write() resets the buffer following the stdout pass (T-1294).
+func writeENIsBySubnet(interfaces []types.NetworkInterface, names map[string]string, resultTitle string, attachmentFor func(types.NetworkInterface) string) {
+	groups := splitBySubnet(interfaces)
+
+	combined := format.OutputArray{Keys: splitENIKeys, Settings: settings.NewOutputSettings()}
+	combined.Settings.SeparateTables = true
+	combined.Settings.Title = resultTitle
+	combined.Settings.SortKey = attachmentColumn
+
+	for subnet, group := range groups {
+		groupTitle := fmt.Sprintf("%s - %s: %s", resultTitle, getNameAndIDFromMap(aws.ToString(group[0].VpcId), names), getNameAndIDFromMap(subnet, names))
+		groupOutput := buildENIOutput(group, names, groupTitle, true, attachmentFor)
+		// Accumulate each row into the combined array so the final Write() has
+		// real contents for the --file branch.
+		for _, holder := range groupOutput.Contents {
+			combined.AddContents(holder.Contents)
+		}
+		groupOutput.AddToBuffer()
+	}
+	combined.Write()
+}
+
+const (
+	eniColumn = "ENI"
+	ipsColumn = "IPs"
+)
+
+var fullENIKeys = []string{eniColumn, typeColumn, attachmentColumn, ipsColumn, vpcColumn, subnetColumn}
+var splitENIKeys = []string{eniColumn, typeColumn, attachmentColumn, ipsColumn}
+
+// buildENIOutput constructs a populated OutputArray for the supplied ENIs. The
+// attachmentFor resolver decouples row construction from the AWS-backed
+// ENILookupCache so the output shape is unit testable (T-1294).
+func buildENIOutput(interfaces []types.NetworkInterface, names map[string]string, resultTitle string, split bool, attachmentFor func(types.NetworkInterface) string) format.OutputArray {
+	keys := fullENIKeys
 	output := format.OutputArray{Keys: keys, Settings: settings.NewOutputSettings()}
 	output.Settings.Title = resultTitle
 	output.Settings.SortKey = subnetColumn
 	if split {
 		// unset VPC and subnet
-		output.Keys = []string{"ENI", typeColumn, attachmentColumn, "IPs"}
+		output.Keys = splitENIKeys
 		output.Settings.SeparateTables = true
 		output.Settings.SortKey = attachmentColumn
 	}
-
-	// Build cache once for all ENIs to avoid per-ENI API calls (T-727).
-	cache := helpers.NewENILookupCache(svc, interfaces)
 
 	for _, netinterface := range interfaces {
 		content := make(map[string]any)
@@ -76,15 +121,15 @@ func printENIs(interfaces []types.NetworkInterface, names map[string]string, res
 				iparray = append(iparray, *ips.PrivateIpAddress)
 			}
 		}
-		content["ENI"] = aws.ToString(netinterface.NetworkInterfaceId)
+		content[eniColumn] = aws.ToString(netinterface.NetworkInterfaceId)
 		content[typeColumn] = netinterface.InterfaceType
-		content[attachmentColumn] = getNameAndIDFromMap(helpers.GetAttachmentFromCache(netinterface, cache), names)
-		content["IPs"] = iparray
+		content[attachmentColumn] = getNameAndIDFromMap(attachmentFor(netinterface), names)
+		content[ipsColumn] = iparray
 		content[vpcColumn] = getNameAndIDFromMap(aws.ToString(netinterface.VpcId), names)
 		content[subnetColumn] = getNameAndIDFromMap(aws.ToString(netinterface.SubnetId), names)
 		output.AddContents(content)
 	}
-	output.AddToBuffer()
+	return output
 }
 
 func splitBySubnet(interfaces []types.NetworkInterface) map[string][]types.NetworkInterface {
