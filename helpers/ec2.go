@@ -1255,6 +1255,12 @@ func isPublicSubnet(subnetID string, vpcID string, routeTables []types.RouteTabl
 // hasInternetGatewayRoute checks if a route table has a route to an internet gateway
 func hasInternetGatewayRoute(routeTable types.RouteTable) bool {
 	for _, route := range routeTable.Routes {
+		// Skip blackhole routes: when an internet gateway target is deleted,
+		// AWS leaves the route in the table with State=blackhole. Such a route
+		// is unusable, so it must not make a subnet public (T-1411).
+		if route.State == types.RouteStateBlackhole {
+			continue
+		}
 		// Check for internet gateway route
 		if route.GatewayId != nil && strings.HasPrefix(*route.GatewayId, "igw-") {
 			// Check for IPv4 default route (0.0.0.0/0)

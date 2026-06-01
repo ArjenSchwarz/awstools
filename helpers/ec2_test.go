@@ -1903,6 +1903,85 @@ func TestIsPublicSubnet_IPv6OnlyPublic(t *testing.T) {
 	}
 }
 
+// Regression tests for T-1411: blackhole IGW default routes were classified
+// as public. When an internet gateway target is deleted, AWS leaves the route
+// in the table with State=blackhole. Such a route is unusable and must not
+// make a subnet public.
+
+func TestHasInternetGatewayRoute_IPv4BlackholeNotPublic(t *testing.T) {
+	routeTable := types.RouteTable{
+		RouteTableId: aws.String("rtb-blackhole-v4"),
+		Routes: []types.Route{
+			{
+				DestinationCidrBlock: aws.String("0.0.0.0/0"),
+				GatewayId:            aws.String("igw-deleted"),
+				State:                types.RouteStateBlackhole,
+			},
+		},
+	}
+	if hasInternetGatewayRoute(routeTable) {
+		t.Error("route table with blackhole IPv4 igw default route should NOT be detected as having internet gateway route")
+	}
+}
+
+func TestHasInternetGatewayRoute_IPv6BlackholeNotPublic(t *testing.T) {
+	routeTable := types.RouteTable{
+		RouteTableId: aws.String("rtb-blackhole-v6"),
+		Routes: []types.Route{
+			{
+				DestinationIpv6CidrBlock: aws.String("::/0"),
+				GatewayId:                aws.String("igw-deleted"),
+				State:                    types.RouteStateBlackhole,
+			},
+		},
+	}
+	if hasInternetGatewayRoute(routeTable) {
+		t.Error("route table with blackhole IPv6 igw default route should NOT be detected as having internet gateway route")
+	}
+}
+
+func TestHasInternetGatewayRoute_ActiveStateStillPublic(t *testing.T) {
+	// An explicitly active route must still be treated as public.
+	routeTable := types.RouteTable{
+		RouteTableId: aws.String("rtb-active"),
+		Routes: []types.Route{
+			{
+				DestinationCidrBlock: aws.String("0.0.0.0/0"),
+				GatewayId:            aws.String("igw-active"),
+				State:                types.RouteStateActive,
+			},
+		},
+	}
+	if !hasInternetGatewayRoute(routeTable) {
+		t.Error("route table with active igw default route should be detected as having internet gateway route")
+	}
+}
+
+func TestIsPublicSubnet_BlackholeIGWNotPublic(t *testing.T) {
+	routeTables := []types.RouteTable{
+		{
+			RouteTableId: aws.String("rtb-blackhole-subnet"),
+			VpcId:        aws.String("vpc-bh"),
+			Associations: []types.RouteTableAssociation{
+				{
+					SubnetId: aws.String("subnet-bh"),
+				},
+			},
+			Routes: []types.Route{
+				{
+					DestinationCidrBlock: aws.String("0.0.0.0/0"),
+					GatewayId:            aws.String("igw-deleted"),
+					State:                types.RouteStateBlackhole,
+				},
+			},
+		},
+	}
+
+	if isPublicSubnet("subnet-bh", "vpc-bh", routeTables) {
+		t.Error("subnet whose only igw default route is blackhole should NOT be classified as public")
+	}
+}
+
 // Regression tests for T-568: prefix list routes were silently dropped
 // because FormatRouteTableInfo only checked DestinationCidrBlock and
 // DestinationIpv6CidrBlock, ignoring DestinationPrefixListId entirely.
