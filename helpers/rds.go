@@ -45,13 +45,19 @@ func addAllInstanceNames(svc rds.DescribeDBInstancesAPIClient, result map[string
 			panic(err)
 		}
 		for _, dbinstance := range resp.DBInstances {
-			result[*dbinstance.DbiResourceId] = *dbinstance.DBInstanceIdentifier
-			if dbinstance.TagList != nil {
-				for _, tag := range dbinstance.TagList {
-					if *tag.Key == "Name" {
-						result[*dbinstance.DbiResourceId] = *tag.Value
-						break
-					}
+			// DbiResourceId is the map key; without it there is nothing to
+			// store, so skip instances that lack one rather than panic.
+			resourceID := aws.ToString(dbinstance.DbiResourceId)
+			if resourceID == "" {
+				continue
+			}
+			// Fall back to the instance identifier (which may itself be
+			// empty) and prefer a Name tag when one is present.
+			result[resourceID] = aws.ToString(dbinstance.DBInstanceIdentifier)
+			for _, tag := range dbinstance.TagList {
+				if aws.ToString(tag.Key) == "Name" && tag.Value != nil {
+					result[resourceID] = aws.ToString(tag.Value)
+					break
 				}
 			}
 		}

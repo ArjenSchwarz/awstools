@@ -103,3 +103,61 @@ func TestAddAllInstanceNames_Pagination(t *testing.T) {
 		}
 	}
 }
+
+// TestAddAllInstanceNames_NilFields verifies that addAllInstanceNames safely
+// handles DB instances and tags with nil pointer fields. The AWS SDK returns
+// pointer fields that may be nil; before the fix the helper dereferenced
+// DbiResourceId, DBInstanceIdentifier, tag.Key, and tag.Value directly, which
+// panicked instead of skipping or falling back. T-1104.
+func TestAddAllInstanceNames_NilFields(t *testing.T) {
+	instances := []types.DBInstance{
+		// nil DbiResourceId: no map key available, must be skipped entirely.
+		{
+			DBInstanceIdentifier: aws.String("db-no-resource-id"),
+		},
+		// nil DBInstanceIdentifier: should fall back to empty rather than panic.
+		{
+			DbiResourceId: aws.String("db-resource-nil-identifier"),
+		},
+		// nil tag key and nil Name tag value: must not panic; identifier is used.
+		{
+			DbiResourceId:        aws.String("db-resource-nil-tags"),
+			DBInstanceIdentifier: aws.String("db-identifier-nil-tags"),
+			TagList: []types.Tag{
+				{Key: nil, Value: aws.String("ignored")},
+				{Key: aws.String("Name"), Value: nil},
+			},
+		},
+		// well-formed instance with a Name tag to confirm normal behaviour.
+		{
+			DbiResourceId:        aws.String("db-resource-good"),
+			DBInstanceIdentifier: aws.String("db-identifier-good"),
+			TagList: []types.Tag{
+				{Key: aws.String("Name"), Value: aws.String("good-name")},
+			},
+		},
+	}
+	mock := &mockDescribeDBInstancesClient{instances: instances}
+
+	result := addAllInstanceNames(mock, map[string]string{})
+
+	// Instance with nil DbiResourceId must be skipped (no key to store under).
+	if _, ok := result["db-no-resource-id"]; ok {
+		t.Errorf("instance with nil DbiResourceId should be skipped, got entry %q", result["db-no-resource-id"])
+	}
+	if len(result) != 3 {
+		t.Fatalf("expected 3 entries (nil-resource-id skipped), got %d: %v", len(result), result)
+	}
+	// nil DBInstanceIdentifier falls back to empty string.
+	if got := result["db-resource-nil-identifier"]; got != "" {
+		t.Errorf("nil DBInstanceIdentifier should fall back to %q, got %q", "", got)
+	}
+	// nil tag key / nil Name value: falls back to the instance identifier.
+	if got := result["db-resource-nil-tags"]; got != "db-identifier-nil-tags" {
+		t.Errorf("nil tag fields should fall back to identifier %q, got %q", "db-identifier-nil-tags", got)
+	}
+	// well-formed instance uses its Name tag.
+	if got := result["db-resource-good"]; got != "good-name" {
+		t.Errorf("expected Name tag %q, got %q", "good-name", got)
+	}
+}
