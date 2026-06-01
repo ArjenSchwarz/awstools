@@ -251,6 +251,7 @@ func GetUserDetails(svc IAMClient) []IAMUser {
 		go func(user types.User) {
 			userStruct := IAMUser{
 				Name: aws.ToString(user.UserName),
+				ID:   aws.ToString(user.UserId),
 				User: &user,
 			}
 			userStruct.Groups = GetGroupNameSliceForUser(user.UserName, svc)
@@ -306,6 +307,7 @@ func GetGroupDetails(svc IAMClient) []IAMGroup {
 			groupName := aws.ToString(group.GroupName)
 			groupStruct := IAMGroup{
 				Name:  groupName,
+				ID:    aws.ToString(group.GroupId),
 				Group: &group,
 			}
 			groupStruct.InlinePolicies = GetGroupPoliciesMapForGroups([]string{groupName}, svc)
