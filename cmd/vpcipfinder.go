@@ -30,7 +30,7 @@ var ipFinderCmd = &cobra.Command{
 	  awstools vpc ip-finder 10.0.1.100 --output json
 	  awstools vpc ip-finder 10.0.1.100 --region eu-west-1`,
 	Args: cobra.ExactArgs(1),
-	Run:  findIPAddress,
+	RunE: findIPAddress,
 }
 
 var (
@@ -61,12 +61,14 @@ func validateIPFinderFlags(ipAddress string, allRegions bool) error {
 	return nil
 }
 
-func findIPAddress(_ *cobra.Command, args []string) {
+func findIPAddress(_ *cobra.Command, args []string) error {
 	ipAddress := args[0]
 
-	// Validate arguments and flags before any AWS calls.
+	// Validate arguments and flags before any AWS calls. Invalid user input is
+	// an expected CLI error, so it is returned as a normal error (handled by
+	// Cobra/Execute) rather than triggering a panic (T-1370).
 	if err := validateIPFinderFlags(ipAddress, searchAllRegions); err != nil {
-		panic(err)
+		return err
 	}
 
 	// Load AWS configuration
@@ -79,6 +81,7 @@ func findIPAddress(_ *cobra.Command, args []string) {
 
 	// Format and output results
 	formatIPFinderOutput(results)
+	return nil
 }
 
 func formatIPFinderOutput(results []helpers.IPFinderResult) {
