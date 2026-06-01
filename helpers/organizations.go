@@ -121,10 +121,10 @@ func formatChild(raw types.Child, svc OrganizationsAPI) (OrganizationEntry, erro
 		}
 		details, err := svc.DescribeOrganizationalUnit(context.TODO(), input)
 		if err != nil {
-			return OrganizationEntry{}, fmt.Errorf("failed to describe OU %s: %w", *raw.Id, err)
+			return OrganizationEntry{}, fmt.Errorf("failed to describe OU %s: %w", aws.ToString(raw.Id), err)
 		}
 		if details.OrganizationalUnit == nil {
-			return OrganizationEntry{}, fmt.Errorf("OU metadata is nil for %s", *raw.Id)
+			return OrganizationEntry{}, fmt.Errorf("OU metadata is nil for %s", aws.ToString(raw.Id))
 		}
 		return OrganizationEntry{
 			Name:     aws.ToString(details.OrganizationalUnit.Name),
@@ -139,10 +139,10 @@ func formatChild(raw types.Child, svc OrganizationsAPI) (OrganizationEntry, erro
 	}
 	details, err := svc.DescribeAccount(context.TODO(), input)
 	if err != nil {
-		return OrganizationEntry{}, fmt.Errorf("failed to describe account %s: %w", *raw.Id, err)
+		return OrganizationEntry{}, fmt.Errorf("failed to describe account %s: %w", aws.ToString(raw.Id), err)
 	}
 	if details.Account == nil {
-		return OrganizationEntry{}, fmt.Errorf("account metadata is nil for %s", *raw.Id)
+		return OrganizationEntry{}, fmt.Errorf("account metadata is nil for %s", aws.ToString(raw.Id))
 	}
 	return OrganizationEntry{
 		Name:     aws.ToString(details.Account.Name),
