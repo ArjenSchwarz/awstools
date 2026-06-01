@@ -11,6 +11,31 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
 )
 
+// TestEnisGraphFormatError_T1145 verifies that the vpc enis command rejects the
+// graph output formats it cannot produce. ENIs are leaf resources with no
+// from/to relationship, so dot/drawio cannot generate a meaningful diagram.
+//
+// Before the T-1145 fix the command advertised dot/drawio in its help but never
+// configured DrawIOHeader or FromToColumns. go-output v1.4.0 then either called
+// log.Fatal (non-split path) or silently produced nothing (split path). This
+// test pins the expectation that those formats now yield a clear, returnable
+// error rather than a fatal exit or empty output.
+func TestEnisGraphFormatError_T1145(t *testing.T) {
+	rejected := []string{"dot", "drawio", "DOT", "DrawIO"}
+	for _, format := range rejected {
+		if err := enisGraphFormatError(format); err == nil {
+			t.Errorf("format %q: expected an error for unsupported graph format, got nil", format)
+		}
+	}
+
+	allowed := []string{"json", "csv", "table", "html", "mermaid", ""}
+	for _, format := range allowed {
+		if err := enisGraphFormatError(format); err != nil {
+			t.Errorf("format %q: expected no error for supported format, got %v", format, err)
+		}
+	}
+}
+
 // eniAttachmentLookupClient is the minimum EC2 API surface used by
 // getAttachment (below) to resolve ENI attachment metadata via the paginated
 // helpers. Kept in the test file after T-727 moved production code to use
