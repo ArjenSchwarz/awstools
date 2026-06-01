@@ -422,3 +422,43 @@ func TestFormatChild_NilAccountMetadata_ReturnsError(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "account metadata is nil")
 }
+
+// TestFormatChild_NilOUID_DescribeError_ReturnsError verifies that when AWS
+// returns an OU child with a nil Id and the subsequent DescribeOrganizationalUnit
+// call fails, formatChild returns an error rather than panicking while formatting
+// the error message (it must not dereference *raw.Id).
+func TestFormatChild_NilOUID_DescribeError_ReturnsError(t *testing.T) {
+	mock := &mockOrganizationsClient{
+		DescribeOrganizationalUnitFunc: func(_ context.Context, _ *organizations.DescribeOrganizationalUnitInput, _ ...func(*organizations.Options)) (*organizations.DescribeOrganizationalUnitOutput, error) {
+			return nil, errors.New("access denied to OU")
+		},
+	}
+	child := orgtypes.Child{
+		Id:   nil,
+		Type: orgtypes.ChildType(orgtypes.TargetTypeOrganizationalUnit),
+	}
+
+	_, err := formatChild(child, mock)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "access denied to OU")
+}
+
+// TestFormatChild_NilAccountID_DescribeError_ReturnsError verifies that when AWS
+// returns an account child with a nil Id and the subsequent DescribeAccount call
+// fails, formatChild returns an error rather than panicking while formatting the
+// error message (it must not dereference *raw.Id).
+func TestFormatChild_NilAccountID_DescribeError_ReturnsError(t *testing.T) {
+	mock := &mockOrganizationsClient{
+		DescribeAccountFunc: func(_ context.Context, _ *organizations.DescribeAccountInput, _ ...func(*organizations.Options)) (*organizations.DescribeAccountOutput, error) {
+			return nil, errors.New("account not found")
+		},
+	}
+	child := orgtypes.Child{
+		Id:   nil,
+		Type: orgtypes.ChildType(orgtypes.TargetTypeAccount),
+	}
+
+	_, err := formatChild(child, mock)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "account not found")
+}
