@@ -3008,7 +3008,7 @@ output = json
 		},
 	}
 
-	err = pg.AppendToConfig(profiles)
+	err = pg.AppendToConfig(profiles, nil)
 	require.NoError(t, err)
 
 	// Read file and verify no duplicates
@@ -3023,5 +3023,129 @@ output = json
 
 	// Unrelated profile must survive
 	assert.Contains(t, string(content), "[profile unrelated-profile]",
+		"unrelated profile should not be removed")
+}
+
+// TestAppendToConfig_ReplaceRemovesRenamedOldProfile verifies the end-to-end
+// replace workflow when the existing same-role profile has a DIFFERENT name
+// from the generated replacement. Existing profile "old-admin" points at the
+// same SSO account/role as the generated "prod-AdministratorAccess"; replace
+// mode must remove "old-admin" and write only "prod-AdministratorAccess", so
+// the file does not end up with two profiles for the same account/role.
+// Regression test for T-1278.
+func TestAppendToConfig_ReplaceRemovesRenamedOldProfile(t *testing.T) {
+	tempDir := t.TempDir()
+	awsDir := filepath.Join(tempDir, ".aws")
+	err := os.MkdirAll(awsDir, 0700)
+	require.NoError(t, err)
+
+	configPath := filepath.Join(awsDir, "config")
+	// Existing profile uses a custom name "old-admin" but points at the same
+	// SSO account/role that the generator will produce as "prod-AdministratorAccess".
+	existingContent := `[profile old-admin]
+region = us-east-1
+sso_start_url = https://example.awsapps.com/start
+sso_region = us-east-1
+sso_account_id = 123456789012
+sso_role_name = AdministratorAccess
+sso_session = test-session
+
+[profile unrelated-profile]
+region = eu-west-1
+output = json
+`
+	err = os.WriteFile(configPath, []byte(existingContent), 0600)
+	require.NoError(t, err)
+
+	// Override HOME so AppendToConfig finds our temp config
+	oldHome := os.Getenv("HOME")
+	os.Setenv("HOME", tempDir)
+	defer func() {
+		if oldHome != "" {
+			os.Setenv("HOME", oldHome)
+		} else {
+			os.Unsetenv("HOME")
+		}
+	}()
+
+	pg, err := NewProfileGenerator(
+		"test-profile",
+		"{account_name}-{role_name}",
+		true, // autoApprove
+		"",   // use default path
+		ConflictReplace,
+		aws.Config{},
+	)
+	require.NoError(t, err)
+
+	// The generated replacement profile for the same account/role.
+	generated := GeneratedProfile{
+		Name:         "prod-AdministratorAccess",
+		AccountID:    "123456789012",
+		AccountName:  "prod",
+		RoleName:     "AdministratorAccess",
+		Region:       "us-east-1",
+		SSOStartURL:  "https://example.awsapps.com/start",
+		SSORegion:    "us-east-1",
+		SSOSession:   "test-session",
+		SSOAccountID: "123456789012",
+		SSORoleName:  "AdministratorAccess",
+	}
+
+	// The resolution action carries the old (renamed) profile name and the new name,
+	// mirroring what ResolveConflicts records for a ConflictReplace same-role conflict.
+	actions := []ConflictAction{
+		{
+			Conflict: ProfileConflict{
+				DiscoveredRole: DiscoveredRole{
+					AccountID:         "123456789012",
+					AccountName:       "prod",
+					PermissionSetName: "AdministratorAccess",
+				},
+				ExistingProfiles: []Profile{
+					{
+						Name:         "old-admin",
+						Region:       "us-east-1",
+						SSOStartURL:  "https://example.awsapps.com/start",
+						SSORegion:    "us-east-1",
+						SSOSession:   "test-session",
+						SSOAccountID: "123456789012",
+						SSORoleName:  "AdministratorAccess",
+					},
+				},
+				ProposedName: "prod-AdministratorAccess",
+			},
+			Action:  ActionReplace,
+			OldName: "old-admin",
+			NewName: "prod-AdministratorAccess",
+		},
+	}
+
+	err = pg.AppendToConfig([]GeneratedProfile{generated}, actions)
+	require.NoError(t, err)
+
+	content, err := os.ReadFile(configPath)
+	require.NoError(t, err)
+	got := string(content)
+
+	// The renamed old profile must be gone.
+	assert.NotContains(t, got, "[profile old-admin]",
+		"old renamed profile should be removed during replace.\nFile content:\n%s", got)
+
+	// The new profile must be present exactly once.
+	newHeader := "[profile prod-AdministratorAccess]"
+	count := strings.Count(got, newHeader)
+	assert.Equal(t, 1, count,
+		"generated profile %q should appear exactly once, found %d.\nFile content:\n%s",
+		newHeader, count, got)
+
+	// Only one profile should point at this account/role.
+	roleLineCount := strings.Count(got, "sso_role_name = AdministratorAccess")
+	assert.Equal(t, 1, roleLineCount,
+		"only one profile should reference the AdministratorAccess role, found %d.\nFile content:\n%s",
+		roleLineCount, got)
+
+	// Unrelated profile must survive.
+	assert.Contains(t, got, "[profile unrelated-profile]",
 		"unrelated profile should not be removed")
 }
