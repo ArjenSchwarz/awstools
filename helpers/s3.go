@@ -2,6 +2,7 @@ package helpers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -9,7 +10,38 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
+	smithy "github.com/aws/smithy-go"
 )
+
+// S3 error codes that represent a normal "no configuration present"
+// answer rather than a failed read. When S3 returns one of these, the
+// corresponding optional configuration simply does not exist for the
+// bucket; this is a definitive absence answer, not an access/transport
+// failure, so callers set the empty/false state instead of leaving it
+// "unknown" and emitting a warning.
+const (
+	s3ErrNoSuchTagSet                              = "NoSuchTagSet"
+	s3ErrNoSuchBucketPolicy                        = "NoSuchBucketPolicy"
+	s3ErrReplicationConfigurationNotFound          = "ReplicationConfigurationNotFoundError"
+	s3ErrServerSideEncryptionConfigurationNotFound = "ServerSideEncryptionConfigurationNotFoundError"
+)
+
+// isS3AbsenceError reports whether err is a smithy API error whose error
+// code matches one of the provided codes. These codes mean S3 gave a
+// definitive "configuration absent" answer, not a failed read.
+func isS3AbsenceError(err error, codes ...string) bool {
+	var apiErr smithy.APIError
+	if !errors.As(err, &apiErr) {
+		return false
+	}
+	code := apiErr.ErrorCode()
+	for _, c := range codes {
+		if code == c {
+			return true
+		}
+	}
+	return false
+}
 
 // S3API defines the subset of the S3 client used by helpers.GetBucketDetails.
 // It exists so tests can inject per-call failures when exercising the
@@ -211,24 +243,29 @@ func GetBucketDetails(svc S3API) []S3Bucket {
 
 		params := &s3.GetBucketEncryptionInput{Bucket: bucket.Name}
 		resp, err := svc.GetBucketEncryption(context.TODO(), params)
-		if err != nil {
+		switch {
+		case isS3AbsenceError(err, s3ErrServerSideEncryptionConfigurationNotFound):
+			// No bucket-level encryption configuration exists. This is a
+			// definitive "not encrypted" answer, not a failed read, so
+			// record false rather than leaving the state unknown.
+			bucketObject.HasEncryption = boolPtr(false)
+		case err != nil:
 			warnS3DetailError(bucketName, "GetBucketEncryption", err)
-		} else {
-			if resp != nil && resp.ServerSideEncryptionConfiguration != nil {
-				bucketObject.EncryptionRules = resp.ServerSideEncryptionConfiguration.Rules
-				bucketObject.HasEncryption = boolPtr(true)
-			} else {
-				bucketObject.HasEncryption = boolPtr(false)
-			}
+		case resp != nil && resp.ServerSideEncryptionConfiguration != nil:
+			bucketObject.EncryptionRules = resp.ServerSideEncryptionConfiguration.Rules
+			bucketObject.HasEncryption = boolPtr(true)
+		default:
+			bucketObject.HasEncryption = boolPtr(false)
 		}
 
 		tagsResp, err := svc.GetBucketTagging(context.TODO(), &s3.GetBucketTaggingInput{Bucket: bucket.Name})
-		if err != nil {
-			// Tag retrieval commonly fails (NoSuchTagSet) for buckets
-			// with no tags; treat as "no tags" rather than an error.
-			// Other failures are logged but not fatal.
+		switch {
+		case isS3AbsenceError(err, s3ErrNoSuchTagSet):
+			// NoSuchTagSet is the normal response for an untagged bucket,
+			// not a failure. Leave Tags empty without a warning.
+		case err != nil:
 			warnS3DetailError(bucketName, "GetBucketTagging", err)
-		} else if tagsResp != nil {
+		case tagsResp != nil:
 			for _, tag := range tagsResp.TagSet {
 				tags[aws.ToString(tag.Key)] = aws.ToString(tag.Value)
 			}
@@ -236,16 +273,24 @@ func GetBucketDetails(svc S3API) []S3Bucket {
 		bucketObject.Tags = tags
 
 		policyResp, err := svc.GetBucketPolicy(context.TODO(), &s3.GetBucketPolicyInput{Bucket: bucket.Name})
-		if err != nil {
+		switch {
+		case isS3AbsenceError(err, s3ErrNoSuchBucketPolicy):
+			// NoSuchBucketPolicy means no policy is attached, a definitive
+			// "not configured" state. Leave Policy empty without a warning.
+		case err != nil:
 			warnS3DetailError(bucketName, "GetBucketPolicy", err)
-		} else if policyResp != nil && policyResp.Policy != nil {
+		case policyResp != nil && policyResp.Policy != nil:
 			bucketObject.Policy = *policyResp.Policy
 		}
 
 		replicationResp, err := svc.GetBucketReplication(context.TODO(), &s3.GetBucketReplicationInput{Bucket: bucket.Name})
-		if err != nil {
+		switch {
+		case isS3AbsenceError(err, s3ErrReplicationConfigurationNotFound):
+			// No replication configuration exists, a definitive empty
+			// state. Leave Replication zero-valued without a warning.
+		case err != nil:
 			warnS3DetailError(bucketName, "GetBucketReplication", err)
-		} else if replicationResp != nil && replicationResp.ReplicationConfiguration != nil {
+		case replicationResp != nil && replicationResp.ReplicationConfiguration != nil:
 			bucketObject.Replication = *replicationResp.ReplicationConfiguration
 		}
 
