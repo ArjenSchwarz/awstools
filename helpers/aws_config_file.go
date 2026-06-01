@@ -25,9 +25,10 @@ type AWSConfigFile struct {
 
 // SSOSession represents an SSO session configuration
 type SSOSession struct {
-	Name        string `json:"name" yaml:"name"`
-	SSOStartURL string `json:"sso_start_url" yaml:"sso_start_url"`
-	SSORegion   string `json:"sso_region" yaml:"sso_region"`
+	Name            string            `json:"name" yaml:"name"`
+	SSOStartURL     string            `json:"sso_start_url" yaml:"sso_start_url"`
+	SSORegion       string            `json:"sso_region" yaml:"sso_region"`
+	OtherProperties map[string]string `json:"other_properties" yaml:"other_properties"`
 }
 
 // Validate checks if the SSO session is valid
@@ -339,7 +340,8 @@ func (cf *AWSConfigFile) parseConfigFileWithRecovery(file *os.File) error {
 
 			// Start new SSO session
 			currentSession = &SSOSession{
-				Name: sessionName,
+				Name:            sessionName,
+				OtherProperties: make(map[string]string),
 			}
 		} else if currentSession != nil { //nolint:gocritic // Sequential parsing logic requires if-else chain
 			// Parse SSO session property line
@@ -365,12 +367,13 @@ func (cf *AWSConfigFile) parseConfigFileWithRecovery(file *os.File) error {
 					case ssoRegionKey:
 						currentSession.SSORegion = value
 					default:
-						// Log unknown property but continue
-						parseErrors = append(parseErrors, NewValidationError(
-							fmt.Sprintf("unknown SSO session property '%s' at line %d", key, lineNumber), nil).
-							WithContext("line_number", lineNumber).
-							WithContext("property_key", key).
-							WithContext("session_name", currentSession.Name))
+						// Preserve other AWS CLI session properties (e.g.
+						// sso_registration_scopes) so write paths don't drop
+						// them. See T-1302.
+						if currentSession.OtherProperties == nil {
+							currentSession.OtherProperties = make(map[string]string)
+						}
+						currentSession.OtherProperties[key] = value
 					}
 				} else {
 					parseErrors = append(parseErrors, NewValidationError(
@@ -561,6 +564,11 @@ func (cf *AWSConfigFile) WriteToFile() error {
 			}
 			if session.SSORegion != "" {
 				sessionConfig += fmt.Sprintf("sso_region = %s\n", session.SSORegion)
+			}
+			// Preserve other AWS CLI session properties (e.g.
+			// sso_registration_scopes). See T-1302.
+			for key, value := range session.OtherProperties {
+				sessionConfig += fmt.Sprintf("%s = %s\n", key, value)
 			}
 			sessionConfig += "\n"
 

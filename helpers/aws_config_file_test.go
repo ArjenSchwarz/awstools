@@ -573,6 +573,59 @@ func TestAWSConfigFile_ParseLongLine(t *testing.T) {
 	assert.Equal(t, "us-west-2", trailing.Region)
 }
 
+// TestAWSConfigFile_PreserveSSOSessionExtraProperties is a regression test for
+// T-1302: the parser only stored sso_start_url and sso_region on SSOSession and
+// treated other AWS CLI session keys (such as sso_registration_scopes) as parse
+// warnings, dropping them. Any write path that rewrites the config from the
+// parsed model (WriteToFile) therefore silently corrupted modern AWS CLI SSO
+// session configuration. Extra SSO session properties must now be preserved
+// across a parse-then-write round trip.
+func TestAWSConfigFile_PreserveSSOSessionExtraProperties(t *testing.T) {
+	tempDir := t.TempDir()
+	configPath := filepath.Join(tempDir, "config")
+
+	configContent := `[sso-session test-session]
+sso_start_url = https://test.awsapps.com/start
+sso_region = us-east-1
+sso_registration_scopes = sso:account:access
+
+[profile test-profile]
+region = us-east-1
+sso_session = test-session
+sso_account_id = 123456789012
+sso_role_name = AdministratorAccess
+`
+
+	require.NoError(t, os.WriteFile(configPath, []byte(configContent), 0600))
+
+	// Parse loads cleanly with no warning for the known-good extra key.
+	configFile, err := LoadAWSConfigFile(configPath)
+	require.NoError(t, err)
+
+	session, exists := configFile.Sessions["test-session"]
+	require.True(t, exists)
+	assert.Equal(t, "https://test.awsapps.com/start", session.SSOStartURL)
+	assert.Equal(t, "us-east-1", session.SSORegion)
+	assert.Equal(t, "sso:account:access", session.OtherProperties["sso_registration_scopes"],
+		"extra SSO session properties must be retained on parse")
+
+	// Rewriting the whole config from the parsed model must not drop the
+	// extra property.
+	require.NoError(t, configFile.WriteToFile())
+
+	written, err := os.ReadFile(configPath)
+	require.NoError(t, err)
+	assert.Contains(t, string(written), "sso_registration_scopes = sso:account:access",
+		"extra SSO session properties must be written back")
+
+	// Reloading the rewritten file must still expose the extra property.
+	reloaded, err := LoadAWSConfigFile(configPath)
+	require.NoError(t, err)
+	reloadedSession, exists := reloaded.Sessions["test-session"]
+	require.True(t, exists)
+	assert.Equal(t, "sso:account:access", reloadedSession.OtherProperties["sso_registration_scopes"])
+}
+
 func TestAWSConfigFile_FindProfilesByName(t *testing.T) {
 	configFile := &AWSConfigFile{
 		Profiles: map[string]Profile{
@@ -1936,11 +1989,13 @@ sso_account_id = 123456789012`,
 			errorType:      ErrorTypeValidation,
 		},
 		{
-			name: "unknown SSO session property",
+			// T-1302: additional SSO session properties are now preserved
+			// rather than reported as parse errors.
+			name: "extra SSO session property is preserved",
 			configContent: `[sso-session dev]
 sso_start_url = https://example.awsapps.com/start
 sso_region = us-east-1
-unknown_property = value
+sso_registration_scopes = sso:account:access
 
 [profile dev-admin]
 sso_session = dev
@@ -1948,8 +2003,7 @@ sso_account_id = 123456789012
 sso_role_name = AdministratorAccess`,
 			expectProfiles: 1,
 			expectSessions: 1,
-			expectError:    true,
-			errorType:      ErrorTypeValidation,
+			expectError:    false,
 		},
 	}
 
