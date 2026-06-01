@@ -2193,6 +2193,15 @@ func getResourceNameAndID(eni types.NetworkInterface, cache *ENILookupCache) (st
 		}
 	}
 
+	// Handle Transit Gateways (T-1147). TGW attachment IDs are keyed by VPC ID
+	// in the cache, mirroring how getENIAttachmentDetailsOptimized resolves the
+	// attachment detail for the resource name.
+	if eni.InterfaceType == types.NetworkInterfaceTypeTransitGateway && eni.VpcId != nil {
+		if tgwAttachmentID, exists := cache.TransitGateways[*eni.VpcId]; exists {
+			return attachmentDetails, tgwAttachmentID
+		}
+	}
+
 	// Default to attachment details
 	return attachmentDetails, ""
 }
