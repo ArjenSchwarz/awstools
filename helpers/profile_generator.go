@@ -893,6 +893,25 @@ func (pg *ProfileGenerator) GenerateProfilesForNonConflictedRoles(nonConflictedR
 		return nil, err
 	}
 
+	// Load existing profiles from output file so that names generated here do not
+	// collide with profiles already present (falls back to default when empty).
+	configFile, err := LoadAWSConfigFile(pg.outputFile)
+	if err != nil {
+		return nil, NewFileSystemError("failed to load AWS config file", err)
+	}
+
+	// Seed the resolver with existing names so duplicates generated within this
+	// batch (e.g. a naming pattern that maps several roles to the same name) get
+	// unique names instead of silently overwriting each other.
+	resolver := NewProfileNameConflictResolver(configFile.GetProfileNames())
+
+	return pg.buildProfilesForRoles(templateProfile, nonConflictedRoles, resolver)
+}
+
+// buildProfilesForRoles generates profiles for the given roles, resolving any
+// naming conflicts via the supplied resolver. The resolver is updated for every
+// name it returns, so duplicate desired names within roles are made unique.
+func (pg *ProfileGenerator) buildProfilesForRoles(templateProfile *TemplateProfile, roles []DiscoveredRole, resolver *ProfileNameConflictResolver) ([]GeneratedProfile, error) {
 	// Create naming pattern
 	namingPattern, err := NewNamingPattern(pg.namingPattern)
 	if err != nil {
@@ -901,14 +920,14 @@ func (pg *ProfileGenerator) GenerateProfilesForNonConflictedRoles(nonConflictedR
 
 	var generatedProfiles []GeneratedProfile
 
-	for _, role := range nonConflictedRoles {
+	for _, role := range roles {
 		// Validate role before processing
 		if err := role.Validate(); err != nil {
 			return nil, err
 		}
 
 		// Generate profile name
-		profileName, err := namingPattern.GenerateProfileName(
+		desiredName, err := namingPattern.GenerateProfileName(
 			role.AccountID,
 			role.AccountName,
 			role.AccountAlias,
@@ -919,6 +938,12 @@ func (pg *ProfileGenerator) GenerateProfilesForNonConflictedRoles(nonConflictedR
 			return nil, NewValidationError("failed to generate profile name", err).
 				WithContext("account_id", role.AccountID).
 				WithContext("role_name", role.PermissionSetName)
+		}
+
+		// Resolve naming conflicts (against existing profiles and earlier roles in this batch)
+		profileName := desiredName
+		if resolver != nil {
+			profileName = resolver.ResolveConflict(desiredName)
 		}
 
 		// Create generated profile
