@@ -146,12 +146,10 @@ func getAttachedPoliciesForRole(rolename string, verbose bool, svc IAMClient) ma
 					Name: policyname,
 				}
 				if verbose {
+					// getAttachedPolicy already URL-decodes the policy
+					// document, so it must not be decoded again here (T-1094).
 					policystring := getAttachedPolicy(policy.PolicyArn, svc)
-					decodeddocument, err := url.QueryUnescape(policystring)
-					if err != nil {
-						panic(err)
-					}
-					err = json.Unmarshal([]byte(decodeddocument), &policydocument)
+					err := json.Unmarshal([]byte(policystring), &policydocument)
 					if err != nil {
 						panic(err)
 					}
