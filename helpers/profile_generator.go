@@ -373,8 +373,17 @@ func (pg *ProfileGenerator) PreviewProfiles(profiles []GeneratedProfile) error {
 	return nil
 }
 
-// AppendToConfig appends profiles to the AWS config file
-func (pg *ProfileGenerator) AppendToConfig(profiles []GeneratedProfile) error {
+// AppendToConfig appends profiles to the AWS config file.
+//
+// The actions parameter carries the conflict resolution actions produced by
+// ResolveConflicts. For replace actions where the existing same-role profile
+// has a different name than the generated profile (e.g. an existing "old-admin"
+// being replaced by "prod-AdministratorAccess"), the old profile is removed
+// before the new profile is written. Without this, AppendProfiles would only
+// replace by the new name and leave the differently-named old profile behind,
+// resulting in two profiles pointing at the same account/role. Callers without
+// resolution actions (e.g. tests, no-conflict paths) may pass nil.
+func (pg *ProfileGenerator) AppendToConfig(profiles []GeneratedProfile, actions []ConflictAction) error {
 	if len(profiles) == 0 {
 		return NewValidationError("no profiles to append", nil)
 	}
@@ -406,6 +415,27 @@ func (pg *ProfileGenerator) AppendToConfig(profiles []GeneratedProfile) error {
 			WithContext("suggestion", "Use --yes flag to auto-approve or rename conflicting profiles")
 	}
 
+	// Remove renamed old profiles for replace actions. When a same-role conflict
+	// is resolved by replacing an existing profile whose name differs from the
+	// generated name, the old profile must be removed so it is not left dangling
+	// alongside the new one.
+	removedOldProfiles := make([]string, 0, len(actions))
+	for _, action := range actions {
+		if action.Action != ActionReplace {
+			continue
+		}
+		if action.OldName == "" || action.OldName == action.NewName {
+			continue
+		}
+		if !configFile.HasProfile(action.OldName) {
+			continue
+		}
+		if err := configFile.RemoveProfile(action.OldName); err != nil {
+			return err
+		}
+		removedOldProfiles = append(removedOldProfiles, action.OldName)
+	}
+
 	// Append profiles
 	if err := configFile.AppendProfiles(profiles); err != nil {
 		return err
@@ -413,6 +443,10 @@ func (pg *ProfileGenerator) AppendToConfig(profiles []GeneratedProfile) error {
 
 	if len(conflicts) > 0 {
 		pg.logger.Printf("Warning: %d existing profiles were overwritten: %v", len(conflicts), conflicts)
+	}
+
+	if len(removedOldProfiles) > 0 {
+		pg.logger.Printf("Removed %d renamed existing profiles during replace: %v", len(removedOldProfiles), removedOldProfiles)
 	}
 
 	return nil
@@ -591,7 +625,7 @@ func (pg *ProfileGenerator) GenerateProfilesWorkflow() (*ProfileGenerationResult
 
 	// Append to config (if approved)
 	if pg.autoApprove {
-		if err := pg.AppendToConfig(result.GeneratedProfiles); err != nil {
+		if err := pg.AppendToConfig(result.GeneratedProfiles, result.ResolutionActions); err != nil {
 			if pgErr, ok := err.(ProfileGeneratorError); ok {
 				result.AddError(pgErr)
 			} else {

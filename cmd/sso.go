@@ -337,7 +337,7 @@ func displayComprehensiveResults(result *helpers.ProfileGenerationResult, genera
 		}
 
 		fmt.Println("💾 Applying profiles to AWS configuration...")
-		if err := generator.AppendToConfig(result.GeneratedProfiles); err != nil {
+		if err := generator.AppendToConfig(result.GeneratedProfiles, result.ResolutionActions); err != nil {
 			displayErrorWithRecovery("Error appending profiles to config", err)
 			os.Exit(1)
 		}

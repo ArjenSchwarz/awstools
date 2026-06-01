@@ -849,7 +849,7 @@ func TestAppendToConfig(t *testing.T) {
 			assert.NoError(t, err)
 
 			// Test append operation
-			err = pg.AppendToConfig(tt.profiles)
+			err = pg.AppendToConfig(tt.profiles, nil)
 
 			if tt.expectedError {
 				assert.Error(t, err)
