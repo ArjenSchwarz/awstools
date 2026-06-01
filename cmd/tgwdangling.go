@@ -30,18 +30,7 @@ func tgwdangling(_ *cobra.Command, _ []string) {
 	keys := []string{vpcColumn, "VPCName", "DestinationVPC", "DestinationName"}
 	output := format.OutputArray{Keys: keys, Settings: settings.NewOutputSettings()}
 	output.Settings.Title = resultTitle
-	vpcs := make(map[string][]string)
-	for _, gateway := range gateways {
-		for _, routetable := range gateway.RouteTables {
-			for _, assoc := range routetable.SourceAttachments {
-				vpcs[assoc.ResourceID] = []string{}
-				for _, route := range routetable.Routes {
-					vpcs[assoc.ResourceID] = append(vpcs[assoc.ResourceID], route.Attachment.ResourceID)
-				}
-			}
-
-		}
-	}
+	vpcs := danglingRouteTargets(gateways)
 
 	for vpcid, targets := range vpcs {
 		for _, target := range targets {
@@ -59,4 +48,27 @@ func tgwdangling(_ *cobra.Command, _ []string) {
 	}
 	// fmt.Printf("%v", vpcs)
 	output.Write()
+}
+
+// danglingRouteTargets builds, for each source attachment, the list of resource
+// IDs it routes to. Blackhole routes are parsed with an empty attachment
+// ResourceID (see helpers.parseBlackholeRoute); they have no destination, so
+// they are skipped to avoid emitting dangling rows with an empty destination.
+func danglingRouteTargets(gateways []helpers.TransitGateway) map[string][]string {
+	vpcs := make(map[string][]string)
+	for _, gateway := range gateways {
+		for _, routetable := range gateway.RouteTables {
+			for _, assoc := range routetable.SourceAttachments {
+				vpcs[assoc.ResourceID] = []string{}
+				for _, route := range routetable.Routes {
+					if route.Attachment.ResourceID == "" {
+						continue
+					}
+					vpcs[assoc.ResourceID] = append(vpcs[assoc.ResourceID], route.Attachment.ResourceID)
+				}
+			}
+
+		}
+	}
+	return vpcs
 }
