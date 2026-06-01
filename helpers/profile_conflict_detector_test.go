@@ -398,3 +398,90 @@ func TestProfileConflictDetector_DetectConflicts_MultipleConflicts(t *testing.T)
 	assert.Equal(t, ConflictSameName, conflicts[1].ConflictType)
 	assert.Equal(t, "production-ReadOnlyAccess", conflicts[1].ProposedName)
 }
+
+// TestProfileConflictDetector_DifferentStartURL_NoSameRoleConflict is the
+// regression test for T-1354. An AWS config may contain profiles for multiple
+// SSO start URLs that expose the same account ID and role name. When generating
+// profiles from a template tied to one SSO start URL, a profile belonging to a
+// DIFFERENT SSO start URL must NOT be treated as a same-role conflict.
+//
+// Expected: no conflict (the discovered role and the existing profile point at
+// different SSO instances even though account/role match).
+// Buggy behaviour: detected as a ConflictSameRole because only account ID and
+// role name were compared.
+func TestProfileConflictDetector_DifferentStartURL_NoSameRoleConflict(t *testing.T) {
+	configFile := &AWSConfigFile{
+		Profiles: map[string]Profile{
+			// Profile belongs to a different SSO start URL than the discovered role.
+			"other-sso-profile": {
+				Name:         "other-sso-profile",
+				SSOAccountID: "123456789012",
+				SSORoleName:  "PowerUserAccess",
+				SSOStartURL:  "https://other.awsapps.com/start",
+				SSORegion:    "us-east-1",
+			},
+		},
+		Sessions: make(map[string]SSOSession),
+	}
+
+	namingPattern, err := NewNamingPattern("{account_name}-{role_name}")
+	require.NoError(t, err)
+
+	detector := NewProfileConflictDetector(configFile, namingPattern)
+
+	roles := []DiscoveredRole{
+		{
+			AccountID:         "123456789012",
+			AccountName:       "production",
+			RoleName:          "PowerUserAccess",
+			PermissionSetName: "PowerUserAccess",
+			// Discovered via a template tied to a different SSO start URL.
+			SSOStartURL: "https://example.awsapps.com/start",
+			SSORegion:   "us-east-1",
+		},
+	}
+
+	conflicts, err := detector.DetectConflicts(roles)
+	assert.NoError(t, err)
+	assert.Empty(t, conflicts, "profile from a different SSO start URL must not be a same-role conflict")
+}
+
+// TestProfileConflictDetector_SameStartURL_SameRoleConflict confirms that when
+// the discovered role's SSO start URL matches the existing profile, the same-role
+// conflict is still detected (the fix must not break the positive case).
+func TestProfileConflictDetector_SameStartURL_SameRoleConflict(t *testing.T) {
+	configFile := &AWSConfigFile{
+		Profiles: map[string]Profile{
+			"existing-profile": {
+				Name:         "existing-profile",
+				SSOAccountID: "123456789012",
+				SSORoleName:  "PowerUserAccess",
+				SSOStartURL:  "https://example.awsapps.com/start",
+				SSORegion:    "us-east-1",
+			},
+		},
+		Sessions: make(map[string]SSOSession),
+	}
+
+	namingPattern, err := NewNamingPattern("{account_name}-{role_name}")
+	require.NoError(t, err)
+
+	detector := NewProfileConflictDetector(configFile, namingPattern)
+
+	roles := []DiscoveredRole{
+		{
+			AccountID:         "123456789012",
+			AccountName:       "production",
+			RoleName:          "PowerUserAccess",
+			PermissionSetName: "PowerUserAccess",
+			SSOStartURL:       "https://example.awsapps.com/start",
+			SSORegion:         "us-east-1",
+		},
+	}
+
+	conflicts, err := detector.DetectConflicts(roles)
+	assert.NoError(t, err)
+	require.Len(t, conflicts, 1)
+	assert.Equal(t, ConflictSameRole, conflicts[0].ConflictType)
+	assert.Equal(t, "existing-profile", conflicts[0].ExistingProfiles[0].Name)
+}

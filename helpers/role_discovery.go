@@ -216,6 +216,10 @@ func (rd *RoleDiscovery) getRolesForAccount(ctx context.Context, token *CachedTo
 				AccountAlias:      accountAlias,
 				PermissionSetName: roleName,
 				RoleName:          roleName,
+				// Carry the SSO instance the role was discovered through so conflict
+				// detection can distinguish profiles for different SSO start URLs.
+				SSOStartURL: token.StartURL,
+				SSORegion:   token.Region,
 			}
 
 			if err := role.Validate(); err != nil {

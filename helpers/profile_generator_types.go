@@ -240,6 +240,13 @@ type DiscoveredRole struct {
 	PermissionSetName string `json:"permission_set_name" yaml:"permission_set_name"`
 	PermissionSetArn  string `json:"permission_set_arn,omitempty" yaml:"permission_set_arn,omitempty"`
 	RoleName          string `json:"role_name" yaml:"role_name"`
+	// SSOStartURL and SSORegion identify the SSO instance the role was discovered
+	// through (carried from the template profile's resolved SSO config). They allow
+	// conflict detection to distinguish profiles that share an account ID and role
+	// name but belong to different SSO start URLs. They may be empty for roles built
+	// without SSO context, in which case start-URL comparison is skipped.
+	SSOStartURL string `json:"sso_start_url,omitempty" yaml:"sso_start_url,omitempty"`
+	SSORegion   string `json:"sso_region,omitempty" yaml:"sso_region,omitempty"`
 }
 
 // Validate checks if the discovered role is valid and contains all required information.
