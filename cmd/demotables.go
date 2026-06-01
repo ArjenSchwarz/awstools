@@ -43,46 +43,46 @@ func init() {
 }
 
 func demoTables(_ *cobra.Command, _ []string) {
-	keys := []string{"Export", "Description", "Stack", "Value", "Imported"}
+	keys := []string{exportColumn, descriptionColumn, stackColumn, valueColumn, importedColumn}
 	title := "CloudFormation Export values demo"
 	output := format.OutputArray{Keys: keys, Settings: settings.NewOutputSettings()}
 	output.Settings.Title = title
-	output.Settings.SortKey = "Export"
+	output.Settings.SortKey = exportColumn
 
 	value1 := format.OutputHolder{
 		Contents: map[string]any{
-			"Export":      "awesome-stack-dev-s3-arn",
-			"Value":       "arn:aws:s3:::fog-awesome-stack-dev",
-			"Description": "ARN of the S3 bucket",
-			"Stack":       "awesome-stack-dev",
-			"Imported":    true,
+			exportColumn:      "awesome-stack-dev-s3-arn",
+			valueColumn:       "arn:aws:s3:::fog-awesome-stack-dev",
+			descriptionColumn: s3BucketARNDescription,
+			stackColumn:       "awesome-stack-dev",
+			importedColumn:    true,
 		},
 	}
 	value2 := format.OutputHolder{
 		Contents: map[string]any{
-			"Export":      "awesome-stack-test-s3-arn",
-			"Value":       "arn:aws:s3:::fog-awesome-stack-test",
-			"Description": "ARN of the S3 bucket",
-			"Stack":       "awesome-stack-test",
-			"Imported":    true,
+			exportColumn:      "awesome-stack-test-s3-arn",
+			valueColumn:       "arn:aws:s3:::fog-awesome-stack-test",
+			descriptionColumn: s3BucketARNDescription,
+			stackColumn:       "awesome-stack-test",
+			importedColumn:    true,
 		},
 	}
 	value3 := format.OutputHolder{
 		Contents: map[string]any{
-			"Export":      "awesome-stack-prod-s3-arn",
-			"Value":       "arn:aws:s3:::fog-awesome-stack-prod",
-			"Description": "ARN of the S3 bucket",
-			"Stack":       "awesome-stack-prod",
-			"Imported":    true,
+			exportColumn:      "awesome-stack-prod-s3-arn",
+			valueColumn:       "arn:aws:s3:::fog-awesome-stack-prod",
+			descriptionColumn: s3BucketARNDescription,
+			stackColumn:       "awesome-stack-prod",
+			importedColumn:    true,
 		},
 	}
 	value4 := format.OutputHolder{
 		Contents: map[string]any{
-			"Export":      "demo-s3-bucket",
-			"Value":       "fog-demo-bucket",
-			"Description": "The S3 bucket used for demos but has an exceptionally long description so it can show a multi-line example",
-			"Stack":       "demo-resources",
-			"Imported":    true,
+			exportColumn:      "demo-s3-bucket",
+			valueColumn:       "fog-demo-bucket",
+			descriptionColumn: "The S3 bucket used for demos but has an exceptionally long description so it can show a multi-line example",
+			stackColumn:       "demo-resources",
+			importedColumn:    true,
 		},
 	}
 	output.AddHolder(value1)

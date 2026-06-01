@@ -28,13 +28,13 @@ func ssoDangling(_ *cobra.Command, _ []string) {
 	if err != nil {
 		panic(err)
 	}
-	keys := []string{"PermissionSet", "Arn", "ManagedPolicies", "InlinePolicy"}
+	keys := []string{permissionSetColumn, "Arn", "ManagedPolicies", "InlinePolicy"}
 	output := format.OutputArray{Keys: keys, Settings: settings.NewOutputSettings()}
 	output.Settings.Title = resultTitle
 	for _, permissionset := range ssoInstance.PermissionSets {
 		if len(permissionset.Accounts) == 0 {
 			content := make(map[string]any)
-			content["PermissionSet"] = permissionset.Name
+			content[permissionSetColumn] = permissionset.Name
 			content["Arn"] = permissionset.Arn
 			content["ManagedPolicies"] = permissionset.GetManagedPolicyNames()
 			content["InlinePolicy"] = permissionset.InlinePolicy

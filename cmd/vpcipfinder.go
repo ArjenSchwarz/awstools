@@ -67,7 +67,7 @@ func formatIPFinderOutput(result helpers.IPFinderResult) {
 		return
 	}
 
-	keys := []string{"Field", "Value"}
+	keys := []string{fieldColumn, valueColumn}
 	output := format.OutputArray{
 		Keys:     keys,
 		Settings: settings.NewOutputSettings(),
@@ -103,14 +103,14 @@ func formatIPFinderOutput(result helpers.IPFinderResult) {
 	}
 
 	outputData := []map[string]any{
-		{"Field": "IP Address", "Value": result.IPAddress},
-		{"Field": "ENI ID", "Value": eniID},
-		{"Field": "Resource Type", "Value": result.ResourceType},
-		{"Field": "Resource Name", "Value": resourceName},
-		{"Field": "Resource ID", "Value": result.ResourceID},
-		{"Field": "VPC", "Value": vpcDisplay},
-		{"Field": "Subnet", "Value": subnetDisplay},
-		{"Field": "Is Secondary IP", "Value": result.IsSecondaryIP},
+		{fieldColumn: "IP Address", valueColumn: result.IPAddress},
+		{fieldColumn: "ENI ID", valueColumn: eniID},
+		{fieldColumn: "Resource Type", valueColumn: result.ResourceType},
+		{fieldColumn: "Resource Name", valueColumn: resourceName},
+		{fieldColumn: "Resource ID", valueColumn: result.ResourceID},
+		{fieldColumn: vpcColumn, valueColumn: vpcDisplay},
+		{fieldColumn: subnetColumn, valueColumn: subnetDisplay},
+		{fieldColumn: "Is Secondary IP", valueColumn: result.IsSecondaryIP},
 	}
 
 	// Add security groups if present
@@ -124,23 +124,23 @@ func formatIPFinderOutput(result helpers.IPFinderResult) {
 			}
 		}
 		outputData = append(outputData, map[string]any{
-			"Field": "Security Groups",
-			"Value": sgList,
+			fieldColumn: "Security Groups",
+			valueColumn: sgList,
 		})
 	}
 
 	// Add route table information if present
 	if result.RouteTable.ID != "" {
 		outputData = append(outputData, map[string]any{
-			"Field": "Route Table",
-			"Value": result.RouteTable.Name,
+			fieldColumn: routeTableColumn,
+			valueColumn: result.RouteTable.Name,
 		})
 
 		// Add routes if present
 		if len(result.RouteTable.Routes) > 0 {
 			outputData = append(outputData, map[string]any{
-				"Field": "Routes",
-				"Value": result.RouteTable.Routes,
+				fieldColumn: routesColumn,
+				valueColumn: result.RouteTable.Routes,
 			})
 		}
 	}

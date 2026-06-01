@@ -33,9 +33,9 @@ func showmesh(_ *cobra.Command, _ []string) {
 	awsConfig := config.DefaultAwsConfig(*settings)
 	svc := awsConfig.AppmeshClient()
 	nodes := helpers.GetAllAppMeshNodeConnections(meshname, svc)
-	keys := []string{"Name", "Endpoints"}
+	keys := []string{nameColumn, "Endpoints"}
 	if settings.IsDrawIO() {
-		keys = append(keys, "Image")
+		keys = append(keys, imageColumn)
 	}
 	output := format.OutputArray{Keys: keys, Settings: settings.NewOutputSettings()}
 	output.Settings.Title = resultTitle
@@ -44,14 +44,14 @@ func showmesh(_ *cobra.Command, _ []string) {
 		output.Settings.DrawIOHeader = createAppmeshShowmeshDrawIOHeader()
 	}
 	if output.Settings.NeedsFromToColumns() {
-		output.Settings.AddFromToColumns("Name", "Endpoints")
+		output.Settings.AddFromToColumns(nameColumn, "Endpoints")
 	}
 
 	for _, node := range nodes {
 		content := make(map[string]any)
-		content["Name"] = node.VirtualNodeName
+		content[nameColumn] = node.VirtualNodeName
 		if settings.IsDrawIO() {
-			content["Image"] = drawio.AWSShape("Containers", "Container")
+			content[imageColumn] = drawio.AWSShape("Containers", "Container")
 		}
 		endpoints := append([]string{}, node.BackendNodes...)
 		content["Endpoints"] = endpoints
@@ -62,11 +62,11 @@ func showmesh(_ *cobra.Command, _ []string) {
 }
 
 func createAppmeshShowmeshDrawIOHeader() drawio.Header {
-	drawioheader := drawio.NewHeader("%Name%", "%Image%", "Image")
+	drawioheader := drawio.NewHeader("%Name%", "%Image%", imageColumn)
 	drawioheader.SetHeightAndWidth("78", "78")
 	connection := drawio.NewConnection()
 	connection.From = "Endpoints"
-	connection.To = "Name"
+	connection.To = nameColumn
 	connection.Invert = false
 	connection.Label = "Calls"
 	drawioheader.AddConnection(connection)

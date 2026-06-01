@@ -48,9 +48,9 @@ func tgwroutes(_ *cobra.Command, _ []string) {
 	awsConfig := config.DefaultAwsConfig(*settings)
 	resultTitle := "Overview of all routes"
 	gateways := helpers.GetAllTransitGateways(awsConfig.Ec2Client())
-	keys := []string{"ID", "Name", "Destinations", "TargetGateway"}
+	keys := []string{"ID", nameColumn, destinationsColumn, targetGatewayColumn}
 	if settings.IsDrawIO() {
-		keys = append(keys, "Image")
+		keys = append(keys, imageColumn)
 	}
 	if simplelist {
 		simplelistOnly(awsConfig)
@@ -58,12 +58,12 @@ func tgwroutes(_ *cobra.Command, _ []string) {
 	}
 	output := format.OutputArray{Keys: keys, Settings: settings.NewOutputSettings()}
 	output.Settings.Title = resultTitle
-	output.Settings.SortKey = "TargetGateway"
+	output.Settings.SortKey = targetGatewayColumn
 	if settings.IsDrawIO() {
 		output.Settings.DrawIOHeader = createTgwRoutesDrawIOHeader()
 	}
 	if output.Settings.NeedsFromToColumns() {
-		output.Settings.AddFromToColumns("Destinations", "ID")
+		output.Settings.AddFromToColumns(destinationsColumn, "ID")
 	}
 
 	attachedresources, tgwrts := filterGateway(gateways)
@@ -71,10 +71,10 @@ func tgwroutes(_ *cobra.Command, _ []string) {
 	for rt, connectedvpcs := range tgwrts {
 		content := make(map[string]any)
 		content["ID"] = rt
-		content["Name"] = getName(rt)
-		content["Destinations"] = unique(connectedvpcs)
+		content[nameColumn] = getName(rt)
+		content[destinationsColumn] = unique(connectedvpcs)
 		if settings.IsDrawIO() {
-			content["Image"] = drawio.AWSShape("Network Content Delivery", "Route Table")
+			content[imageColumn] = drawio.AWSShape("Network Content Delivery", routeTableColumn)
 		}
 		holder := format.OutputHolder{Contents: content}
 		output.AddHolder(holder)
@@ -82,16 +82,16 @@ func tgwroutes(_ *cobra.Command, _ []string) {
 	for resourceid, resourceInfo := range attachedresources {
 		content := make(map[string]any)
 		content["ID"] = resourceid
-		content["Name"] = getName(resourceid)
+		content[nameColumn] = getName(resourceid)
 		if settings.IsDrawIO() {
 			// Use raw ID for DrawIO to enable proper connection matching
-			content["TargetGateway"] = resourceInfo.RouteTableID
+			content[targetGatewayColumn] = resourceInfo.RouteTableID
 		} else {
 			// Use composite name for other output formats
 			if getName(resourceInfo.RouteTableID) != resourceInfo.RouteTableID && getName(resourceInfo.RouteTableID) != "" {
-				content["TargetGateway"] = getNameWithID(resourceInfo.RouteTableID)
+				content[targetGatewayColumn] = getNameWithID(resourceInfo.RouteTableID)
 			} else {
-				content["TargetGateway"] = resourceInfo.RouteTableID
+				content[targetGatewayColumn] = resourceInfo.RouteTableID
 			}
 		}
 
@@ -104,23 +104,23 @@ func tgwroutes(_ *cobra.Command, _ []string) {
 			}
 			switch resourceType {
 			case vpcResourceType:
-				content["Image"] = drawio.AWSShape("Network Content Delivery", "VPC")
+				content[imageColumn] = drawio.AWSShape("Network Content Delivery", vpcColumn)
 			case "vpn":
-				content["Image"] = drawio.AWSShape("Network Content Delivery", "Site-to-Site VPN")
+				content[imageColumn] = drawio.AWSShape("Network Content Delivery", "Site-to-Site VPN")
 			case "dxgw":
-				content["Image"] = drawio.AWSShape("Network Content Delivery", "Direct Connect Gateway")
+				content[imageColumn] = drawio.AWSShape("Network Content Delivery", "Direct Connect Gateway")
 			case tgwResourceType:
-				content["Image"] = drawio.AWSShape("Network Content Delivery", "Transit Gateway")
+				content[imageColumn] = drawio.AWSShape("Network Content Delivery", "Transit Gateway")
 			case "peering":
-				content["Image"] = drawio.AWSShape("Network Content Delivery", "Transit Gateway")
+				content[imageColumn] = drawio.AWSShape("Network Content Delivery", "Transit Gateway")
 			case "tgw-peering":
-				content["Image"] = drawio.AWSShape("Network Content Delivery", "Transit Gateway")
+				content[imageColumn] = drawio.AWSShape("Network Content Delivery", "Transit Gateway")
 			case "direct-connect-gateway":
-				content["Image"] = drawio.AWSShape("Network Content Delivery", "Direct Connect")
+				content[imageColumn] = drawio.AWSShape("Network Content Delivery", "Direct Connect")
 			case "connect":
-				content["Image"] = drawio.AWSShape("Network Content Delivery", "Transit Gateway")
+				content[imageColumn] = drawio.AWSShape("Network Content Delivery", "Transit Gateway")
 			default:
-				content["Image"] = drawio.AWSShape("General Resources", "General")
+				content[imageColumn] = drawio.AWSShape("General Resources", "General")
 			}
 		}
 		holder := format.OutputHolder{Contents: content}
@@ -130,17 +130,17 @@ func tgwroutes(_ *cobra.Command, _ []string) {
 }
 
 func simplelistOnly(awsConfig config.AWSConfig) {
-	keys := []string{"CIDR", "Target", "Route Type", "State"}
+	keys := []string{cidrColumn, "Target", "Route Type", "State"}
 	output := format.OutputArray{Keys: keys, Settings: settings.NewOutputSettings()}
 	output.Settings.Title = fmt.Sprintf("Simple route list for %s", tgwresourceid)
-	output.Settings.SortKey = "CIDR"
+	output.Settings.SortKey = cidrColumn
 
 	activeroutes := helpers.GetActiveRoutesForTransitGatewayRouteTable(tgwresourceid, awsConfig.Ec2Client())
 	blackholeroutes := helpers.GetBlackholeRoutesForTransitGatewayRouteTable(tgwresourceid, awsConfig.Ec2Client())
 
 	for _, route := range activeroutes {
 		content := make(map[string]any)
-		content["CIDR"] = route.CIDR
+		content[cidrColumn] = route.CIDR
 		content["Target"] = getName(route.Attachment.ResourceID)
 		// content["Target Type"] = getName(route.Attachment.ResourceType)
 		content["Route Type"] = route.RouteType
@@ -151,7 +151,7 @@ func simplelistOnly(awsConfig config.AWSConfig) {
 	}
 	for _, route := range blackholeroutes {
 		content := make(map[string]any)
-		content["CIDR"] = route.CIDR
+		content[cidrColumn] = route.CIDR
 		content["Target"] = "-"
 		// content["Target Type"] = "-"
 		content["Route Type"] = route.RouteType
@@ -252,16 +252,16 @@ func filterGateway(gateways []helpers.TransitGateway) (map[string]attachedResour
 }
 
 func createTgwRoutesDrawIOHeader() drawio.Header {
-	drawioheader := drawio.NewHeader("%Name%", "%Image%", "Image")
+	drawioheader := drawio.NewHeader("%Name%", "%Image%", imageColumn)
 	drawioheader.SetHeightAndWidth("78", "78")
 	connection := drawio.NewConnection()
-	connection.From = "Destinations"
+	connection.From = destinationsColumn
 	connection.To = "ID"
 	connection.Invert = false
 	connection.Label = "Outbound"
 	drawioheader.AddConnection(connection)
 	connection2 := drawio.NewConnection()
-	connection2.From = "TargetGateway"
+	connection2.From = targetGatewayColumn
 	connection2.To = "ID"
 	connection2.Invert = false
 	connection2.Label = "Inbound"

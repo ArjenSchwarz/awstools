@@ -395,7 +395,7 @@ func displayEnhancedProfileResults(result *helpers.ProfileGenerationResult) {
 	}
 
 	// Create enhanced output for generated profiles
-	keys := []string{"ProfileName", "Account", "Role", "Region", "Format", "Status", "Action"}
+	keys := []string{"ProfileName", accountColumn, "Role", "Region", "Format", "Status", "Action"}
 	output := format.OutputArray{Keys: keys, Settings: settings.NewOutputSettings()}
 	output.Settings.Title = "Generated AWS CLI Profiles"
 	output.Settings.SortKey = "ProfileName"
@@ -403,7 +403,7 @@ func displayEnhancedProfileResults(result *helpers.ProfileGenerationResult) {
 	for _, profile := range result.GeneratedProfiles {
 		content := make(map[string]any)
 		content["ProfileName"] = profile.Name
-		content["Account"] = fmt.Sprintf("%s (%s)", profile.AccountName, profile.AccountID)
+		content[accountColumn] = fmt.Sprintf("%s (%s)", profile.AccountName, profile.AccountID)
 		content["Role"] = profile.RoleName
 		content["Region"] = profile.Region
 
