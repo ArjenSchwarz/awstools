@@ -32,8 +32,12 @@ func validateFilePermissionsForWrite(filePath string) error {
 	// Check if file exists
 	fileInfo, err := os.Stat(filePath)
 	if os.IsNotExist(err) {
-		// File doesn't exist, check if directory is writable
-		dir := filepath.Dir(filePath)
+		// File doesn't exist. Walk up to the nearest existing ancestor
+		// directory and check that it is writable. The write path
+		// (WriteToFile) creates any missing intermediate directories via
+		// os.MkdirAll, so a brand-new --output-file path (or first-time
+		// generation without ~/.aws/config) must be allowed here.
+		dir := nearestExistingDir(filepath.Dir(filePath))
 		dirInfo, err := os.Stat(dir)
 		if err != nil {
 			return NewFileSystemError("failed to get directory info", err).
