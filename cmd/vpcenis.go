@@ -51,15 +51,15 @@ func enis(_ *cobra.Command, _ []string) {
 }
 
 func printENIs(interfaces []types.NetworkInterface, names map[string]string, resultTitle string, split bool, svc *ec2.Client) {
-	keys := []string{"ENI", "Type", "Attachment", "IPs", "VPC", "Subnet"}
+	keys := []string{"ENI", typeColumn, attachmentColumn, "IPs", vpcColumn, subnetColumn}
 	output := format.OutputArray{Keys: keys, Settings: settings.NewOutputSettings()}
 	output.Settings.Title = resultTitle
-	output.Settings.SortKey = "Subnet"
+	output.Settings.SortKey = subnetColumn
 	if split {
 		// unset VPC and subnet
-		output.Keys = []string{"ENI", "Type", "Attachment", "IPs"}
+		output.Keys = []string{"ENI", typeColumn, attachmentColumn, "IPs"}
 		output.Settings.SeparateTables = true
-		output.Settings.SortKey = "Attachment"
+		output.Settings.SortKey = attachmentColumn
 	}
 
 	// Build cache once for all ENIs to avoid per-ENI API calls (T-727).
@@ -77,11 +77,11 @@ func printENIs(interfaces []types.NetworkInterface, names map[string]string, res
 			}
 		}
 		content["ENI"] = aws.ToString(netinterface.NetworkInterfaceId)
-		content["Type"] = netinterface.InterfaceType
-		content["Attachment"] = getNameAndIDFromMap(helpers.GetAttachmentFromCache(netinterface, cache), names)
+		content[typeColumn] = netinterface.InterfaceType
+		content[attachmentColumn] = getNameAndIDFromMap(helpers.GetAttachmentFromCache(netinterface, cache), names)
 		content["IPs"] = iparray
-		content["VPC"] = getNameAndIDFromMap(aws.ToString(netinterface.VpcId), names)
-		content["Subnet"] = getNameAndIDFromMap(aws.ToString(netinterface.SubnetId), names)
+		content[vpcColumn] = getNameAndIDFromMap(aws.ToString(netinterface.VpcId), names)
+		content[subnetColumn] = getNameAndIDFromMap(aws.ToString(netinterface.SubnetId), names)
 		output.AddContents(content)
 	}
 	output.AddToBuffer()

@@ -27,7 +27,7 @@ func tgwdangling(_ *cobra.Command, _ []string) {
 	awsConfig := config.DefaultAwsConfig(*settings)
 	resultTitle := "Transit Gateway uni-directional routes"
 	gateways := helpers.GetAllTransitGateways(awsConfig.Ec2Client())
-	keys := []string{"VPC", "VPCName", "DestinationVPC", "DestinationName"}
+	keys := []string{vpcColumn, "VPCName", "DestinationVPC", "DestinationName"}
 	output := format.OutputArray{Keys: keys, Settings: settings.NewOutputSettings()}
 	output.Settings.Title = resultTitle
 	vpcs := make(map[string][]string)
@@ -47,7 +47,7 @@ func tgwdangling(_ *cobra.Command, _ []string) {
 		for _, target := range targets {
 			if !contains(vpcs[target], vpcid) {
 				content := make(map[string]any)
-				content["VPC"] = vpcid
+				content[vpcColumn] = vpcid
 				content["VPCName"] = getName(vpcid)
 				content["DestinationVPC"] = target
 				content["DestinationName"] = getName(target)

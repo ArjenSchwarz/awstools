@@ -74,7 +74,7 @@ func listResources(_ *cobra.Command, _ []string) {
 	for i := range unparsedResources {
 		resources[i] = <-c
 	}
-	keys := []string{"ResourceID", "Type", "Stack", "Name"}
+	keys := []string{"ResourceID", typeColumn, stackColumn, nameColumn}
 	if settings.IsVerbose() {
 		keys = append(keys, "Status")
 		keys = append(keys, "LogicalName")
@@ -84,9 +84,9 @@ func listResources(_ *cobra.Command, _ []string) {
 	for _, resource := range resources {
 		content := make(map[string]any)
 		content["ResourceID"] = resource.ResourceID
-		content["Type"] = resource.Type
-		content["Stack"] = resource.Stack
-		content["Name"] = resource.ResourceName
+		content[typeColumn] = resource.Type
+		content[stackColumn] = resource.Stack
+		content[nameColumn] = resource.ResourceName
 		if settings.IsVerbose() {
 			content["Status"] = resource.Status
 			content["LogicalName"] = resource.LogicalName

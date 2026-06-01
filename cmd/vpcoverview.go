@@ -60,13 +60,13 @@ func vpcOverview(_ *cobra.Command, _ []string) {
 	}
 
 	// Create separate subnet overview tables for each VPC
-	subnetKeys := []string{"Subnet", "CIDR", "Type", "Route Table", "Routes", "Total IPs", "Available IPs", "Used IPs"}
+	subnetKeys := []string{subnetColumn, cidrColumn, typeColumn, routeTableColumn, routesColumn, "Total IPs", "Available IPs", "Used IPs"}
 
 	for _, vpc := range filteredVPCs {
 		vpcDisplay := getResourceDisplayName(vpc.ID, vpc.Tags)
 		subnetOutput := format.OutputArray{Keys: subnetKeys, Settings: settings.NewOutputSettings()}
 		subnetOutput.Settings.Title = "Subnet Overview for " + vpcDisplay + " in account " + accountName
-		subnetOutput.Settings.SortKey = "CIDR"
+		subnetOutput.Settings.SortKey = cidrColumn
 		subnetOutput.Settings.SeparateTables = true
 
 		for _, subnet := range vpc.Subnets {
@@ -78,15 +78,15 @@ func vpcOverview(_ *cobra.Command, _ []string) {
 			routeTableName, routes := helpers.FormatRouteTableInfo(routeTable)
 
 			content := make(map[string]any)
-			content["Subnet"] = subnetDisplay
-			content["CIDR"] = subnet.CIDR
+			content[subnetColumn] = subnetDisplay
+			content[cidrColumn] = subnet.CIDR
 			if subnet.IsPublic {
-				content["Type"] = "Public"
+				content[typeColumn] = "Public"
 			} else {
-				content["Type"] = "Private"
+				content[typeColumn] = "Private"
 			}
-			content["Route Table"] = routeTableName
-			content["Routes"] = routes
+			content[routeTableColumn] = routeTableName
+			content[routesColumn] = routes
 			content["Total IPs"] = subnet.TotalIPs
 			content["Available IPs"] = subnet.AvailableIPs
 			content["Used IPs"] = subnet.UsedIPs

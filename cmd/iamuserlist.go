@@ -36,9 +36,9 @@ func detailUsers(_ *cobra.Command, _ []string) {
 	for _, group := range grouplist {
 		objectlist = append(objectlist, group)
 	}
-	keys := []string{nameColumn, "Type", "Groups", "Users", "PolicyNames", "InheritedPolicyNames", "Console", "API"}
+	keys := []string{nameColumn, typeColumn, "Groups", "Users", "PolicyNames", "InheritedPolicyNames", "Console", "API"}
 	if settings.IsDrawIO() {
-		keys = append(keys, "Image")
+		keys = append(keys, imageColumn)
 		keys = append(keys, "DrawioID")
 		if settings.IsVerbose() {
 			keys = append(keys, "AttachedToGroups")
@@ -57,7 +57,7 @@ func detailUsers(_ *cobra.Command, _ []string) {
 	for _, object := range objectlist {
 		content := make(map[string]any)
 		content[nameColumn] = object.GetName()
-		content["Type"] = object.GetObjectType()
+		content[typeColumn] = object.GetObjectType()
 		if user, ok := object.(helpers.IAMUser); ok {
 			if user.HasUsedPassword() {
 				content["Console"] = user.GetLastPasswordDate().String()
@@ -90,9 +90,9 @@ func detailUsers(_ *cobra.Command, _ []string) {
 
 		if settings.IsDrawIO() {
 			if object.GetObjectType() == "User" {
-				content["Image"] = drawio.AWSShape("General Resources", "User")
+				content[imageColumn] = drawio.AWSShape("General Resources", "User")
 			} else {
-				content["Image"] = drawio.AWSShape("General Resources", "Users")
+				content[imageColumn] = drawio.AWSShape("General Resources", "Users")
 			}
 			content["DrawioID"] = object.GetID()
 		}
@@ -103,9 +103,9 @@ func detailUsers(_ *cobra.Command, _ []string) {
 	for _, policy := range policylist {
 		content := make(map[string]any)
 		content[nameColumn] = policy.Name
-		content["Type"] = "Policy"
+		content[typeColumn] = "Policy"
 		if settings.IsDrawIO() {
-			content["Image"] = drawio.AWSShape("Security Identity Compliance", "Permissions")
+			content[imageColumn] = drawio.AWSShape("Security Identity Compliance", "Permissions")
 			content["AttachedToUsers"] = policy.Users
 			content["AttachedToGroups"] = policy.Groups
 			content["DrawioID"] = createID("Policy" + policy.Name)

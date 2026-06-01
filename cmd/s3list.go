@@ -40,7 +40,7 @@ func s3List(_ *cobra.Command, _ []string) {
 	awsConfig := config.DefaultAwsConfig(*settings)
 	resultTitle := "S3 Buckets"
 	buckets := helpers.GetBucketDetails(awsConfig.S3Client())
-	keys := []string{"Name", "AccountID", "AccountName", "Region", "Is Private", "Policy is locked down", "ACLs are locked down", "Public Access Block", "Logs to", "Encryption", "Replication", "Versioning", "Versioning MFA delete"}
+	keys := []string{nameColumn, accountIDColumn, "AccountName", "Region", "Is Private", "Policy is locked down", "ACLs are locked down", "Public Access Block", "Logs to", "Encryption", "Replication", "Versioning", "Versioning MFA delete"}
 	if includeTags != "" {
 		taglist := strings.SplitSeq(includeTags, ",")
 		for tag := range taglist {
@@ -68,8 +68,8 @@ func s3List(_ *cobra.Command, _ []string) {
 			continue
 		}
 		content := make(map[string]any)
-		content["Name"] = bucket.Name
-		content["AccountID"] = awsConfig.AccountID
+		content[nameColumn] = bucket.Name
+		content[accountIDColumn] = awsConfig.AccountID
 		content["AccountName"] = getName(awsConfig.AccountID)
 		content["Region"] = bucket.Region
 		content["Owner"] = bucket.Owner

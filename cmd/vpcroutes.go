@@ -25,32 +25,32 @@ func routes(_ *cobra.Command, _ []string) {
 	awsConfig := config.DefaultAwsConfig(*settings)
 	resultTitle := "VPC Routes for account " + getName(helpers.GetAccountID(awsConfig.StsClient()))
 	routes := helpers.GetAllVPCRouteTables(awsConfig.Ec2Client())
-	keys := []string{"AccountID", "Account Name", "ID", "Name", "VPC", "VPC Name", "Subnets", "Routes"}
+	keys := []string{accountIDColumn, "Account Name", "ID", nameColumn, vpcColumn, "VPC Name", "Subnets", routesColumn}
 	output := format.OutputArray{Keys: keys, Settings: settings.NewOutputSettings()}
 	output.Settings.Title = resultTitle
 	for _, routetable := range routes {
 		content := make(map[string]any)
 		content["ID"] = routetable.ID
-		content["Name"] = getName(routetable.ID)
-		content["VPC"] = routetable.Vpc.ID
+		content[nameColumn] = getName(routetable.ID)
+		content[vpcColumn] = routetable.Vpc.ID
 		content["VPC Name"] = getName(routetable.Vpc.ID)
 		var subnets []string
 		for _, subnet := range routetable.Subnets {
 			subnets = append(subnets, fmt.Sprintf("%v (%v)", getName(subnet), subnet))
 		}
 		content["Subnets"] = subnets
-		content["AccountID"] = routetable.Vpc.AccountID
+		content[accountIDColumn] = routetable.Vpc.AccountID
 		content["Account Name"] = getName(routetable.Vpc.AccountID)
 		var routelist []string
 		for _, route := range routetable.Routes {
 			routelist = append(routelist, fmt.Sprintf("%v: %v", route.DestinationCIDR, route.DestinationTarget))
 		}
-		content["Routes"] = routelist
+		content[routesColumn] = routelist
 		holder := format.OutputHolder{Contents: content}
 		output.AddHolder(holder)
 	}
 	// if settings.IsDrawIO() {
-	// 	keys = append(keys, "Image")
+	// 	keys = append(keys, imageColumn)
 	// }
 	//
 	// switch settings.GetOutputFormat() {
@@ -69,7 +69,7 @@ func routes(_ *cobra.Command, _ []string) {
 	// 	headers, previousResults := drawio.GetHeaderAndContentsFromFile(*settings.OutputFile)
 	// 	for _, row := range previousResults {
 	// 		id := row[headers["ID"]]
-	// 		accountid := row[headers["AccountID"]]
+	// 		accountid := row[headers[accountIDColumn]]
 	// 		peeringids := row[headers["PeeringIDs"]]
 	// 		if peeringids != "" {
 	// 			sorted[id] = strings.Split(peeringids, ",")
@@ -105,16 +105,16 @@ func routes(_ *cobra.Command, _ []string) {
 	// 	peeringIDs := unique(entry)
 	// 	content := make(map[string]interface{})
 	// 	content["ID"] = id
-	// 	content["Name"] = getName(id)
+	// 	content[nameColumn] = getName(id)
 	// 	if len(entry) > 0 {
-	// 		content["AccountID"] = vpcs[id].AccountID
+	// 		content[accountIDColumn] = vpcs[id].AccountID
 	// 		content["PeeringIDs"] = peeringIDs
 	// 		if settings.IsDrawIO() {
-	// 			content["Image"] = drawio.ShapeAWSVPC
+	// 			content[imageColumn] = drawio.ShapeAWSVPC
 	// 		}
 	// 	} else {
 	// 		if settings.IsDrawIO() {
-	// 			content["Image"] = drawio.ShapeAWSVPCPeering
+	// 			content[imageColumn] = drawio.ShapeAWSVPCPeering
 	// 		}
 	// 	}
 	// }

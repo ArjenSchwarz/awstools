@@ -36,9 +36,9 @@ func orgstructure(_ *cobra.Command, _ []string) {
 	if err != nil {
 		log.Fatal(err.Error())
 	}
-	keys := []string{"Name", "Type", childrenColumn}
+	keys := []string{nameColumn, typeColumn, childrenColumn}
 	if settings.IsDrawIO() {
-		keys = append(keys, "Image")
+		keys = append(keys, imageColumn)
 	}
 	output := format.OutputArray{Keys: keys, Settings: settings.NewOutputSettings()}
 	output.Settings.Title = resultTitle
@@ -46,7 +46,7 @@ func orgstructure(_ *cobra.Command, _ []string) {
 		output.Settings.DrawIOHeader = createOrganizationsStructureDrawIOHeader()
 	}
 	if output.Settings.NeedsFromToColumns() {
-		output.Settings.AddFromToColumns("Name", childrenColumn)
+		output.Settings.AddFromToColumns(nameColumn, childrenColumn)
 	}
 	traverseOrgStructureEntry(organization, &output)
 	output.Write()
@@ -56,14 +56,14 @@ func traverseOrgStructureEntry(entry helpers.OrganizationEntry, output *format.O
 	imageConversion := map[string]string{
 		"ROOT":                drawio.AWSShape("Management Governance", "Organizations"),
 		"ORGANIZATIONAL_UNIT": drawio.AWSShape("Management Governance", "Organizational Unit"),
-		"ACCOUNT":             drawio.AWSShape("Management Governance", "Account"),
+		"ACCOUNT":             drawio.AWSShape("Management Governance", accountColumn),
 	}
 	content := make(map[string]any)
-	content["Name"] = entry.String()
-	content["Type"] = entry.Type
+	content[nameColumn] = entry.String()
+	content[typeColumn] = entry.Type
 	content[childrenColumn] = entry.String()
 	if settings.IsDrawIO() {
-		content["Image"] = imageConversion[entry.Type]
+		content[imageColumn] = imageConversion[entry.Type]
 	}
 	children := []string{}
 	for _, child := range entry.Children {

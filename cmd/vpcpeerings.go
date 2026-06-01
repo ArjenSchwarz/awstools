@@ -30,9 +30,9 @@ func peerings(_ *cobra.Command, _ []string) {
 	awsConfig := config.DefaultAwsConfig(*settings)
 	resultTitle := "VPC Peerings for account " + getName(helpers.GetAccountID(awsConfig.StsClient()))
 	peerings := helpers.GetAllVpcPeers(awsConfig.Ec2Client())
-	keys := []string{"ID", "Name", "AccountID", "PeeringIDs"}
+	keys := []string{"ID", nameColumn, accountIDColumn, "PeeringIDs"}
 	if settings.IsDrawIO() {
-		keys = append(keys, "Image")
+		keys = append(keys, imageColumn)
 	}
 	output := format.OutputArray{Keys: keys, Settings: settings.NewOutputSettings()}
 	output.Settings.Title = resultTitle
@@ -48,7 +48,7 @@ func peerings(_ *cobra.Command, _ []string) {
 		headers, previousResults := drawio.GetHeaderAndContentsFromFile(settings.GetString("output.file"))
 		for _, row := range previousResults {
 			id := row[headers["ID"]]
-			accountid := row[headers["AccountID"]]
+			accountid := row[headers[accountIDColumn]]
 			peeringids := row[headers["PeeringIDs"]]
 			if peeringids != "" {
 				sorted[id] = strings.Split(peeringids, ",")
@@ -84,15 +84,15 @@ func peerings(_ *cobra.Command, _ []string) {
 		peeringIDs := unique(entry)
 		content := make(map[string]any)
 		content["ID"] = id
-		content["Name"] = getName(id)
+		content[nameColumn] = getName(id)
 		if len(entry) > 0 {
-			content["AccountID"] = vpcs[id].AccountID
+			content[accountIDColumn] = vpcs[id].AccountID
 			content["PeeringIDs"] = peeringIDs
 			if settings.IsDrawIO() {
-				content["Image"] = drawio.AWSShape("Network Content Delivery", "VPC")
+				content[imageColumn] = drawio.AWSShape("Network Content Delivery", vpcColumn)
 			}
 		} else if settings.IsDrawIO() {
-			content["Image"] = drawio.AWSShape("Network Content Delivery", "Peering Connection")
+			content[imageColumn] = drawio.AWSShape("Network Content Delivery", "Peering Connection")
 		}
 		holder := format.OutputHolder{Contents: content}
 		output.AddHolder(holder)
@@ -101,7 +101,7 @@ func peerings(_ *cobra.Command, _ []string) {
 }
 
 func createVpcPeeringsDrawIOHeader() drawio.Header {
-	drawioheader := drawio.NewHeader("%Name%", "%Image%", "Image")
+	drawioheader := drawio.NewHeader("%Name%", "%Image%", imageColumn)
 	drawioheader.SetHeightAndWidth("78", "78")
 	connection := drawio.NewConnection()
 	connection.From = "PeeringIDs"

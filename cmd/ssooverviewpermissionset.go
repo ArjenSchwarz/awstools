@@ -34,19 +34,19 @@ func ssoOverviewByPermissionSet(_ *cobra.Command, _ []string) {
 	if err != nil {
 		panic(err)
 	}
-	keys := []string{"PermissionSet", "AccountID", "Principal"}
+	keys := []string{permissionSetColumn, accountIDColumn, "Principal"}
 	if settings.IsVerbose() {
 		keys = append(keys, "ManagedPolicies", "InlinePolicy")
 	}
 	output := format.OutputArray{Keys: keys, Settings: settings.NewOutputSettings()}
 	output.Settings.Title = resultTitle
-	output.Settings.SortKey = "PermissionSet"
+	output.Settings.SortKey = permissionSetColumn
 	switch {
 	case settings.IsDrawIO():
 		output.Settings.DrawIOHeader = createSSOPermissionsetsDrawIOHeader()
 		createSSOPermissionsetsDrawIOContents(ssoInstance, &output)
 	case output.Settings.NeedsFromToColumns():
-		output.Settings.AddFromToColumns("DrawIOID", "Children")
+		output.Settings.AddFromToColumns(drawIOIDColumn, childrenColumn)
 		createSSOPermissionsetsDrawIOContents(ssoInstance, &output)
 	default:
 		for _, permissionset := range ssoInstance.PermissionSets {
@@ -56,8 +56,8 @@ func ssoOverviewByPermissionSet(_ *cobra.Command, _ []string) {
 			for _, account := range permissionset.Accounts {
 				for _, assignment := range account.AccountAssignments {
 					content := make(map[string]any)
-					content["PermissionSet"] = assignment.PermissionSet.Name
-					content["AccountID"] = getName(account.AccountID)
+					content[permissionSetColumn] = assignment.PermissionSet.Name
+					content[accountIDColumn] = getName(account.AccountID)
 					content["Principal"] = getName(assignment.PrincipalID)
 					if settings.IsVerbose() {
 						content["ManagedPolicies"] = assignment.PermissionSet.GetManagedPolicyNames()
@@ -87,21 +87,21 @@ func createSSOPermissionsetsDrawIOHeader() drawio.Header {
 	drawioheader.SetLayout(drawio.LayoutHorizontalTree)
 	connection := drawio.NewConnection()
 	connection.Invert = false
-	connection.From = "Children"
-	connection.To = "DrawIOID"
+	connection.From = childrenColumn
+	connection.To = drawIOIDColumn
 	drawioheader.AddConnection(connection)
 	return drawioheader
 }
 
 func createSSOPermissionsetsDrawIOContents(instance helpers.SSOInstance, output *format.OutputArray) {
-	output.Keys = []string{"Name", "DrawIOID", "Type", "Children", "Image"}
+	output.Keys = []string{nameColumn, drawIOIDColumn, typeColumn, childrenColumn, imageColumn}
 
 	content := make(map[string]any)
-	content["Name"] = getName(instance.Arn)
-	content["DrawIOID"] = getName(instance.Arn)
-	content["Type"] = "SSO"
-	content["Image"] = drawio.AWSShape("Security Identity Compliance", "Single Sign-On")
-	content["Children"] = instance.GetPermissionSetList()
+	content[nameColumn] = getName(instance.Arn)
+	content[drawIOIDColumn] = getName(instance.Arn)
+	content[typeColumn] = "SSO"
+	content[imageColumn] = drawio.AWSShape("Security Identity Compliance", "Single Sign-On")
+	content[childrenColumn] = instance.GetPermissionSetList()
 	holder := format.OutputHolder{Contents: content}
 	output.AddHolder(holder)
 	uniquefilter := []string{}
@@ -111,23 +111,23 @@ func createSSOPermissionsetsDrawIOContents(instance helpers.SSOInstance, output 
 		}
 		permchildren := []string{}
 		content := make(map[string]any)
-		content["Name"] = getName(permissionset.Name)
-		content["DrawIOID"] = getName(permissionset.Name)
-		content["Type"] = "PermissionSet"
-		content["Image"] = drawio.AWSShape("Security Identity Compliance", "Permissions")
+		content[nameColumn] = getName(permissionset.Name)
+		content[drawIOIDColumn] = getName(permissionset.Name)
+		content[typeColumn] = permissionSetColumn
+		content[imageColumn] = drawio.AWSShape("Security Identity Compliance", "Permissions")
 		for _, account := range permissionset.Accounts {
 			permchildren = append(permchildren, account.AccountID+permissionset.Name)
 		}
-		content["Children"] = permchildren
+		content[childrenColumn] = permchildren
 		holder := format.OutputHolder{Contents: content}
 		output.AddHolder(holder)
 		for _, account := range permissionset.Accounts {
 			content := make(map[string]any)
-			content["Name"] = getName(account.AccountID)
-			content["DrawIOID"] = account.AccountID + permissionset.Name
-			content["Type"] = "Account"
-			content["Image"] = drawio.AWSShape("Security Identity Compliance", "Organizations Account")
-			content["Children"] = account.GetPrincipalIDsForPermissionSet(permissionset)
+			content[nameColumn] = getName(account.AccountID)
+			content[drawIOIDColumn] = account.AccountID + permissionset.Name
+			content[typeColumn] = accountColumn
+			content[imageColumn] = drawio.AWSShape("Security Identity Compliance", "Organizations Account")
+			content[childrenColumn] = account.GetPrincipalIDsForPermissionSet(permissionset)
 			holder := format.OutputHolder{Contents: content}
 			output.AddHolder(holder)
 			for _, assignment := range account.AccountAssignments {
@@ -135,14 +135,14 @@ func createSSOPermissionsetsDrawIOContents(instance helpers.SSOInstance, output 
 					if !contains(uniquefilter, assignment.PrincipalID) {
 						uniquefilter = append(uniquefilter, assignment.PrincipalID)
 						content := make(map[string]any)
-						content["Name"] = getName(assignment.PrincipalID)
-						content["DrawIOID"] = assignment.PrincipalID
-						content["Type"] = assignment.PrincipalType
+						content[nameColumn] = getName(assignment.PrincipalID)
+						content[drawIOIDColumn] = assignment.PrincipalID
+						content[typeColumn] = assignment.PrincipalType
 						switch assignment.PrincipalType {
 						case "USER":
-							content["Image"] = drawio.AWSShape("General Resources", "User")
+							content[imageColumn] = drawio.AWSShape("General Resources", "User")
 						case "GROUP":
-							content["Image"] = drawio.AWSShape("General Resources", "Users")
+							content[imageColumn] = drawio.AWSShape("General Resources", "Users")
 						}
 						holder := format.OutputHolder{Contents: content}
 						output.AddHolder(holder)

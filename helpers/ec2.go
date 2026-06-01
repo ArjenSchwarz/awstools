@@ -26,6 +26,7 @@ const (
 	interfaceType      = "interface"
 	lambdaFunctionType = "Lambda Function"
 	awsServiceType     = "AWS Service"
+	noRouteTableLabel  = "No route table"
 )
 
 // GetEc2Name returns the name of the provided EC2 Resource
@@ -1196,7 +1197,7 @@ func GetSubnetRouteTable(subnetID string, vpcID string, routeTables []types.Rout
 // FormatRouteTableInfo formats route table information similar to vpc routes command
 func FormatRouteTableInfo(routeTable *types.RouteTable) (string, []string) {
 	if routeTable == nil {
-		return "No route table", []string{}
+		return noRouteTableLabel, []string{}
 	}
 
 	// Use the same tiered lookup as other resources
@@ -2298,8 +2299,8 @@ func getRouteTableInfo(svc *ec2.Client, subnetID string, vpcID string) RouteTabl
 	routeTable := GetSubnetRouteTable(subnetID, vpcID, routeTables)
 	if routeTable == nil {
 		return RouteTableInfo{
-			ID:     "No route table",
-			Name:   "No route table",
+			ID:     noRouteTableLabel,
+			Name:   noRouteTableLabel,
 			Routes: []string{},
 		}
 	}

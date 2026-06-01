@@ -35,13 +35,13 @@ func tgwoverview(_ *cobra.Command, _ []string) {
 	awsConfig := config.DefaultAwsConfig(*settings)
 	resultTitle := "Transit Gateway Routes in account " + getName(helpers.GetAccountID(awsConfig.StsClient()))
 	gateways := helpers.GetAllTransitGateways(awsConfig.Ec2Client())
-	keys := []string{"Transit Gateway Account", "Transit Gateway", "Route Table", "CIDR", "Target", "Target Type", "State"}
+	keys := []string{"Transit Gateway Account", "Transit Gateway", routeTableColumn, cidrColumn, "Target", "Target Type", "State"}
 	if settings.IsDrawIO() {
-		keys = []string{"ID", "Name", "Destinations", "Image"}
+		keys = []string{"ID", nameColumn, destinationsColumn, imageColumn}
 	}
 	output := format.OutputArray{Keys: keys, Settings: settings.NewOutputSettings()}
 	output.Settings.Title = resultTitle
-	output.Settings.SortKey = "Route Table"
+	output.Settings.SortKey = routeTableColumn
 	if settings.IsDrawIO() {
 		createTgwOverviewDrawIO(&output, gateways)
 	} else {
@@ -63,8 +63,8 @@ func tgwoverview(_ *cobra.Command, _ []string) {
 					content := make(map[string]any)
 					content["Transit Gateway Account"] = getNameWithID(gateway.AccountID)
 					content["Transit Gateway"] = getNameWithID(gateway.ID)
-					content["Route Table"] = getNameWithID(routetable.ID)
-					content["CIDR"] = route.CIDR
+					content[routeTableColumn] = getNameWithID(routetable.ID)
+					content[cidrColumn] = route.CIDR
 					if route.Attachment.ResourceID != "" {
 						content["Target"] = getNameWithID(route.Attachment.ResourceID)
 					} else {
@@ -92,8 +92,8 @@ func tgwoverview(_ *cobra.Command, _ []string) {
 					content := make(map[string]any)
 					content["Transit Gateway Account"] = getNameWithID(gateway.AccountID)
 					content["Transit Gateway"] = getNameWithID(gateway.ID)
-					content["Route Table"] = getNameWithID(routetable.ID)
-					content["CIDR"] = "-"
+					content[routeTableColumn] = getNameWithID(routetable.ID)
+					content[cidrColumn] = "-"
 					content["Target"] = getNameWithID(attachment.ResourceID)
 					content["Target Type"] = attachment.ResourceType
 					content["State"] = "associated"
@@ -107,10 +107,10 @@ func tgwoverview(_ *cobra.Command, _ []string) {
 }
 
 func createTgwOverviewDrawIO(output *format.OutputArray, gateways []helpers.TransitGateway) {
-	drawioheader := drawio.NewHeader("%Name%", "%Image%", "Image")
+	drawioheader := drawio.NewHeader("%Name%", "%Image%", imageColumn)
 	drawioheader.SetHeightAndWidth("78", "78")
 	connection := drawio.NewConnection()
-	connection.From = "Destinations"
+	connection.From = destinationsColumn
 	connection.To = "ID"
 	connection.Invert = false
 	connection.Style = drawio.BidirectionalConnectionStyle
@@ -128,9 +128,9 @@ func createTgwOverviewDrawIO(output *format.OutputArray, gateways []helpers.Tran
 		for _, row := range previousResults {
 			targetTgwMapping[row[headers["ID"]]] = targetTgwMap{
 				ID:           row[headers["ID"]],
-				Name:         row[headers["Name"]],
-				Destinations: strings.Split(row[headers["Destinations"]], ","),
-				Image:        row[headers["Image"]],
+				Name:         row[headers[nameColumn]],
+				Destinations: strings.Split(row[headers[destinationsColumn]], ","),
+				Image:        row[headers[imageColumn]],
 			}
 		}
 	}
@@ -149,7 +149,7 @@ func createTgwOverviewDrawIO(output *format.OutputArray, gateways []helpers.Tran
 			image := ""
 			switch helpers.TypeByResourceID(resourceid) {
 			case vpcResourceType:
-				image = drawio.AWSShape("Network Content Delivery", "VPC")
+				image = drawio.AWSShape("Network Content Delivery", vpcColumn)
 			case "vpn":
 				image = drawio.AWSShape("Network Content Delivery", "Site-to-Site VPN")
 			case "dxgw":
@@ -168,9 +168,9 @@ func createTgwOverviewDrawIO(output *format.OutputArray, gateways []helpers.Tran
 	for _, mapping := range targetTgwMapping {
 		content := make(map[string]any)
 		content["ID"] = mapping.ID
-		content["Name"] = mapping.Name
-		content["Destinations"] = mapping.Destinations
-		content["Image"] = mapping.Image
+		content[nameColumn] = mapping.Name
+		content[destinationsColumn] = mapping.Destinations
+		content[imageColumn] = mapping.Image
 		holder := format.OutputHolder{Contents: content}
 		output.AddHolder(holder)
 	}
