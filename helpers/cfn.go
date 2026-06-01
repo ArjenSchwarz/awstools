@@ -11,15 +11,18 @@ import (
 // GetResourcesByStackName returns every resource in the provided stack. It
 // walks the ListStackResources paginator so stacks with more than 100
 // resources are handled correctly; DescribeStackResources silently caps its
-// response at 100 and offers no continuation token (T-784).
-func GetResourcesByStackName(stackname *string, svc *cloudformation.Client) []types.StackResource {
+// response at 100 and offers no continuation token (T-784). Any CloudFormation
+// API error (missing/invalid stack, access denied, throttling) is returned to
+// the caller rather than panicking (T-1366).
+func GetResourcesByStackName(stackname *string, svc *cloudformation.Client) ([]types.StackResource, error) {
 	return getResourcesByStackName(stackname, svc)
 }
 
 // GetNestedCloudFormationResources retrieves every resource in the provided
 // stack plus those of any nested stacks it contains. Each level is paginated
-// independently.
-func GetNestedCloudFormationResources(stackname *string, svc *cloudformation.Client) []types.StackResource {
+// independently. Errors from any level (including nested stacks) are returned
+// to the caller rather than panicking (T-1366).
+func GetNestedCloudFormationResources(stackname *string, svc *cloudformation.Client) ([]types.StackResource, error) {
 	return getNestedCloudFormationResources(stackname, svc)
 }
 
@@ -31,7 +34,7 @@ func GetNestedCloudFormationResources(stackname *string, svc *cloudformation.Cli
 // StackName field; the helper backfills it from the input so downstream
 // consumers (notably cmd/cfnresources.go's buildCfnResource) keep the
 // originating stack name for each resource.
-func getResourcesByStackName(stackname *string, svc cloudformation.ListStackResourcesAPIClient) []types.StackResource {
+func getResourcesByStackName(stackname *string, svc cloudformation.ListStackResourcesAPIClient) ([]types.StackResource, error) {
 	paginator := cloudformation.NewListStackResourcesPaginator(svc, &cloudformation.ListStackResourcesInput{
 		StackName: stackname,
 	})
@@ -39,13 +42,13 @@ func getResourcesByStackName(stackname *string, svc cloudformation.ListStackReso
 	for paginator.HasMorePages() {
 		page, err := paginator.NextPage(context.TODO())
 		if err != nil {
-			panic(err)
+			return nil, err
 		}
 		for _, summary := range page.StackResourceSummaries {
 			result = append(result, stackResourceFromSummary(summary, stackname))
 		}
 	}
-	return result
+	return result, nil
 }
 
 // getNestedCloudFormationResources is the testable implementation behind
@@ -53,8 +56,11 @@ func getResourcesByStackName(stackname *string, svc cloudformation.ListStackReso
 // PhysicalResourceId is skipped rather than recursed into — passing a nil
 // StackName to ListStackResources would otherwise re-describe the parent
 // stack, leading to duplicates or infinite recursion.
-func getNestedCloudFormationResources(stackname *string, svc cloudformation.ListStackResourcesAPIClient) []types.StackResource {
-	resources := getResourcesByStackName(stackname, svc)
+func getNestedCloudFormationResources(stackname *string, svc cloudformation.ListStackResourcesAPIClient) ([]types.StackResource, error) {
+	resources, err := getResourcesByStackName(stackname, svc)
+	if err != nil {
+		return nil, err
+	}
 	result := make([]types.StackResource, 0, len(resources))
 	for _, resource := range resources {
 		result = append(result, resource)
@@ -64,9 +70,13 @@ func getNestedCloudFormationResources(stackname *string, svc cloudformation.List
 		if resource.PhysicalResourceId == nil || aws.ToString(resource.PhysicalResourceId) == "" {
 			continue
 		}
-		result = append(result, getNestedCloudFormationResources(resource.PhysicalResourceId, svc)...)
+		nested, err := getNestedCloudFormationResources(resource.PhysicalResourceId, svc)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, nested...)
 	}
-	return result
+	return result, nil
 }
 
 // stackResourceFromSummary converts a ListStackResources summary into the
