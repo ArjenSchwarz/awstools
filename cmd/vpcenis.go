@@ -63,10 +63,11 @@ func enis(_ *cobra.Command, _ []string) error {
 
 	if vpceenisSplit {
 		writeENIsBySubnet(interfaces, names, resultTitle, attachmentFor)
-		return
+		return nil
 	}
 
 	writeENIs(interfaces, names, resultTitle, attachmentFor)
+	return nil
 }
 
 // writeENIs renders the single (non-split) ENI table. It writes the populated
@@ -77,7 +78,6 @@ func enis(_ *cobra.Command, _ []string) error {
 func writeENIs(interfaces []types.NetworkInterface, names map[string]string, resultTitle string, attachmentFor func(types.NetworkInterface) string) {
 	output := buildENIOutput(interfaces, names, resultTitle, false, attachmentFor)
 	output.Write()
-	return nil
 }
 
 // writeENIsBySubnet renders one separate table per subnet group. Each group is
