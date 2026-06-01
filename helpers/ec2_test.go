@@ -2199,3 +2199,198 @@ func TestGetResourceNameAndID_TransitGateway(t *testing.T) {
 		})
 	}
 }
+
+// TestParseVPCRoutesTargetFields verifies that parseVPCRoutes maps every
+// EC2 route target field exposed by types.Route into DestinationTarget.
+// Regression test for T-1196: routes whose target is an InstanceId
+// (NAT instance), CarrierGatewayId, LocalGatewayId, CoreNetworkArn, or
+// OdbNetworkArn previously produced an empty DestinationTarget.
+func TestParseVPCRoutesTargetFields(t *testing.T) {
+	tests := []struct {
+		name  string
+		route types.Route
+		want  string
+	}{
+		{
+			name:  "VpcPeeringConnectionId",
+			route: types.Route{VpcPeeringConnectionId: aws.String("pcx-123")},
+			want:  "pcx-123",
+		},
+		{
+			name:  "GatewayId",
+			route: types.Route{GatewayId: aws.String("igw-123")},
+			want:  "igw-123",
+		},
+		{
+			name:  "NatGatewayId",
+			route: types.Route{NatGatewayId: aws.String("nat-123")},
+			want:  "nat-123",
+		},
+		{
+			name:  "NetworkInterfaceId",
+			route: types.Route{NetworkInterfaceId: aws.String("eni-123")},
+			want:  "eni-123",
+		},
+		{
+			name:  "EgressOnlyInternetGatewayId",
+			route: types.Route{EgressOnlyInternetGatewayId: aws.String("eigw-123")},
+			want:  "eigw-123",
+		},
+		{
+			name:  "TransitGatewayId",
+			route: types.Route{TransitGatewayId: aws.String("tgw-123")},
+			want:  "tgw-123",
+		},
+		{
+			name:  "InstanceId",
+			route: types.Route{InstanceId: aws.String("i-123")},
+			want:  "i-123",
+		},
+		{
+			name:  "CarrierGatewayId",
+			route: types.Route{CarrierGatewayId: aws.String("cagw-123")},
+			want:  "cagw-123",
+		},
+		{
+			name:  "LocalGatewayId",
+			route: types.Route{LocalGatewayId: aws.String("lgw-123")},
+			want:  "lgw-123",
+		},
+		{
+			name:  "CoreNetworkArn",
+			route: types.Route{CoreNetworkArn: aws.String("arn:aws:networkmanager::123:core-network/core-network-123")},
+			want:  "arn:aws:networkmanager::123:core-network/core-network-123",
+		},
+		{
+			name:  "OdbNetworkArn",
+			route: types.Route{OdbNetworkArn: aws.String("arn:aws:odb:us-east-1:123:odb-network/odbnet-123")},
+			want:  "arn:aws:odb:us-east-1:123:odb-network/odbnet-123",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := parseVPCRoutes([]types.Route{tt.route})
+			if len(got) != 1 {
+				t.Fatalf("parseVPCRoutes() returned %d routes, want 1", len(got))
+			}
+			if got[0].DestinationTarget != tt.want {
+				t.Errorf("DestinationTarget = %q, want %q", got[0].DestinationTarget, tt.want)
+			}
+		})
+	}
+}
+
+// TestParseVPCRoutesTargetPrecedence verifies the documented precedence when
+// more than one target field is set on a single route. The first field in the
+// documented ordering wins.
+func TestParseVPCRoutesTargetPrecedence(t *testing.T) {
+	route := types.Route{
+		GatewayId:              aws.String("igw-123"),
+		NatGatewayId:           aws.String("nat-123"),
+		TransitGatewayId:       aws.String("tgw-123"),
+		VpcPeeringConnectionId: aws.String("pcx-123"),
+		InstanceId:             aws.String("i-123"),
+	}
+	got := parseVPCRoutes([]types.Route{route})
+	if len(got) != 1 {
+		t.Fatalf("parseVPCRoutes() returned %d routes, want 1", len(got))
+	}
+	if got[0].DestinationTarget != "igw-123" {
+		t.Errorf("DestinationTarget = %q, want %q (GatewayId wins by precedence)", got[0].DestinationTarget, "igw-123")
+	}
+}
+
+// TestFormatRouteTableInfoTargetFields verifies that FormatRouteTableInfo maps
+// every EC2 route target field into the formatted target. Regression test for
+// T-1196: previously only a subset was handled and the rest fell back to "local".
+func TestFormatRouteTableInfoTargetFields(t *testing.T) {
+	tests := []struct {
+		name  string
+		route types.Route
+		want  string
+	}{
+		{
+			name:  "GatewayId",
+			route: types.Route{GatewayId: aws.String("igw-123")},
+			want:  "igw-123",
+		},
+		{
+			name:  "NatGatewayId",
+			route: types.Route{NatGatewayId: aws.String("nat-123")},
+			want:  "nat-123",
+		},
+		{
+			name:  "TransitGatewayId",
+			route: types.Route{TransitGatewayId: aws.String("tgw-123")},
+			want:  "tgw-123",
+		},
+		{
+			name:  "VpcPeeringConnectionId",
+			route: types.Route{VpcPeeringConnectionId: aws.String("pcx-123")},
+			want:  "pcx-123",
+		},
+		{
+			name:  "NetworkInterfaceId",
+			route: types.Route{NetworkInterfaceId: aws.String("eni-123")},
+			want:  "eni-123",
+		},
+		{
+			name:  "EgressOnlyInternetGatewayId",
+			route: types.Route{EgressOnlyInternetGatewayId: aws.String("eigw-123")},
+			want:  "eigw-123",
+		},
+		{
+			name:  "InstanceId",
+			route: types.Route{InstanceId: aws.String("i-123")},
+			want:  "i-123",
+		},
+		{
+			name:  "CarrierGatewayId",
+			route: types.Route{CarrierGatewayId: aws.String("cagw-123")},
+			want:  "cagw-123",
+		},
+		{
+			name:  "LocalGatewayId",
+			route: types.Route{LocalGatewayId: aws.String("lgw-123")},
+			want:  "lgw-123",
+		},
+		{
+			name:  "CoreNetworkArn",
+			route: types.Route{CoreNetworkArn: aws.String("arn:aws:networkmanager::123:core-network/core-network-123")},
+			want:  "arn:aws:networkmanager::123:core-network/core-network-123",
+		},
+		{
+			name:  "OdbNetworkArn",
+			route: types.Route{OdbNetworkArn: aws.String("arn:aws:odb:us-east-1:123:odb-network/odbnet-123")},
+			want:  "arn:aws:odb:us-east-1:123:odb-network/odbnet-123",
+		},
+		{
+			name:  "local fallback when no target",
+			route: types.Route{},
+			want:  "local",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// FormatRouteTableInfo only emits a route when it has a
+			// destination, so give every case the same destination CIDR and
+			// assert on the target portion after the ": " separator.
+			route := tt.route
+			route.DestinationCidrBlock = aws.String("10.0.0.0/16")
+			rt := &types.RouteTable{
+				RouteTableId: aws.String("rtb-123"),
+				Routes:       []types.Route{route},
+			}
+			_, routeList := FormatRouteTableInfo(rt)
+			if len(routeList) != 1 {
+				t.Fatalf("FormatRouteTableInfo() returned %d targets, want 1", len(routeList))
+			}
+			want := "10.0.0.0/16: " + tt.want
+			if routeList[0] != want {
+				t.Errorf("route = %q, want %q", routeList[0], want)
+			}
+		})
+	}
+}
