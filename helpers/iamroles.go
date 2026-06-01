@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/url"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/iam"
 	"github.com/aws/aws-sdk-go-v2/service/iam/types"
 )
@@ -41,21 +42,24 @@ func GetRoleDetails(verbose bool, svc IAMClient) []IAMRole {
 		}
 		for _, role := range page.Roles {
 			policydocument := IAMPolicyDocument{Type: IAMPolicyTypeAssumeRole}
-			decodeddocument, err := url.QueryUnescape(*role.AssumeRolePolicyDocument)
-			if err != nil {
-				panic(err)
+			if role.AssumeRolePolicyDocument != nil {
+				decodeddocument, err := url.QueryUnescape(*role.AssumeRolePolicyDocument)
+				if err != nil {
+					panic(err)
+				}
+				err = json.Unmarshal([]byte(decodeddocument), &policydocument)
+				if err != nil {
+					panic(err)
+				}
 			}
-			err = json.Unmarshal([]byte(decodeddocument), &policydocument)
-			if err != nil {
-				panic(err)
-			}
-			inlinepolicies := getInlinePoliciesForRole(*role.RoleName, verbose, svc)
-			attachedpolicies := getAttachedPoliciesForRole(*role.RoleName, verbose, svc)
+			roleName := aws.ToString(role.RoleName)
+			inlinepolicies := getInlinePoliciesForRole(roleName, verbose, svc)
+			attachedpolicies := getAttachedPoliciesForRole(roleName, verbose, svc)
 			rolestruct := IAMRole{
-				Name:             *role.RoleName,
-				ID:               *role.RoleId,
+				Name:             roleName,
+				ID:               aws.ToString(role.RoleId),
 				AssumeRolePolicy: policydocument,
-				Path:             *role.Path,
+				Path:             aws.ToString(role.Path),
 				Role:             &role,
 				InlinePolicies:   inlinepolicies,
 				AttachedPolicies: attachedpolicies,
@@ -75,7 +79,7 @@ func GetRoleDetails(verbose bool, svc IAMClient) []IAMRole {
 }
 
 func getRoleType(role types.Role) string {
-	rolePath := *role.Path
+	rolePath := aws.ToString(role.Path)
 	if rolePath == "/service-role/" || (len(rolePath) > 18 && rolePath[0:18] == "/aws-service-role/") {
 		return IAMRoleTypeServiceRole
 	}
@@ -139,7 +143,7 @@ func getAttachedPoliciesForRole(rolename string, verbose bool, svc IAMClient) ma
 			log.Fatal(err.Error())
 		}
 		for _, policy := range page.AttachedPolicies {
-			policyname := *policy.PolicyName
+			policyname := aws.ToString(policy.PolicyName)
 			if _, ok := cachedIAMPolicyDocuments[policyname]; !ok {
 				policydocument := IAMPolicyDocument{
 					Type: IAMPolicyTypeAttached,
