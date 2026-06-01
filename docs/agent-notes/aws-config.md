@@ -29,3 +29,7 @@ AWS profile names are case-sensitive — they are matched verbatim against `[pro
 ## AWS Config File Parser
 
 `helpers/aws_config_file.go:parseConfigFileWithRecovery` reads `~/.aws/config` with `bufio.Scanner`. The default token size (64 KiB) is too small for configs with long `credential_process` commands or other oversized custom properties, so the parser calls `scanner.Buffer` with a 1 MiB cap (`maxConfigLineSize`). Without this, a single long line causes `bufio.ErrTooLong` and aborts the whole parse, bypassing the partial-recovery logic. This was the fix for T-867.
+
+## Appending Profiles (AppendToFile)
+
+`AppendToFile` opens the config with `os.O_APPEND|os.O_CREATE|os.O_RDWR` and writes each generated profile's `ToConfigString()`. Each `ToConfigString()` block already ends in `\n\n`, so successive appended profiles separate correctly — but the boundary between pre-existing content and the first appended profile is not guaranteed. Before the append loop it now `Stat`s the file and, if non-empty with a final byte that is not `\n`, writes one separator newline. Without this, a user config ending on a property line with no trailing newline would have the next `[profile ...]` header concatenated onto it, corrupting both entries (T-1314). The fd is `O_RDWR` (not `O_WRONLY`) specifically so the trailing byte can be read via `ReadAt`; `O_APPEND` still forces all writes to the end.

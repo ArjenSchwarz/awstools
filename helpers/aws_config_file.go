@@ -628,8 +628,11 @@ func (cf *AWSConfigFile) AppendToFile(profiles []GeneratedProfile) error {
 
 	// Append with file locking for concurrent access protection
 	appendErr := func() error {
-		// Open file for appending with locking
-		file, err := os.OpenFile(cf.FilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
+		// Open file for appending with locking. O_RDWR (rather than
+		// O_WRONLY) is required so the existing trailing byte can be
+		// inspected before appending; O_APPEND still forces writes to
+		// the end of the file.
+		file, err := os.OpenFile(cf.FilePath, os.O_APPEND|os.O_CREATE|os.O_RDWR, 0600)
 		if err != nil {
 			return NewFileSystemError("failed to open config file for appending", err).
 				WithContext("file_path", cf.FilePath)
@@ -646,6 +649,27 @@ func (cf *AWSConfigFile) AppendToFile(profiles []GeneratedProfile) error {
 		if err := file.Chmod(0600); err != nil {
 			return NewFileSystemError("failed to set file permissions", err).
 				WithContext("file_path", cf.FilePath)
+		}
+
+		// Ensure the existing content ends with a newline before appending.
+		// If the file is non-empty and its final byte is not a newline,
+		// appending a profile header would concatenate it onto the previous
+		// property line, corrupting both entries (T-1314).
+		if info, statErr := file.Stat(); statErr != nil {
+			return NewFileSystemError("failed to stat config file", statErr).
+				WithContext("file_path", cf.FilePath)
+		} else if info.Size() > 0 {
+			lastByte := make([]byte, 1)
+			if _, readErr := file.ReadAt(lastByte, info.Size()-1); readErr != nil {
+				return NewFileSystemError("failed to read end of config file", readErr).
+					WithContext("file_path", cf.FilePath)
+			}
+			if lastByte[0] != '\n' {
+				if _, writeErr := file.WriteString("\n"); writeErr != nil {
+					return NewFileSystemError("failed to write separator newline", writeErr).
+						WithContext("file_path", cf.FilePath)
+				}
+			}
 		}
 
 		// Append new profiles
