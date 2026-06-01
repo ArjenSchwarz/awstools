@@ -25,7 +25,7 @@ func routes(_ *cobra.Command, _ []string) {
 	awsConfig := config.DefaultAwsConfig(*settings)
 	resultTitle := "VPC Routes for account " + getName(helpers.GetAccountID(awsConfig.StsClient()))
 	routes := helpers.GetAllVPCRouteTables(awsConfig.Ec2Client())
-	keys := []string{accountIDColumn, "Account Name", "ID", nameColumn, vpcColumn, "VPC Name", "Subnets", routesColumn}
+	keys := []string{accountIDColumn, "Account Name", "ID", nameColumn, vpcColumn, "VPC Name", "Default", "Subnets", routesColumn}
 	output := format.OutputArray{Keys: keys, Settings: settings.NewOutputSettings()}
 	output.Settings.Title = resultTitle
 	for _, routetable := range routes {
@@ -34,9 +34,16 @@ func routes(_ *cobra.Command, _ []string) {
 		content[nameColumn] = getName(routetable.ID)
 		content[vpcColumn] = routetable.Vpc.ID
 		content["VPC Name"] = getName(routetable.Vpc.ID)
+		content["Default"] = routetable.Default
 		var subnets []string
 		for _, subnet := range routetable.Subnets {
 			subnets = append(subnets, fmt.Sprintf("%v (%v)", getName(subnet), subnet))
+		}
+		// The main/default route table applies to every subnet that has no
+		// explicit association. EC2 reports no SubnetId for it, so make that
+		// state visible instead of leaving the column blank (T-1270).
+		if routetable.Default && len(subnets) == 0 {
+			subnets = append(subnets, "main (all unassociated subnets)")
 		}
 		content["Subnets"] = subnets
 		content[accountIDColumn] = routetable.Vpc.AccountID
