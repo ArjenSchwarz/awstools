@@ -158,3 +158,78 @@ func TestSearchENIsByIP_NoMatches(t *testing.T) {
 		t.Errorf("DescribeNetworkInterfaces called %d times, want 1", mock.callCount)
 	}
 }
+
+// TestBuildBaseIPFinderResults_DuplicateIPAcrossVPCs is the regression test for
+// T-1413. Two ENIs in different VPCs share the same private IP — a common
+// scenario because RFC1918 ranges are reused across unrelated VPCs. Before the
+// fix FindIPAddressDetails logged a warning and returned only enis[0], hiding
+// the second match. The fix returns one result per matching ENI.
+func TestBuildBaseIPFinderResults_DuplicateIPAcrossVPCs(t *testing.T) {
+	ip := "10.0.1.100"
+	enis := []types.NetworkInterface{
+		{
+			NetworkInterfaceId: aws.String("eni-aaaa"),
+			VpcId:              aws.String("vpc-aaaa"),
+			SubnetId:           aws.String("subnet-aaaa"),
+			PrivateIpAddress:   aws.String(ip),
+			PrivateIpAddresses: []types.NetworkInterfacePrivateIpAddress{
+				{PrivateIpAddress: aws.String(ip), Primary: aws.Bool(true)},
+			},
+		},
+		{
+			NetworkInterfaceId: aws.String("eni-bbbb"),
+			VpcId:              aws.String("vpc-bbbb"),
+			SubnetId:           aws.String("subnet-bbbb"),
+			PrivateIpAddress:   aws.String("10.0.2.50"),
+			PrivateIpAddresses: []types.NetworkInterfacePrivateIpAddress{
+				{PrivateIpAddress: aws.String("10.0.2.50"), Primary: aws.Bool(true)},
+				{PrivateIpAddress: aws.String(ip), Primary: aws.Bool(false)},
+			},
+		},
+	}
+
+	results := buildBaseIPFinderResults(ip, enis)
+
+	if len(results) != 2 {
+		t.Fatalf("buildBaseIPFinderResults() returned %d results, want 2 (duplicate IP across VPCs must not be dropped)", len(results))
+	}
+
+	// Every result must be marked Found and carry its own ENI/IP.
+	for i, r := range results {
+		if !r.Found {
+			t.Errorf("results[%d].Found = false, want true", i)
+		}
+		if r.IPAddress != ip {
+			t.Errorf("results[%d].IPAddress = %s, want %s", i, r.IPAddress, ip)
+		}
+		if r.ENI == nil {
+			t.Fatalf("results[%d].ENI is nil", i)
+		}
+	}
+
+	// The two results must reference distinct ENIs in distinct VPCs, proving the
+	// second match was preserved rather than overwritten by the first.
+	if aws.ToString(results[0].ENI.NetworkInterfaceId) == aws.ToString(results[1].ENI.NetworkInterfaceId) {
+		t.Errorf("both results reference the same ENI %s", aws.ToString(results[0].ENI.NetworkInterfaceId))
+	}
+	if aws.ToString(results[0].ENI.VpcId) == aws.ToString(results[1].ENI.VpcId) {
+		t.Errorf("both results reference the same VPC %s", aws.ToString(results[0].ENI.VpcId))
+	}
+
+	// Primary on first ENI, secondary on second ENI.
+	if results[0].IsSecondaryIP {
+		t.Errorf("results[0].IsSecondaryIP = true, want false (primary IP)")
+	}
+	if !results[1].IsSecondaryIP {
+		t.Errorf("results[1].IsSecondaryIP = false, want true (secondary IP)")
+	}
+}
+
+// TestBuildBaseIPFinderResults_NoMatches verifies an empty ENI list yields no
+// results (the not-found case is handled separately by FindIPAddressDetails).
+func TestBuildBaseIPFinderResults_NoMatches(t *testing.T) {
+	results := buildBaseIPFinderResults("10.0.1.100", nil)
+	if len(results) != 0 {
+		t.Errorf("buildBaseIPFinderResults() returned %d results, want 0", len(results))
+	}
+}
