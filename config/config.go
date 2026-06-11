@@ -87,7 +87,10 @@ func (config *Config) IsVerbose() bool {
 	return config.GetBool("output.verbose")
 }
 
-// NewOutputSettings creates and returns a new OutputSettings instance with current configuration
+// NewOutputSettings creates and returns a new OutputSettings instance with
+// current configuration. It must return a fresh object on every call: the
+// library's Write() mutates the settings it is given (e.g. filling in an empty
+// OutputFileFormat), so sharing one instance across calls would leak state.
 func (config *Config) NewOutputSettings() *format.OutputSettings {
 	settings := format.NewOutputSettings()
 	settings.UseEmoji = config.GetBool("output.use-emoji")

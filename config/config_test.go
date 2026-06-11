@@ -1,6 +1,7 @@
 package config
 
 import (
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -293,6 +294,32 @@ func TestConfig_NewOutputSettings(t *testing.T) {
 	})
 }
 
+// captureStdout runs fn with os.Stdout redirected to a pipe and returns what
+// was written. Write() prints the stdout rendering via os.Stdout directly, so
+// this is the only way to observe it in a test.
+func captureStdout(t *testing.T, fn func()) string {
+	t.Helper()
+	old := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("failed to create pipe: %v", err)
+	}
+	os.Stdout = w
+	t.Cleanup(func() { os.Stdout = old })
+
+	fn()
+
+	if err := w.Close(); err != nil {
+		t.Fatalf("failed to close pipe writer: %v", err)
+	}
+	os.Stdout = old
+	captured, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatalf("failed to read captured stdout: %v", err)
+	}
+	return string(captured)
+}
+
 func TestConfig_FileFormatWrite(t *testing.T) {
 	config := &Config{}
 
@@ -303,14 +330,37 @@ func TestConfig_FileFormatWrite(t *testing.T) {
 		viper.Set("output.file-format", "csv")
 		t.Cleanup(viper.Reset)
 
-		output := format.OutputArray{Keys: []string{"Name", "Value"}, Settings: config.NewOutputSettings()}
-		output.AddContents(map[string]any{"Name": "first", "Value": "one"})
-		output.Write()
+		stdout := captureStdout(t, func() {
+			output := format.OutputArray{Keys: []string{"Name", "Value"}, Settings: config.NewOutputSettings()}
+			output.AddContents(map[string]any{"Name": "first", "Value": "one"})
+			output.Write()
+		})
 
 		contents, err := os.ReadFile(outputFile)
 		assert.NoError(t, err)
 		assert.Contains(t, string(contents), "Name,Value")
 		assert.Contains(t, string(contents), "first,one")
 		assert.NotContains(t, string(contents), "{")
+
+		assert.Contains(t, stdout, `"Name":"first"`)
+		assert.NotContains(t, stdout, "Name,Value")
+	})
+
+	t.Run("file format without a file is a no-op", func(t *testing.T) {
+		outputDir := t.TempDir()
+		viper.Set("output.format", "json")
+		viper.Set("output.file-format", "csv")
+		t.Cleanup(viper.Reset)
+
+		stdout := captureStdout(t, func() {
+			output := format.OutputArray{Keys: []string{"Name", "Value"}, Settings: config.NewOutputSettings()}
+			output.AddContents(map[string]any{"Name": "first", "Value": "one"})
+			output.Write()
+		})
+
+		assert.Contains(t, stdout, `"Name":"first"`)
+		entries, err := os.ReadDir(outputDir)
+		assert.NoError(t, err)
+		assert.Empty(t, entries, "no file may be written when --file is not set")
 	})
 }
