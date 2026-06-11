@@ -42,7 +42,8 @@ func init() {
 
 	rootCmd.PersistentFlags().BoolP("verbose", "v", false, "Give verbose output")
 	rootCmd.PersistentFlags().StringP("file", "f", "", "Optional file to save the output to")
-	rootCmd.PersistentFlags().StringP("output", "o", "json", "Format for the output, currently supported are csv, table, json, html, dot, and drawio")
+	rootCmd.PersistentFlags().String("file-format", "", "Optional format for the file set with --file, defaults to the same as --output")
+	rootCmd.PersistentFlags().StringP("output", "o", "json", "Format for the output, currently supported are csv, table, json, yaml, html, markdown, mermaid, dot, and drawio")
 	rootCmd.PersistentFlags().BoolP("append", "a", false, "Add to the provided output file instead of replacing it")
 	rootCmd.PersistentFlags().StringP("namefile", "n", "", "Use this file to provide names")
 	rootCmd.PersistentFlags().String("profile", "", "Use a specific profile")
@@ -62,6 +63,9 @@ func init() {
 		panic(err)
 	}
 	if err := viper.BindPFlag("output.file", rootCmd.PersistentFlags().Lookup("file")); err != nil {
+		panic(err)
+	}
+	if err := viper.BindPFlag("output.file-format", rootCmd.PersistentFlags().Lookup("file-format")); err != nil {
 		panic(err)
 	}
 	if err := viper.BindPFlag("output.append", rootCmd.PersistentFlags().Lookup("append")); err != nil {
