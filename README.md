@@ -79,21 +79,22 @@ Available Commands:
   vpc           VPC commands
 
 Flags:
-  -a, --append            Add to the provided output file instead of replacing it
-      --config string     config file (default is .awstools.yaml in current directory, or $HOME/.awstools.yaml)
-      --emoji             Use emoji in the output
-  -f, --file string       Optional file to save the output to
-  -h, --help              help for awstools
-  -n, --namefile string   Use this file to provide names
-  -o, --output string     Format for the output, currently supported are csv, table, json, html, dot, and drawio (default "json")
-      --profile string    Use a specific profile
-      --region string     Use a specific region
-  -v, --verbose           Give verbose output
+  -a, --append               Add to the provided output file instead of replacing it
+      --config string        config file (default is .awstools.yaml in current directory, or $HOME/.awstools.yaml)
+      --emoji                Use emoji in the output
+  -f, --file string          Optional file to save the output to
+      --file-format string   Optional format for the file set with --file, defaults to the same as --output
+  -h, --help                 help for awstools
+  -n, --namefile string      Use this file to provide names
+  -o, --output string        Format for the output, currently supported are csv, table, json, yaml, html, markdown, mermaid, dot, and drawio (default "json")
+      --profile string       Use a specific profile
+      --region string        Use a specific region
+  -v, --verbose              Give verbose output
 
 Use "awstools [command] --help" for more information about a command.
 ```
 
-Output options are csv, table, json, html, markdown, dot, and drawio with json being the default so you can easily pass it to a tool like [jq](https://stedolan.github.io/jq/). The dot and drawio formats are input for graphical tools and only available for certain actions. You can also directly save the output into a file. Most commands will have a verbose option that will show some additional information that you often won't need.
+Output options are csv, table, json, yaml, html, markdown, mermaid, dot, and drawio with json being the default so you can easily pass it to a tool like [jq](https://stedolan.github.io/jq/). The dot, mermaid, and drawio formats are input for graphical tools and only available for certain actions. You can also directly save the output into a file, and with `--file-format` the file can use a different format than what is shown on screen (for example a table on screen and json in the file). Most commands will have a verbose option that will show some additional information that you often won't need.
 
 ## Pretty names
 
