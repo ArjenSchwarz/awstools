@@ -1,8 +1,12 @@
 package config
 
 import (
+	"io"
+	"os"
+	"path/filepath"
 	"testing"
 
+	format "github.com/ArjenSchwarz/go-output"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 )
@@ -192,6 +196,24 @@ func TestConfig_ShouldCombineAndAppend(t *testing.T) {
 		assert.True(t, result)
 		viper.Reset()
 	})
+
+	t.Run("returns false when the file format is html even though stdout format is not", func(t *testing.T) {
+		viper.Set("output.append", true)
+		viper.Set("output.format", "csv")
+		viper.Set("output.file-format", "html")
+		result := config.ShouldCombineAndAppend()
+		assert.False(t, result)
+		viper.Reset()
+	})
+
+	t.Run("returns true when the file format overrides an html stdout format", func(t *testing.T) {
+		viper.Set("output.append", true)
+		viper.Set("output.format", "html")
+		viper.Set("output.file-format", "csv")
+		result := config.ShouldCombineAndAppend()
+		assert.True(t, result)
+		viper.Reset()
+	})
 }
 
 func TestConfig_IsVerbose(t *testing.T) {
@@ -219,6 +241,7 @@ func TestConfig_NewOutputSettings(t *testing.T) {
 		viper.Set("output.use-emoji", true)
 		viper.Set("output.format", "json")
 		viper.Set("output.file", "/tmp/output.json")
+		viper.Set("output.file-format", "csv")
 		viper.Set("output.append", true)
 		viper.Set("output.table.style", "default")
 		viper.Set("output.table.max-column-width", 50)
@@ -228,9 +251,19 @@ func TestConfig_NewOutputSettings(t *testing.T) {
 		assert.True(t, settings.UseEmoji)
 		assert.Equal(t, "json", settings.OutputFormat)
 		assert.Equal(t, "/tmp/output.json", settings.OutputFile)
+		assert.Equal(t, "csv", settings.OutputFileFormat)
 		assert.True(t, settings.ShouldAppend)
 		assert.Equal(t, 50, settings.TableMaxColumnWidth)
 
+		viper.Reset()
+	})
+
+	t.Run("lowercases the file format like the output format", func(t *testing.T) {
+		viper.Set("output.file-format", "CSV")
+
+		settings := config.NewOutputSettings()
+
+		assert.Equal(t, "csv", settings.OutputFileFormat)
 		viper.Reset()
 	})
 
@@ -253,7 +286,81 @@ func TestConfig_NewOutputSettings(t *testing.T) {
 		assert.False(t, settings.UseEmoji)
 		assert.Equal(t, "", settings.OutputFormat)
 		assert.Equal(t, "", settings.OutputFile)
+		// An empty OutputFileFormat makes the library fall back to the
+		// stdout format when writing the file.
+		assert.Equal(t, "", settings.OutputFileFormat)
 		assert.False(t, settings.ShouldAppend)
 		assert.Equal(t, 0, settings.TableMaxColumnWidth)
+	})
+}
+
+// captureStdout runs fn with os.Stdout redirected to a pipe and returns what
+// was written. Write() prints the stdout rendering via os.Stdout directly, so
+// this is the only way to observe it in a test.
+func captureStdout(t *testing.T, fn func()) string {
+	t.Helper()
+	old := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("failed to create pipe: %v", err)
+	}
+	os.Stdout = w
+	t.Cleanup(func() { os.Stdout = old })
+
+	fn()
+
+	if err := w.Close(); err != nil {
+		t.Fatalf("failed to close pipe writer: %v", err)
+	}
+	os.Stdout = old
+	captured, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatalf("failed to read captured stdout: %v", err)
+	}
+	return string(captured)
+}
+
+func TestConfig_FileFormatWrite(t *testing.T) {
+	config := &Config{}
+
+	t.Run("writes the file in the file format while stdout keeps the output format", func(t *testing.T) {
+		outputFile := filepath.Join(t.TempDir(), "output")
+		viper.Set("output.format", "json")
+		viper.Set("output.file", outputFile)
+		viper.Set("output.file-format", "csv")
+		t.Cleanup(viper.Reset)
+
+		stdout := captureStdout(t, func() {
+			output := format.OutputArray{Keys: []string{"Name", "Value"}, Settings: config.NewOutputSettings()}
+			output.AddContents(map[string]any{"Name": "first", "Value": "one"})
+			output.Write()
+		})
+
+		contents, err := os.ReadFile(outputFile)
+		assert.NoError(t, err)
+		assert.Contains(t, string(contents), "Name,Value")
+		assert.Contains(t, string(contents), "first,one")
+		assert.NotContains(t, string(contents), "{")
+
+		assert.Contains(t, stdout, `"Name":"first"`)
+		assert.NotContains(t, stdout, "Name,Value")
+	})
+
+	t.Run("file format without a file is a no-op", func(t *testing.T) {
+		outputDir := t.TempDir()
+		viper.Set("output.format", "json")
+		viper.Set("output.file-format", "csv")
+		t.Cleanup(viper.Reset)
+
+		stdout := captureStdout(t, func() {
+			output := format.OutputArray{Keys: []string{"Name", "Value"}, Settings: config.NewOutputSettings()}
+			output.AddContents(map[string]any{"Name": "first", "Value": "one"})
+			output.Write()
+		})
+
+		assert.Contains(t, stdout, `"Name":"first"`)
+		entries, err := os.ReadDir(outputDir)
+		assert.NoError(t, err)
+		assert.Empty(t, entries, "no file may be written when --file is not set")
 	})
 }

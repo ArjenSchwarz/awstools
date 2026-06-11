@@ -69,13 +69,17 @@ func (config *Config) ShouldAppend() bool {
 
 // ShouldCombineAndAppend returns if the output should be combined
 func (config *Config) ShouldCombineAndAppend() bool {
-	if !config.NewOutputSettings().ShouldAppend {
+	settings := config.NewOutputSettings()
+	if !settings.ShouldAppend {
 		return false
 	}
-	if config.NewOutputSettings().OutputFormat == "html" {
-		return false
+	// The HTML exclusion concerns the file being appended to, so it has to
+	// look at the format the file is written in, not the stdout format.
+	fileFormat := settings.OutputFileFormat
+	if fileFormat == "" {
+		fileFormat = settings.OutputFormat
 	}
-	return true
+	return fileFormat != "html"
 }
 
 // IsVerbose returns whether verbose output is enabled
@@ -83,12 +87,16 @@ func (config *Config) IsVerbose() bool {
 	return config.GetBool("output.verbose")
 }
 
-// NewOutputSettings creates and returns a new OutputSettings instance with current configuration
+// NewOutputSettings creates and returns a new OutputSettings instance with
+// current configuration. It must return a fresh object on every call: the
+// library's Write() mutates the settings it is given (e.g. filling in an empty
+// OutputFileFormat), so sharing one instance across calls would leak state.
 func (config *Config) NewOutputSettings() *format.OutputSettings {
 	settings := format.NewOutputSettings()
 	settings.UseEmoji = config.GetBool("output.use-emoji")
 	settings.SetOutputFormat(config.GetLCString("output.format"))
 	settings.OutputFile = config.GetString("output.file")
+	settings.OutputFileFormat = config.GetLCString("output.file-format")
 	settings.ShouldAppend = config.GetBool("output.append")
 	settings.TableStyle = format.TableStyles[config.GetString("output.table.style")]
 	settings.TableMaxColumnWidth = config.GetInt("output.table.max-column-width")
