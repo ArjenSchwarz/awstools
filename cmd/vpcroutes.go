@@ -5,7 +5,7 @@ import (
 
 	"github.com/ArjenSchwarz/awstools/config"
 	"github.com/ArjenSchwarz/awstools/helpers"
-	format "github.com/ArjenSchwarz/go-output"
+	output "github.com/ArjenSchwarz/go-output/v2"
 	"github.com/spf13/cobra"
 )
 
@@ -14,20 +14,19 @@ var routesCmd = &cobra.Command{
 	Use:   "routes",
 	Short: "Get VPC Routes",
 	Long:  `Get an overview of the routes of all VPCs in the account.`,
-	Run:   routes,
+	RunE:  routes,
 }
 
 func init() {
 	vpcCmd.AddCommand(routesCmd)
 }
 
-func routes(_ *cobra.Command, _ []string) {
+func routes(cmd *cobra.Command, _ []string) error {
 	awsConfig := config.DefaultAwsConfig(*settings)
 	resultTitle := "VPC Routes for account " + getName(helpers.GetAccountID(awsConfig.StsClient()))
 	routes := helpers.GetAllVPCRouteTables(awsConfig.Ec2Client())
 	keys := []string{accountIDColumn, "Account Name", "ID", nameColumn, vpcColumn, "VPC Name", "Default", "Subnets", routesColumn}
-	output := format.OutputArray{Keys: keys, Settings: settings.NewOutputSettings()}
-	output.Settings.Title = resultTitle
+	rows := make([]map[string]any, 0, len(routes))
 	for _, routetable := range routes {
 		content := make(map[string]any)
 		content["ID"] = routetable.ID
@@ -53,8 +52,7 @@ func routes(_ *cobra.Command, _ []string) {
 			routelist = append(routelist, fmt.Sprintf("%v: %v", route.DestinationCIDR, route.DestinationTarget))
 		}
 		content[routesColumn] = routelist
-		holder := format.OutputHolder{Contents: content}
-		output.AddHolder(holder)
+		rows = append(rows, content)
 	}
 	// if settings.IsDrawIO() {
 	// 	keys = append(keys, imageColumn)
@@ -125,5 +123,8 @@ func routes(_ *cobra.Command, _ []string) {
 	// 		}
 	// 	}
 	// }
-	output.Write()
+	doc := output.New().
+		Table(resultTitle, rows, output.WithKeys(keys...)).
+		Build()
+	return settings.RenderDocument(cmd.Context(), doc)
 }
