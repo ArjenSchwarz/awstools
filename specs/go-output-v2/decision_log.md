@@ -288,3 +288,36 @@ RunE is the idiomatic cobra error contract: errors reach stderr and the exit cod
 - Touches every command definition (signature churn) and slightly changes error output formatting (cobra prefixes `Error:`).
 
 ---
+
+## Decision 10: graphEdges drops rows with nil to-cells instead of replicating v1's fmt artifact
+
+**Date**: 2026-07-04
+**Status**: accepted
+
+### Context
+
+v1's `OutputArray.splitFromToValues` stringified every to-cell with `toString`, so a missing/nil to-cell became the literal string `%!s(<nil>)`. Because that string is non-empty, v1's dot renderer emitted an edge from the row's from-node to an uninitialized zero-value node — garbage output triggered by rows like a VPC with no peerings. The new shared `graphEdges` helper (task 5, `cmd/graph.go`) had to either replicate this byte-for-byte or clean it up.
+
+### Decision
+
+`graphCellString` maps nil cells to the empty string, so rows without a to-cell produce no edges at all. All other v1 stringification semantics (comma join for `[]string`, split on `,`, empty-target skip) are replicated exactly and pinned by `TestGraphEdges`.
+
+### Rationale
+
+The v1 behavior is an artifact of `fmt.Sprintf("%s", nil)`, not intentional design: it rendered a bogus `%!s(<nil>)` node/edge in dot output. Reproducing a bug to preserve byte equivalence would make the graph output worse and would complicate the equivalence oracle tests (task 23), which would have to whitelist the artifact anyway.
+
+### Alternatives Considered
+
+- **Replicate `%!s(<nil>)` exactly**: Byte-for-byte v1 equivalence - Rejected because it preserves garbage output and a v1 rendering bug.
+- **Emit the from-node without an edge**: Keeps lone nodes visible in graphs - Rejected because v2's Edge-based API has no isolated-node concept in this helper, and v1 only showed such nodes alongside the garbage edge; no command depends on it.
+
+### Consequences
+
+**Positive:**
+- Graph output for rows without targets is clean (no phantom nodes/edges).
+- Deviation is documented in code and pinned by a dedicated test.
+
+**Negative:**
+- dot/mermaid output is not byte-identical to v1 for rows with nil to-cells; the per-format equivalence tests (task 23) must account for this documented deviation.
+
+---
