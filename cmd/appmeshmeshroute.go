@@ -3,7 +3,7 @@ package cmd
 import (
 	"github.com/ArjenSchwarz/awstools/config"
 	"github.com/ArjenSchwarz/awstools/helpers"
-	format "github.com/ArjenSchwarz/go-output"
+	output "github.com/ArjenSchwarz/go-output/v2"
 	"github.com/spf13/cobra"
 )
 
@@ -12,14 +12,14 @@ var meshrouteCmd = &cobra.Command{
 	Use:   "routelist",
 	Short: "Get an overview of all routes in the mesh",
 	Long:  `This displays all the routes in the mesh`,
-	Run:   meshroute,
+	RunE:  meshroute,
 }
 
 func init() {
 	appmeshCmd.AddCommand(meshrouteCmd)
 }
 
-func meshroute(_ *cobra.Command, _ []string) {
+func meshroute(cmd *cobra.Command, _ []string) error {
 	resultTitle := "Overview of the routes in the mesh"
 	awsConfig := config.DefaultAwsConfig(*settings)
 	svc := awsConfig.AppmeshClient()
@@ -29,8 +29,7 @@ func meshroute(_ *cobra.Command, _ []string) {
 		keys = append(keys, "Weight")
 		keys = append(keys, "Router")
 	}
-	output := format.OutputArray{Keys: keys, Settings: settings.NewOutputSettings()}
-	output.Settings.Title = resultTitle
+	rows := []map[string]any{}
 	for _, route := range routes {
 		for _, path := range route.VirtualServiceRoutes {
 			content := make(map[string]any)
@@ -41,9 +40,11 @@ func meshroute(_ *cobra.Command, _ []string) {
 				content["Weight"] = int(path.Weight)
 				content["Router"] = path.Router
 			}
-			holder := format.OutputHolder{Contents: content}
-			output.AddHolder(holder)
+			rows = append(rows, content)
 		}
 	}
-	output.Write()
+	doc := output.New().
+		Table(resultTitle, rows, output.WithKeys(keys...)).
+		Build()
+	return settings.RenderDocument(cmd.Context(), doc)
 }
