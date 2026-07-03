@@ -1,14 +1,21 @@
 package config
 
 import (
+	"bytes"
+	"context"
+	"encoding/csv"
+	"encoding/json"
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	format "github.com/ArjenSchwarz/go-output"
+	output "github.com/ArjenSchwarz/go-output/v2"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestConfig_GetLCString(t *testing.T) {
@@ -148,6 +155,22 @@ func TestConfig_IsDrawIO(t *testing.T) {
 		viper.Set("output.format", "json")
 		result := config.IsDrawIO()
 		assert.False(t, result)
+		viper.Reset()
+	})
+
+	t.Run("returns true when the file format is drawio", func(t *testing.T) {
+		viper.Set("output.format", "json")
+		viper.Set("output.file-format", "drawio")
+		result := config.IsDrawIO()
+		assert.True(t, result)
+		viper.Reset()
+	})
+
+	t.Run("returns true when stdout is drawio and the file format is not", func(t *testing.T) {
+		viper.Set("output.format", "drawio")
+		viper.Set("output.file-format", "json")
+		result := config.IsDrawIO()
+		assert.True(t, result)
 		viper.Reset()
 	})
 }
@@ -363,4 +386,383 @@ func TestConfig_FileFormatWrite(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Empty(t, entries, "no file may be written when --file is not set")
 	})
+}
+
+// ---- go-output v2 render helper tests ----
+
+// captureWriter implements output.Writer, buffering rendered bytes so tests
+// can inject it as the stdout writer of the renderDocuments core.
+type captureWriter struct {
+	buf bytes.Buffer
+}
+
+func (w *captureWriter) Write(_ context.Context, _ string, data []byte) error {
+	_, err := w.buf.Write(data)
+	return err
+}
+
+// tableDocument builds a single-table document with fixed keys for render tests.
+func tableDocument(rows ...map[string]any) *output.Document {
+	return output.New().Table("Test", rows, output.WithKeys("Name", "Value")).Build()
+}
+
+func TestFormatFor(t *testing.T) {
+	config := &Config{}
+
+	tests := map[string]struct {
+		name string
+		want string
+	}{
+		"json maps to json":                {name: "json", want: "json"},
+		"yaml maps to yaml":                {name: "yaml", want: "yaml"},
+		"csv maps to csv":                  {name: "csv", want: "csv"},
+		"table maps to table":              {name: "table", want: "table"},
+		"markdown maps to markdown":        {name: "markdown", want: "markdown"},
+		"html maps to html":                {name: "html", want: "html"},
+		"dot maps to dot":                  {name: "dot", want: "dot"},
+		"mermaid maps to mermaid":          {name: "mermaid", want: "mermaid"},
+		"drawio maps to drawio":            {name: "drawio", want: "drawio"},
+		"empty falls back to json":         {name: "", want: "json"},
+		"unknown value falls back to json": {name: "nosuchformat", want: "json"},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			got := formatFor(tc.name, config)
+			assert.Equal(t, tc.want, got.Name)
+			assert.NotNil(t, got.Renderer)
+		})
+	}
+}
+
+func TestConfig_NeedsGraphFormat(t *testing.T) {
+	config := &Config{}
+
+	tests := map[string]struct {
+		format     string
+		fileFormat string
+		want       bool
+	}{
+		"dot stdout":                        {format: "dot", want: true},
+		"mermaid stdout":                    {format: "mermaid", want: true},
+		"json stdout":                       {format: "json", want: false},
+		"dot as file format":                {format: "json", fileFormat: "dot", want: true},
+		"mermaid as file format":            {format: "json", fileFormat: "mermaid", want: true},
+		"dot stdout with json file format":  {format: "dot", fileFormat: "json", want: true},
+		"drawio is not a graph format":      {format: "drawio", want: false},
+		"unset formats":                     {want: false},
+		"non-graph stdout and file formats": {format: "json", fileFormat: "csv", want: false},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			if tc.format != "" {
+				viper.Set("output.format", tc.format)
+			}
+			if tc.fileFormat != "" {
+				viper.Set("output.file-format", tc.fileFormat)
+			}
+			t.Cleanup(viper.Reset)
+			assert.Equal(t, tc.want, config.NeedsGraphFormat())
+		})
+	}
+}
+
+func TestConfig_RenderDocuments_FileFormat(t *testing.T) {
+	config := &Config{}
+	doc := tableDocument(map[string]any{"Name": "first", "Value": "one"})
+
+	t.Run("writes the file in the file format while stdout keeps the output format", func(t *testing.T) {
+		outputFile := filepath.Join(t.TempDir(), "out.csv")
+		viper.Set("output.format", "json")
+		viper.Set("output.file", outputFile)
+		viper.Set("output.file-format", "csv")
+		t.Cleanup(viper.Reset)
+
+		stdout := &captureWriter{}
+		require.NoError(t, config.renderDocuments(t.Context(), DocumentSet{Table: doc}, stdout))
+
+		// stdout parses as JSON and carries the data
+		var stdoutData any
+		require.NoError(t, json.Unmarshal(stdout.buf.Bytes(), &stdoutData), "stdout must be valid JSON")
+		assert.Contains(t, stdout.buf.String(), "first")
+		assert.NotContains(t, stdout.buf.String(), "Name,Value")
+
+		// file parses as CSV with the expected column order and data
+		contents, err := os.ReadFile(outputFile)
+		require.NoError(t, err)
+		assert.NotContains(t, string(contents), "{", "file must not contain JSON")
+		records, err := csv.NewReader(bytes.NewReader(contents)).ReadAll()
+		require.NoError(t, err, "file must be valid CSV")
+		require.GreaterOrEqual(t, len(records), 2)
+		assert.Equal(t, []string{"Name", "Value"}, records[0])
+		assert.Equal(t, []string{"first", "one"}, records[1])
+	})
+
+	t.Run("file bytes are identical to stdout bytes when the formats match", func(t *testing.T) {
+		outputFile := filepath.Join(t.TempDir(), "out.csv")
+		viper.Set("output.format", "csv")
+		viper.Set("output.file", outputFile)
+		t.Cleanup(viper.Reset)
+
+		stdout := &captureWriter{}
+		require.NoError(t, config.renderDocuments(t.Context(), DocumentSet{Table: doc}, stdout))
+
+		contents, err := os.ReadFile(outputFile)
+		require.NoError(t, err)
+		assert.Equal(t, stdout.buf.Bytes(), contents)
+	})
+
+	t.Run("unknown file format falls back to json like an unknown output format", func(t *testing.T) {
+		outputFile := filepath.Join(t.TempDir(), "out")
+		viper.Set("output.format", "nosuchformat")
+		viper.Set("output.file", outputFile)
+		viper.Set("output.file-format", "alsonosuchformat")
+		t.Cleanup(viper.Reset)
+
+		stdout := &captureWriter{}
+		require.NoError(t, config.renderDocuments(t.Context(), DocumentSet{Table: doc}, stdout))
+
+		var parsed any
+		require.NoError(t, json.Unmarshal(stdout.buf.Bytes(), &parsed), "stdout must fall back to JSON")
+
+		contents, err := os.ReadFile(outputFile)
+		require.NoError(t, err)
+		require.NoError(t, json.Unmarshal(contents, &parsed), "file must fall back to JSON")
+	})
+
+	t.Run("no file is written when output.file is not set", func(t *testing.T) {
+		outputDir := t.TempDir()
+		viper.Set("output.format", "json")
+		viper.Set("output.file-format", "csv")
+		t.Cleanup(viper.Reset)
+
+		stdout := &captureWriter{}
+		require.NoError(t, config.renderDocuments(t.Context(), DocumentSet{Table: doc}, stdout))
+
+		assert.Contains(t, stdout.buf.String(), "first")
+		entries, err := os.ReadDir(outputDir)
+		require.NoError(t, err)
+		assert.Empty(t, entries, "no file may be written when --file is not set")
+	})
+}
+
+func TestConfig_RenderDocuments_GraphFormatGuard(t *testing.T) {
+	config := &Config{}
+	doc := tableDocument(map[string]any{"Name": "first", "Value": "one"})
+
+	for _, formatName := range []string{"dot", "mermaid", "drawio"} {
+		t.Run(formatName+" without matching flavor errors with the v1 message", func(t *testing.T) {
+			viper.Set("output.format", formatName)
+			t.Cleanup(viper.Reset)
+
+			stdout := &captureWriter{}
+			err := config.renderDocuments(t.Context(), DocumentSet{Table: doc}, stdout)
+			require.Error(t, err)
+			assert.Equal(t, "This command doesn't currently support the "+formatName+" output format", err.Error())
+		})
+	}
+
+	t.Run("guard also fires for the file destination", func(t *testing.T) {
+		outputFile := filepath.Join(t.TempDir(), "out.dot")
+		viper.Set("output.format", "json")
+		viper.Set("output.file", outputFile)
+		viper.Set("output.file-format", "dot")
+		t.Cleanup(viper.Reset)
+
+		stdout := &captureWriter{}
+		err := config.renderDocuments(t.Context(), DocumentSet{Table: doc}, stdout)
+		require.Error(t, err)
+		assert.Equal(t, "This command doesn't currently support the dot output format", err.Error())
+	})
+
+	t.Run("graph flavor renders when populated", func(t *testing.T) {
+		viper.Set("output.format", "dot")
+		t.Cleanup(viper.Reset)
+
+		docs := DocumentSet{
+			Table: doc,
+			Graph: output.New().Graph("Test", []output.Edge{{From: "node-a", To: "node-b"}}).Build(),
+		}
+		stdout := &captureWriter{}
+		require.NoError(t, config.renderDocuments(t.Context(), docs, stdout))
+		assert.Contains(t, stdout.buf.String(), "node-a")
+		assert.Contains(t, stdout.buf.String(), "node-b")
+	})
+
+	t.Run("drawio flavor renders when populated", func(t *testing.T) {
+		viper.Set("output.format", "drawio")
+		t.Cleanup(viper.Reset)
+
+		docs := DocumentSet{
+			Table:  doc,
+			DrawIO: output.New().DrawIO("Test", []output.Record{{"Name": "node-a"}}, output.DefaultDrawIOHeader()).Build(),
+		}
+		stdout := &captureWriter{}
+		require.NoError(t, config.renderDocuments(t.Context(), docs, stdout))
+		assert.Contains(t, stdout.buf.String(), "node-a")
+	})
+}
+
+func TestConfig_RenderDocuments_EmojiTransformer(t *testing.T) {
+	config := &Config{}
+	doc := tableDocument(map[string]any{"Name": "first", "Value": "Yes"})
+
+	t.Run("emoji substitution applies when output.use-emoji is set", func(t *testing.T) {
+		viper.Set("output.format", "csv")
+		viper.Set("output.use-emoji", true)
+		t.Cleanup(viper.Reset)
+
+		stdout := &captureWriter{}
+		require.NoError(t, config.renderDocuments(t.Context(), DocumentSet{Table: doc}, stdout))
+		assert.Contains(t, stdout.buf.String(), "✅")
+		assert.NotContains(t, stdout.buf.String(), "Yes")
+	})
+
+	t.Run("no emoji substitution when output.use-emoji is not set", func(t *testing.T) {
+		viper.Set("output.format", "csv")
+		t.Cleanup(viper.Reset)
+
+		stdout := &captureWriter{}
+		require.NoError(t, config.renderDocuments(t.Context(), DocumentSet{Table: doc}, stdout))
+		assert.Contains(t, stdout.buf.String(), "Yes")
+		assert.NotContains(t, stdout.buf.String(), "✅")
+	})
+
+	t.Run("emoji substitution applies to the file output too", func(t *testing.T) {
+		outputFile := filepath.Join(t.TempDir(), "out.csv")
+		viper.Set("output.format", "json")
+		viper.Set("output.file", outputFile)
+		viper.Set("output.file-format", "csv")
+		viper.Set("output.use-emoji", true)
+		t.Cleanup(viper.Reset)
+
+		stdout := &captureWriter{}
+		require.NoError(t, config.renderDocuments(t.Context(), DocumentSet{Table: doc}, stdout))
+
+		contents, err := os.ReadFile(outputFile)
+		require.NoError(t, err)
+		assert.Contains(t, string(contents), "✅")
+	})
+}
+
+func TestConfig_RenderDocuments_TableStyleAndWidth(t *testing.T) {
+	config := &Config{}
+	longValue := strings.Repeat("x", 40)
+	doc := tableDocument(map[string]any{"Name": "first", "Value": longValue})
+
+	t.Run("applies the configured table style", func(t *testing.T) {
+		viper.Set("output.format", "table")
+		viper.Set("output.table.style", "Rounded")
+		t.Cleanup(viper.Reset)
+
+		stdout := &captureWriter{}
+		require.NoError(t, config.renderDocuments(t.Context(), DocumentSet{Table: doc}, stdout))
+		assert.Contains(t, stdout.buf.String(), "╭", "Rounded style must draw rounded corners")
+	})
+
+	t.Run("caps column width at output.table.max-column-width", func(t *testing.T) {
+		viper.Set("output.format", "table")
+		viper.Set("output.table.max-column-width", 10)
+		t.Cleanup(viper.Reset)
+
+		stdout := &captureWriter{}
+		require.NoError(t, config.renderDocuments(t.Context(), DocumentSet{Table: doc}, stdout))
+		assert.NotContains(t, stdout.buf.String(), longValue, "long cells must wrap at the configured width")
+	})
+
+	t.Run("width zero leaves column width unlimited", func(t *testing.T) {
+		viper.Set("output.format", "table")
+		t.Cleanup(viper.Reset)
+
+		stdout := &captureWriter{}
+		require.NoError(t, config.renderDocuments(t.Context(), DocumentSet{Table: doc}, stdout))
+		assert.Contains(t, stdout.buf.String(), longValue)
+	})
+}
+
+func TestConfig_RenderDocuments_AppendMode(t *testing.T) {
+	config := &Config{}
+	docFor := func(name string) *output.Document {
+		return tableDocument(map[string]any{"Name": name, "Value": "one"})
+	}
+
+	t.Run("appends to the existing file when output.append is set", func(t *testing.T) {
+		outputFile := filepath.Join(t.TempDir(), "out.csv")
+		viper.Set("output.format", "csv")
+		viper.Set("output.file", outputFile)
+		viper.Set("output.append", true)
+		t.Cleanup(viper.Reset)
+
+		require.NoError(t, config.renderDocuments(t.Context(), DocumentSet{Table: docFor("first")}, &captureWriter{}))
+		require.NoError(t, config.renderDocuments(t.Context(), DocumentSet{Table: docFor("second")}, &captureWriter{}))
+
+		contents, err := os.ReadFile(outputFile)
+		require.NoError(t, err)
+		assert.Contains(t, string(contents), "first")
+		assert.Contains(t, string(contents), "second")
+	})
+
+	t.Run("WithFileOverwrite suppresses append mode", func(t *testing.T) {
+		outputFile := filepath.Join(t.TempDir(), "out.csv")
+		viper.Set("output.format", "csv")
+		viper.Set("output.file", outputFile)
+		viper.Set("output.append", true)
+		t.Cleanup(viper.Reset)
+
+		require.NoError(t, config.renderDocuments(t.Context(), DocumentSet{Table: docFor("first")}, &captureWriter{}))
+		require.NoError(t, config.renderDocuments(t.Context(), DocumentSet{Table: docFor("second")}, &captureWriter{}, WithFileOverwrite()))
+
+		contents, err := os.ReadFile(outputFile)
+		require.NoError(t, err)
+		assert.NotContains(t, string(contents), "first")
+		assert.Contains(t, string(contents), "second")
+	})
+
+	t.Run("overwrites by default when output.append is not set", func(t *testing.T) {
+		outputFile := filepath.Join(t.TempDir(), "out.csv")
+		viper.Set("output.format", "csv")
+		viper.Set("output.file", outputFile)
+		t.Cleanup(viper.Reset)
+
+		require.NoError(t, config.renderDocuments(t.Context(), DocumentSet{Table: docFor("first")}, &captureWriter{}))
+		require.NoError(t, config.renderDocuments(t.Context(), DocumentSet{Table: docFor("second")}, &captureWriter{}))
+
+		contents, err := os.ReadFile(outputFile)
+		require.NoError(t, err)
+		assert.NotContains(t, string(contents), "first")
+		assert.Contains(t, string(contents), "second")
+	})
+}
+
+func TestSortOption(t *testing.T) {
+	config := &Config{}
+	viper.Set("output.format", "csv")
+	t.Cleanup(viper.Reset)
+
+	rows := []map[string]any{
+		{"Name": "zebra", "Value": "one"},
+		{"Name": "apple", "Value": "two"},
+	}
+	doc := output.New().Table("Test", rows, output.WithKeys("Name", "Value"), SortOption("Name")).Build()
+
+	stdout := &captureWriter{}
+	require.NoError(t, config.renderDocuments(t.Context(), DocumentSet{Table: doc}, stdout))
+
+	rendered := stdout.buf.String()
+	assert.Less(t, strings.Index(rendered, "apple"), strings.Index(rendered, "zebra"),
+		"rows must be sorted ascending by the sort column")
+}
+
+func TestConfig_RenderDocument(t *testing.T) {
+	config := &Config{}
+	viper.Set("output.format", "json")
+	t.Cleanup(viper.Reset)
+
+	doc := tableDocument(map[string]any{"Name": "first", "Value": "one"})
+
+	stdout := captureStdout(t, func() {
+		require.NoError(t, config.RenderDocument(t.Context(), doc))
+	})
+	assert.Contains(t, stdout, "first")
 }
