@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Graph and drawio commands migrated to go-output v2 (Graph and drawio commands phase): appmesh showmesh, iam rolelist/userlist, organizations structure, sso overview (by account and by permission set), tgw routes/overview, vpc peerings — per-format document flavors built additively, drawio combine/append flows ported to v2's CSV read-back, and `tgw routes --list` now supports graph/drawio output instead of erroring
 - Canonical table commands migrated to go-output v2 (Canonical table commands phase): appmesh danglingnodes/meshroute, s3 list, sso dangling/list-permission-sets, sso profile generator, cfn resources, tgw dangling, vpc routes — same keys, titles, verbose columns, and sort order, with errors now returned instead of exiting
 - `names` and `organizations names` no longer use go-output: direct JSON write to file or stdout with identical semantics, dead S3 output path removed, errors returned instead of exiting (go-output-v2 migration, task 22)
 - `clean` target now also removes coverage artifacts
