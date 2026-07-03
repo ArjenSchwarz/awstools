@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Specification for the go-output v2.7.0 migration (`specs/go-output-v2/`): requirements, design, decision log, and task list covering the switch from go-output v1.4.0 to v2 across all commands
 - Makefile targets for code quality: `fmt`, `vet`, `modernize`, `check`, `security-scan`
 - Makefile targets for testing: `test-verbose`, `test-coverage`
 - Makefile targets for dependency management: `deps-tidy`, `deps-update`
