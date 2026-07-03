@@ -4,6 +4,7 @@ go 1.25.1
 
 require (
 	github.com/ArjenSchwarz/go-output v1.4.0
+	github.com/ArjenSchwarz/go-output/v2 v2.7.0
 	github.com/aws/aws-sdk-go-v2 v1.39.3
 	github.com/aws/aws-sdk-go-v2/config v1.29.17
 	github.com/aws/aws-sdk-go-v2/service/appmesh v1.30.4
@@ -23,7 +24,6 @@ require (
 )
 
 require (
-	github.com/ArjenSchwarz/go-output/v2 v2.7.0 // indirect
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.30.3 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/emicklei/dot v1.8.0 // indirect

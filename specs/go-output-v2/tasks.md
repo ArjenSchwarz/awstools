@@ -17,7 +17,7 @@ references:
 
 ## Config core
 
-- [ ] 2. Write tests for config render helpers (red) <!-- id:1hi7wj5 -->
+- [x] 2. Write tests for config render helpers (red) <!-- id:1hi7wj5 -->
   - new tests in config/config_test.go alongside existing v1 tests (old tests removed in task 26)
   - formatFor: every format name + unknown-value JSON fallback + file-format fallback symmetry
   - NeedsGraphFormat/IsDrawIO: true when stdout OR effective file format matches
@@ -30,7 +30,7 @@ references:
   - Stream: 1
   - Requirements: [3.1](requirements.md#3.1), [3.2](requirements.md#3.2), [3.3](requirements.md#3.3), [3.6](requirements.md#3.6), [4.2](requirements.md#4.2), [4.3](requirements.md#4.3), [4.4](requirements.md#4.4), [4.6](requirements.md#4.6), [8.3](requirements.md#8.3), [9.2](requirements.md#9.2)
 
-- [ ] 3. Implement config render core (green) <!-- id:1hi7wj6 -->
+- [x] 3. Implement config render core (green) <!-- id:1hi7wj6 -->
   - config/config.go: DocumentSet{Table,Graph,DrawIO}, RenderDocuments(ctx,docs,opts...), RenderDocument sugar, WithFileOverwrite RenderOption, unexported renderDocuments core with injectable stdout writer, formatFor, NeedsGraphFormat, extended IsDrawIO, SortOption(column)
   - two Outputs (stdout format + effective file format), each rendering the flavor matching its format; sequential stdout-then-file; errors returned never fatal
   - FileWriter: NewFileWriterWithOptions(filepath.Dir, filepath.Base) - no {ext}/{format} placeholders
