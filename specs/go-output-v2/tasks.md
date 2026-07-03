@@ -149,7 +149,7 @@ references:
   - Stream: 4
   - Requirements: [2.8](requirements.md#2.8), [5.1](requirements.md#5.1), [5.4](requirements.md#5.4), [9.1](requirements.md#9.1)
 
-- [ ] 17. Migrate vpcpeerings (graph + drawio + combine) <!-- id:1hi7wjk -->
+- [x] 17. Migrate vpcpeerings (graph + drawio + combine) <!-- id:1hi7wjk -->
   - combine port to ParseDrawIOFile keyed records preserving unique() dedup; WithFileOverwrite() when merged
   - keeps raw connection style string curved=1;endArrow=none;endFill=1;fontSize=11; (R5.2)
   - graph ID->PeeringIDs (multi-value cells exercise graphEdges split)
