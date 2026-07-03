@@ -115,7 +115,7 @@ references:
   - Stream: 2
   - Requirements: [2.3](requirements.md#2.3), [2.6](requirements.md#2.6), [5.1](requirements.md#5.1), [5.2](requirements.md#5.2), [9.1](requirements.md#9.1)
 
-- [ ] 13. Migrate organizationsstructure <!-- id:1hi7wjg -->
+- [x] 13. Migrate organizationsstructure <!-- id:1hi7wjg -->
   - traverseOrgStructureEntry signature: appends rows to a slice (or takes builder) instead of *format.OutputArray
   - DefaultDrawIOHeader + Layout=DrawIOLayoutVerticalTree; graph Name->Children
   - RunE conversion (existing log.Fatal at line 37 -> return err)
