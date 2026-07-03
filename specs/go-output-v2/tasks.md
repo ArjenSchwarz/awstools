@@ -98,7 +98,7 @@ references:
 
 ## Graph and drawio commands
 
-- [ ] 11. Migrate appmeshshowmesh <!-- id:1hi7wje -->
+- [x] 11. Migrate appmeshshowmesh <!-- id:1hi7wje -->
   - DocumentSet: Table always; Graph flavor when NeedsGraphFormat (Name->Endpoints via graphEdges); DrawIO flavor when IsDrawIO with createAppmeshShowmeshDrawIOHeader converted to output.DrawIOHeader public fields
   - flavor construction additive, never exclusive if/else
   - RunE conversion
