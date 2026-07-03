@@ -35,26 +35,26 @@ references:
   - two Outputs (stdout format + effective file format), each rendering the flavor matching its format; sequential stdout-then-file; errors returned never fatal
   - FileWriter: NewFileWriterWithOptions(filepath.Dir, filepath.Base) - no {ext}/{format} placeholders
   - keep NewOutputSettings/GetSeparator and v1 import for now (deleted in task 26)
-  - Blocked-by: 1hi7wj5 (Write tests for config render helpers (red)), helpers
+  - Blocked-by: 1hi7wj5 (Write tests for config render helpers (red)), helpers, helpers, helpers, helpers, helpers
   - Stream: 1
   - Requirements: [3.1](requirements.md#3.1), [3.2](requirements.md#3.2), [3.3](requirements.md#3.3), [3.4](requirements.md#3.4), [3.5](requirements.md#3.5), [3.6](requirements.md#3.6), [4.1](requirements.md#4.1), [4.2](requirements.md#4.2), [4.3](requirements.md#4.3), [4.4](requirements.md#4.4), [4.5](requirements.md#4.5), [4.6](requirements.md#4.6), [7.1](requirements.md#7.1), [9.1](requirements.md#9.1), [9.2](requirements.md#9.2)
 
 ## Shared cmd helpers
 
-- [ ] 4. Write graphEdges unit tests (red) <!-- id:1hi7wj7 -->
+- [x] 4. Write graphEdges unit tests (red) <!-- id:1hi7wj7 -->
   - cmd/graph_test.go: pin v1 splitFromToValues semantics - []string to-cell produces one edge per element, comma-joined string splits, empty targets skipped, from-value stringified
   - verify exact v1 toString join for []string cells against v1 source and encode the result in the tests
   - Blocked-by: 1hi7wj4 (Add go-output v2.7.0 dependency alongside v1)
   - Stream: 1
   - Requirements: [2.3](requirements.md#2.3)
 
-- [ ] 5. Implement cmd/graph.go graphEdges (green) <!-- id:1hi7wj8 -->
+- [x] 5. Implement cmd/graph.go graphEdges (green) <!-- id:1hi7wj8 -->
   - graphEdges(rows []map[string]any, fromCol, toCol string) []output.Edge
   - Blocked-by: 1hi7wj7 (Write graphEdges unit tests (red))
   - Stream: 1
   - Requirements: [2.3](requirements.md#2.3)
 
-- [ ] 6. Write drawio adapter unit tests (red) <!-- id:1hi7wj9 -->
+- [x] 6. Write drawio adapter unit tests (red) <!-- id:1hi7wj9 -->
   - cmd/drawio_test.go: awsShape returns same style as v1 for known group/title; unknown shape returns empty string + stderr warning, no panic
   - drawIOConnection returns v1 NewConnection defaults: From=Parent, To=Name, Invert=true, Style=DrawIODefaultConnectionStyle
   - drawIOBaseHeader(label,style,ignore) matches v1 NewHeader + SetHeightAndWidth(78,78) shape
@@ -62,9 +62,9 @@ references:
   - Stream: 1
   - Requirements: [5.3](requirements.md#5.3)
 
-- [ ] 7. Implement cmd/drawio.go adapters (green) <!-- id:1hi7wja -->
+- [x] 7. Implement cmd/drawio.go adapters (green) <!-- id:1hi7wja -->
   - awsShape wraps icons.GetAWSShape swallowing error; drawIOConnection; drawIOBaseHeader
-  - Blocked-by: 1hi7wj9 (Write drawio adapter unit tests (red)), adapter
+  - Blocked-by: 1hi7wj9 (Write drawio adapter unit tests (red)), adapter, adapter, adapter, adapter, adapter
   - Stream: 1
   - Requirements: [5.3](requirements.md#5.3)
 
@@ -172,7 +172,7 @@ references:
   - delete AddToBuffer/combined-array choreography; one builder, one .Table per subnet group with own WithKeys, single RenderDocument
   - keep enisGraphFormatError guard unchanged (fires pre-build, central guard unreachable, message preserved)
   - RunE conversion
-  - Blocked-by: 1hi7wjl (Rewrite vpcenis tests against single-Document flow (red)), vpcenis, against
+  - Blocked-by: 1hi7wjl (Rewrite vpcenis tests against single-Document flow (red)), vpcenis, against, vpcenis, against, vpcenis, against, vpcenis, against, vpcenis, against
   - Stream: 2
   - Requirements: [7.2](requirements.md#7.2), [9.1](requirements.md#9.1), [9.2](requirements.md#9.2)
 
@@ -214,7 +214,7 @@ references:
   - drawio: ParseDrawIOCSV round-trip of nodes/shapes/connections
   - html: data present within DefaultHTMLTemplate document
   - empty-result case per format renders valid output (R9.3)
-  - Blocked-by: 1hi7wjb (Migrate appmesh commands (danglingnodes, meshroute)), appmesh, 1hi7wjc (Migrate sso + s3 canonical commands (s3list, ssodangling, ssolistpermissionsets, sso.go)), 1hi7wjd (Migrate cfn + tgw + vpc canonical commands (cfnresources, tgwdangling, vpcroutes)), 1hi7wje (Migrate appmeshshowmesh), 1hi7wjf (Migrate iamrolelist + iamuserlist), 1hi7wjg (Migrate organizationsstructure), 1hi7wjh (Migrate ssooverviewaccount + ssooverviewpermissionset), 1hi7wji (Migrate tgwroutes (both render paths)), 1hi7wjj (Migrate tgwoverview (drawio + combine + emoji-in-data)), combine, 1hi7wjk (Migrate vpcpeerings (graph + drawio + combine)), 1hi7wjm (Migrate vpcenis (green)), vpcenis, 1hi7wjn (Migrate vpcoverview (multi-table single render)), 1hi7wjo (Migrate demotables with style-drift test), 1hi7wjp (Migrate names + organizationsnames (drop PrintByteSlice/S3))
+  - Blocked-by: 1hi7wjb (Migrate appmesh commands (danglingnodes, meshroute)), appmesh, appmesh, appmesh, appmesh, appmesh, 1hi7wjc (Migrate sso + s3 canonical commands (s3list, ssodangling, ssolistpermissionsets, sso.go)), 1hi7wjd (Migrate cfn + tgw + vpc canonical commands (cfnresources, tgwdangling, vpcroutes)), 1hi7wje (Migrate appmeshshowmesh), 1hi7wjf (Migrate iamrolelist + iamuserlist), 1hi7wjg (Migrate organizationsstructure), 1hi7wjh (Migrate ssooverviewaccount + ssooverviewpermissionset), 1hi7wji (Migrate tgwroutes (both render paths)), 1hi7wjj (Migrate tgwoverview (drawio + combine + emoji-in-data)), combine, combine, combine, combine, combine, 1hi7wjk (Migrate vpcpeerings (graph + drawio + combine)), 1hi7wjm (Migrate vpcenis (green)), vpcenis, vpcenis, vpcenis, vpcenis, vpcenis, 1hi7wjn (Migrate vpcoverview (multi-table single render)), 1hi7wjo (Migrate demotables with style-drift test), 1hi7wjp (Migrate names + organizationsnames (drop PrintByteSlice/S3))
   - Stream: 1
   - Requirements: [2.1](requirements.md#2.1), [2.2](requirements.md#2.2), [2.3](requirements.md#2.3), [2.4](requirements.md#2.4), [2.5](requirements.md#2.5), [2.7](requirements.md#2.7), [8.1](requirements.md#8.1), [9.3](requirements.md#9.3)
 
@@ -226,7 +226,7 @@ references:
 
 - [ ] 25. Write drawio combine-and-append test <!-- id:1hi7wjs -->
   - write drawio CSV via v2, run the ported merge logic plus new records, assert combined ID set, dedup, and column order
-  - Blocked-by: 1hi7wjj (Migrate tgwoverview (drawio + combine + emoji-in-data)), combine, 1hi7wjk (Migrate vpcpeerings (graph + drawio + combine))
+  - Blocked-by: 1hi7wjj (Migrate tgwoverview (drawio + combine + emoji-in-data)), combine, combine, combine, combine, combine, 1hi7wjk (Migrate vpcpeerings (graph + drawio + combine))
   - Stream: 1
   - Requirements: [5.4](requirements.md#5.4), [8.4](requirements.md#8.4)
 
