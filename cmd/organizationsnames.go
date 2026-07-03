@@ -2,11 +2,9 @@ package cmd
 
 import (
 	"encoding/json"
-	"log"
 
 	"github.com/ArjenSchwarz/awstools/config"
 	"github.com/ArjenSchwarz/awstools/helpers"
-	format "github.com/ArjenSchwarz/go-output"
 	"github.com/spf13/cobra"
 )
 
@@ -19,26 +17,26 @@ var orgnamesCmd = &cobra.Command{
 Examples:
 
 	awstools organizations names -o json`,
-	Run: orgnames,
+	RunE: orgnames,
 }
 
 func init() {
 	organizationsCmd.AddCommand(orgnamesCmd)
 }
 
-func orgnames(_ *cobra.Command, _ []string) {
+func orgnames(_ *cobra.Command, _ []string) error {
 	awsConfig := config.DefaultAwsConfig(*settings)
 	organization, err := helpers.GetFullOrganization(awsConfig.OrganizationsClient())
 	if err != nil {
-		log.Fatal(err.Error())
+		return err
 	}
 	result := make(map[string]string)
 	result = traverseOrgStructureEntryForNames(organization, result)
-	jsonString, _ := json.Marshal(result)
-	err = format.PrintByteSlice(jsonString, settings.GetString("output.file"), format.NewOutputSettings().S3Bucket)
+	jsonString, err := json.Marshal(result)
 	if err != nil {
-		log.Fatal(err.Error())
+		return err
 	}
+	return writeToFileOrStdout(jsonString, settings.GetString("output.file"))
 }
 
 func traverseOrgStructureEntryForNames(entry helpers.OrganizationEntry, output map[string]string) map[string]string {
