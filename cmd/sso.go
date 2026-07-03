@@ -2,13 +2,14 @@ package cmd
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"os"
 	"strings"
 
 	"github.com/ArjenSchwarz/awstools/config"
 	"github.com/ArjenSchwarz/awstools/helpers"
-	format "github.com/ArjenSchwarz/go-output"
+	output "github.com/ArjenSchwarz/go-output/v2"
 	"github.com/spf13/cobra"
 )
 
@@ -183,7 +184,7 @@ For more information:
 • AWS SSO Configuration: https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-sso.html
 • AWS CLI Profiles: https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-profiles.html
 • SSO Session Management: https://docs.aws.amazon.com/cli/latest/userguide/sso-configure-profile-token.html`,
-	Run: profileGenerator,
+	RunE: profileGenerator,
 }
 
 func init() {
@@ -210,7 +211,7 @@ func init() {
 var ssoresourceid string
 
 // profileGenerator implements the profile-generator command
-func profileGenerator(cmd *cobra.Command, _ []string) {
+func profileGenerator(cmd *cobra.Command, _ []string) error {
 	// Parse command line flags
 	templateProfile, _ := cmd.Flags().GetString("template")
 	namingPattern, _ := cmd.Flags().GetString("pattern")
@@ -237,7 +238,7 @@ func profileGenerator(cmd *cobra.Command, _ []string) {
 	generator, err := helpers.NewProfileGenerator(templateProfile, namingPattern, autoApprove, outputFile, conflictStrategy, awsConfig.Config)
 	if err != nil {
 		displayErrorWithRecovery("Error creating profile generator", err)
-		os.Exit(1)
+		return err
 	}
 
 	// Display initialization information
@@ -247,11 +248,11 @@ func profileGenerator(cmd *cobra.Command, _ []string) {
 	result, err := executeProfileGenerationWorkflow(generator)
 	if err != nil {
 		displayErrorWithRecovery("Error during profile generation workflow", err)
-		os.Exit(1)
+		return err
 	}
 
 	// Display comprehensive results
-	displayComprehensiveResults(result, generator, autoApprove)
+	return displayComprehensiveResults(cmd.Context(), result, generator, autoApprove)
 }
 
 // confirmProfileAddition asks user to confirm adding profiles
@@ -318,7 +319,7 @@ func executeProfileGenerationWorkflow(generator *helpers.ProfileGenerator) (*hel
 }
 
 // displayComprehensiveResults shows detailed results with enhanced formatting
-func displayComprehensiveResults(result *helpers.ProfileGenerationResult, generator *helpers.ProfileGenerator, autoApprove bool) {
+func displayComprehensiveResults(ctx context.Context, result *helpers.ProfileGenerationResult, generator *helpers.ProfileGenerator, autoApprove bool) error {
 	// Display conflict resolution summary if conflicts were detected
 	if len(result.DetectedConflicts) > 0 {
 		displayConflictResolutionSummary(result)
@@ -333,13 +334,13 @@ func displayComprehensiveResults(result *helpers.ProfileGenerationResult, genera
 	if !autoApprove && len(result.GeneratedProfiles) > 0 {
 		if !confirmProfileAddition(result.GeneratedProfiles) {
 			fmt.Println("❌ Profile generation cancelled by user.")
-			return
+			return nil
 		}
 
 		fmt.Println("💾 Applying profiles to AWS configuration...")
 		if err := generator.AppendToConfig(result.GeneratedProfiles, result.ResolutionActions); err != nil {
 			displayErrorWithRecovery("Error appending profiles to config", err)
-			os.Exit(1)
+			return err
 		}
 
 		// Update result to mark profiles as successful
@@ -350,13 +351,16 @@ func displayComprehensiveResults(result *helpers.ProfileGenerationResult, genera
 	}
 
 	// Display results using the enhanced output format
-	displayEnhancedProfileResults(result)
+	if err := displayEnhancedProfileResults(ctx, result); err != nil {
+		return err
+	}
 
 	// Display final comprehensive summary
 	displayFinalOperationSummary(result, generator.GetConflictStrategy())
 
 	// Display recovery information if needed
 	displayRecoveryInformation(result)
+	return nil
 }
 
 // displayConflictResolutionSummary shows a summary of conflict detection and resolution
@@ -388,17 +392,15 @@ func displayDetailedConflictReport(result *helpers.ProfileGenerationResult, gene
 }
 
 // displayEnhancedProfileResults displays the generation results with enhanced formatting
-func displayEnhancedProfileResults(result *helpers.ProfileGenerationResult) {
+func displayEnhancedProfileResults(ctx context.Context, result *helpers.ProfileGenerationResult) error {
 	if len(result.GeneratedProfiles) == 0 {
 		fmt.Println("ℹ️  No profiles were generated.")
-		return
+		return nil
 	}
 
 	// Create enhanced output for generated profiles
 	keys := []string{"ProfileName", accountColumn, "Role", "Region", "Format", "Status", "Action"}
-	output := format.OutputArray{Keys: keys, Settings: settings.NewOutputSettings()}
-	output.Settings.Title = "Generated AWS CLI Profiles"
-	output.Settings.SortKey = "ProfileName"
+	rows := []map[string]any{}
 
 	for _, profile := range result.GeneratedProfiles {
 		content := make(map[string]any)
@@ -428,11 +430,15 @@ func displayEnhancedProfileResults(result *helpers.ProfileGenerationResult) {
 		content["Status"] = status
 		content["Action"] = action
 
-		holder := format.OutputHolder{Contents: content}
-		output.AddHolder(holder)
+		rows = append(rows, content)
 	}
 
-	output.Write()
+	doc := output.New().
+		Table("Generated AWS CLI Profiles", rows, output.WithKeys(keys...), config.SortOption("ProfileName")).
+		Build()
+	if err := settings.RenderDocument(ctx, doc); err != nil {
+		return err
+	}
 
 	// Display skipped roles if any
 	if len(result.SkippedRoles) > 0 {
@@ -454,6 +460,7 @@ func displayEnhancedProfileResults(result *helpers.ProfileGenerationResult) {
 		}
 		fmt.Println()
 	}
+	return nil
 }
 
 // displayFinalOperationSummary displays a comprehensive final summary

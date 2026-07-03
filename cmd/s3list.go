@@ -6,7 +6,7 @@ import (
 
 	"github.com/ArjenSchwarz/awstools/config"
 	"github.com/ArjenSchwarz/awstools/helpers"
-	format "github.com/ArjenSchwarz/go-output"
+	output "github.com/ArjenSchwarz/go-output/v2"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/spf13/cobra"
@@ -17,7 +17,7 @@ var s3listCmd = &cobra.Command{
 	Use:   "list",
 	Short: "An overview of S3 buckets",
 	Long:  `Lists all S3 buckets.`,
-	Run:   s3List,
+	RunE:  s3List,
 }
 
 var publicBucketsOnly bool
@@ -36,7 +36,7 @@ func init() {
 	s3listCmd.Flags().StringVarP(&includeTags, "include-tags", "t", "", "Optional tag values to show in output")
 }
 
-func s3List(_ *cobra.Command, _ []string) {
+func s3List(cmd *cobra.Command, _ []string) error {
 	awsConfig := config.DefaultAwsConfig(*settings)
 	resultTitle := "S3 Buckets"
 	buckets := helpers.GetBucketDetails(awsConfig.S3Client())
@@ -50,8 +50,7 @@ func s3List(_ *cobra.Command, _ []string) {
 	if settings.IsVerbose() {
 		keys = append(keys, "Policy")
 	}
-	output := format.OutputArray{Keys: keys, Settings: settings.NewOutputSettings()}
-	output.Settings.Title = resultTitle
+	rows := []map[string]any{}
 	for _, bucket := range buckets {
 		if publicBucketsOnly && skipForPublicOnly(bucket.IsPublic) {
 			continue
@@ -102,10 +101,12 @@ func s3List(_ *cobra.Command, _ []string) {
 		}
 		content["Versioning"] = triState(bucket.Versioning)
 		content["Versioning MFA delete"] = triState(bucket.VersioningMFAEnabled)
-		holder := format.OutputHolder{Contents: content}
-		output.AddHolder(holder)
+		rows = append(rows, content)
 	}
-	output.Write()
+	doc := output.New().
+		Table(resultTitle, rows, output.WithKeys(keys...)).
+		Build()
+	return settings.RenderDocument(cmd.Context(), doc)
 }
 
 // skipForPublicOnly reports whether a bucket should be skipped under the

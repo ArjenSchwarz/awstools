@@ -5,7 +5,7 @@ import (
 
 	"github.com/ArjenSchwarz/awstools/config"
 	"github.com/ArjenSchwarz/awstools/helpers"
-	format "github.com/ArjenSchwarz/go-output"
+	output "github.com/ArjenSchwarz/go-output/v2"
 	"github.com/spf13/cobra"
 )
 
@@ -17,24 +17,22 @@ var ssoListPermissionSetsCmd = &cobra.Command{
 
 By default this command gives an output showing the number of managed policies attached and whether it has an inline policy. To expand this and see the details, use the --verbose (-v) flag.
 	`,
-	Run: ssoListPermissionSets,
+	RunE: ssoListPermissionSets,
 }
 
 func init() {
 	ssoCmd.AddCommand(ssoListPermissionSetsCmd)
 }
 
-func ssoListPermissionSets(_ *cobra.Command, _ []string) {
+func ssoListPermissionSets(cmd *cobra.Command, _ []string) error {
 	awsConfig := config.DefaultAwsConfig(*settings)
 	resultTitle := "SSO Overview per permission set"
 	ssoInstance, err := helpers.GetSSOAccountInstance(awsConfig.SsoClient())
 	if err != nil {
-		panic(err)
+		return err
 	}
 	keys := []string{permissionSetColumn, "AccountIDs", "Arn", "ManagedPolicies", "InlinePolicy"}
-	output := format.OutputArray{Keys: keys, Settings: settings.NewOutputSettings()}
-	output.Settings.Title = resultTitle
-	output.Settings.SortKey = permissionSetColumn
+	rows := []map[string]any{}
 
 	for _, permissionset := range ssoInstance.PermissionSets {
 		permchildren := []string{}
@@ -56,8 +54,10 @@ func ssoListPermissionSets(_ *cobra.Command, _ []string) {
 			permchildren = append(permchildren, getName(account.AccountID))
 		}
 		content["AccountIDs"] = permchildren
-		holder := format.OutputHolder{Contents: content}
-		output.AddHolder(holder)
+		rows = append(rows, content)
 	}
-	output.Write()
+	doc := output.New().
+		Table(resultTitle, rows, output.WithKeys(keys...), config.SortOption(permissionSetColumn)).
+		Build()
+	return settings.RenderDocument(cmd.Context(), doc)
 }

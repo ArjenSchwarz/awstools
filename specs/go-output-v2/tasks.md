@@ -79,7 +79,7 @@ references:
   - Stream: 2
   - Requirements: [2.1](requirements.md#2.1), [2.6](requirements.md#2.6), [3.5](requirements.md#3.5), [9.1](requirements.md#9.1)
 
-- [ ] 9. Migrate sso + s3 canonical commands (s3list, ssodangling, ssolistpermissionsets, sso.go) <!-- id:1hi7wjc -->
+- [x] 9. Migrate sso + s3 canonical commands (s3list, ssodangling, ssolistpermissionsets, sso.go) <!-- id:1hi7wjc -->
   - cmd/s3list.go, cmd/ssodangling.go, cmd/ssolistpermissionsets.go, cmd/sso.go displayEnhancedProfileResults
   - ssolistpermissionsets + sso.go use SortOption for their v1 SortKey
   - RunE conversion throughout
