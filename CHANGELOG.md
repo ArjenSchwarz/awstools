@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- go-output v2.7.0 dependency alongside v1 (go-output-v2 migration, Setup phase); pulls minor AWS SDK updates (aws-sdk-go-v2 v1.39.3, service/s3 v1.88.5, smithy-go v1.23.1)
 - Specification for the go-output v2.7.0 migration (`specs/go-output-v2/`): requirements, design, decision log, and task list covering the switch from go-output v1.4.0 to v2 across all commands
 - Makefile targets for code quality: `fmt`, `vet`, `modernize`, `check`, `security-scan`
 - Makefile targets for testing: `test-verbose`, `test-coverage`
