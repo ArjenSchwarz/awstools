@@ -139,7 +139,7 @@ references:
   - Stream: 4
   - Requirements: [2.3](requirements.md#2.3), [3.4](requirements.md#3.4), [5.1](requirements.md#5.1), [5.2](requirements.md#5.2), [9.1](requirements.md#9.1)
 
-- [ ] 16. Migrate tgwoverview (drawio + combine + emoji-in-data) <!-- id:1hi7wjj -->
+- [x] 16. Migrate tgwoverview (drawio + combine + emoji-in-data) <!-- id:1hi7wjj -->
   - combine port: drawio.GetHeaderAndContentsFromFile -> output.ParseDrawIOFile keyed records; ID-keyed merge logic unchanged; pass WithFileOverwrite() when ShouldCombineAndAppend was true
   - emoji: read settings.GetBool(output.use-emoji) instead of Settings.UseEmoji for the manual checkmark/cross prefixes
   - R2.8: targetTgwMapping map iteration (tgwoverview.go:168) needs deterministic order - sort keys before ranging
