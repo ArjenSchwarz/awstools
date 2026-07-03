@@ -5,8 +5,7 @@ import (
 
 	"github.com/ArjenSchwarz/awstools/config"
 	"github.com/ArjenSchwarz/awstools/helpers"
-	format "github.com/ArjenSchwarz/go-output"
-	"github.com/ArjenSchwarz/go-output/drawio"
+	output "github.com/ArjenSchwarz/go-output/v2"
 	"github.com/spf13/cobra"
 )
 
@@ -20,10 +19,10 @@ var userlistCmd = &cobra.Command{
 It also shows the policies they have through either the group or directly. The groups themselves are shown separately, as are policies when using the verbose flag.
 
 The drawio output format links the users to groups and (in verbose mode) both of those to the policies.`,
-	Run: detailUsers,
+	RunE: detailUsers,
 }
 
-func detailUsers(_ *cobra.Command, _ []string) {
+func detailUsers(cmd *cobra.Command, _ []string) error {
 	awsConfig := config.DefaultAwsConfig(*settings)
 	resultTitle := "IAM User overview for account " + getName(helpers.GetAccountID(awsConfig.StsClient()))
 	svc := awsConfig.IamClient()
@@ -45,14 +44,7 @@ func detailUsers(_ *cobra.Command, _ []string) {
 			keys = append(keys, "AttachedToUsers")
 		}
 	}
-	output := format.OutputArray{Keys: keys, Settings: settings.NewOutputSettings()}
-	output.Settings.Title = resultTitle
-	if settings.IsDrawIO() {
-		output.Settings.DrawIOHeader = createIamuserlistDrawIOHeader()
-	}
-	if output.Settings.NeedsFromToColumns() {
-		output.Settings.AddFromToColumns(nameColumn, "Groups")
-	}
+	rows := []output.Record{}
 	policylist := make(map[string]helpers.AttachedIAMPolicy)
 	for _, object := range objectlist {
 		content := make(map[string]any)
@@ -90,14 +82,13 @@ func detailUsers(_ *cobra.Command, _ []string) {
 
 		if settings.IsDrawIO() {
 			if object.GetObjectType() == "User" {
-				content[imageColumn] = drawio.AWSShape("General Resources", "User")
+				content[imageColumn] = awsShape("General Resources", "User")
 			} else {
-				content[imageColumn] = drawio.AWSShape("General Resources", "Users")
+				content[imageColumn] = awsShape("General Resources", "Users")
 			}
 			content["DrawioID"] = object.GetID()
 		}
-		holder := format.OutputHolder{Contents: content}
-		output.AddHolder(holder)
+		rows = append(rows, content)
 	}
 	// This will only happen when verbose is set
 	for _, policy := range policylist {
@@ -105,7 +96,7 @@ func detailUsers(_ *cobra.Command, _ []string) {
 		content[nameColumn] = policy.Name
 		content[typeColumn] = "Policy"
 		if settings.IsDrawIO() {
-			content[imageColumn] = drawio.AWSShape("Security Identity Compliance", "Permissions")
+			content[imageColumn] = awsShape("Security Identity Compliance", "Permissions")
 			content["AttachedToUsers"] = policy.Users
 			content["AttachedToGroups"] = policy.Groups
 			content["DrawioID"] = createID("Policy" + policy.Name)
@@ -114,33 +105,51 @@ func detailUsers(_ *cobra.Command, _ []string) {
 			content["Groups"] = policy.Groups
 
 		}
-		holder := format.OutputHolder{Contents: content}
-		output.AddHolder(holder)
+		rows = append(rows, content)
 	}
-	output.Write()
+
+	docs := config.DocumentSet{
+		Table: output.New().
+			Table(resultTitle, rows, output.WithKeys(keys...)).
+			Build(),
+	}
+	if settings.NeedsGraphFormat() {
+		graphRows := make([]map[string]any, len(rows))
+		for i, row := range rows {
+			graphRows[i] = row
+		}
+		docs.Graph = output.New().
+			Graph(resultTitle, graphEdges(graphRows, nameColumn, "Groups")).
+			Build()
+	}
+	if settings.IsDrawIO() {
+		docs.DrawIO = output.New().
+			DrawIO(resultTitle, rows, createIamuserlistDrawIOHeader()).
+			Build()
+	}
+	return settings.RenderDocuments(cmd.Context(), docs)
 }
 
 // createIamuserlistDrawIOHeader creates and configures the draw.io header settings
-func createIamuserlistDrawIOHeader() drawio.Header {
-	drawioheader := drawio.NewHeader("%Name%", "%Image%", "Image,DrawioID")
-	drawioheader.SetHeightAndWidth("78", "78")
-	drawioheader.SetIdentity("DrawioID")
-	drawioheader.SetLayout(drawio.LayoutHorizontalFlow)
-	connection := drawio.NewConnection()
+func createIamuserlistDrawIOHeader() output.DrawIOHeader {
+	header := drawIOBaseHeader("%Name%", "%Image%", "Image,DrawioID")
+	header.Identity = "DrawioID"
+	header.Layout = output.DrawIOLayoutHorizontalFlow
+	connection := drawIOConnection()
 	connection.From = "Groups"
 	connection.To = nameColumn
 	connection.Invert = false
 	connection.Label = "Member of"
-	drawioheader.AddConnection(connection)
+	header.Connections = append(header.Connections, connection)
 	if settings.IsVerbose() {
-		connection2 := drawio.NewConnection()
+		connection2 := drawIOConnection()
 		connection2.From = "PolicyNames"
 		connection2.To = nameColumn
 		connection2.Invert = false
 		connection2.Label = "Has Policy"
-		drawioheader.AddConnection(connection2)
+		header.Connections = append(header.Connections, connection2)
 	}
-	return drawioheader
+	return header
 }
 
 func createID(toclean string) string {
