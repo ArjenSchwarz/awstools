@@ -3,7 +3,7 @@ package cmd
 import (
 	"github.com/ArjenSchwarz/awstools/config"
 	"github.com/ArjenSchwarz/awstools/helpers"
-	format "github.com/ArjenSchwarz/go-output"
+	output "github.com/ArjenSchwarz/go-output/v2"
 	"github.com/spf13/cobra"
 )
 
@@ -12,27 +12,27 @@ var danglingnodesCmd = &cobra.Command{
 	Use:   "danglingnodes",
 	Short: "Get all dangling nodes",
 	Long:  `Get an overview of all nodes without a route or service attached to them`,
-	Run:   danglingnodes,
+	RunE:  danglingnodes,
 }
 
 func init() {
 	appmeshCmd.AddCommand(danglingnodesCmd)
 }
 
-func danglingnodes(_ *cobra.Command, _ []string) {
+func danglingnodes(cmd *cobra.Command, _ []string) error {
 	resultTitle := "App Mesh Unattached Nodes for mesh " + *meshname
 	awsConfig := config.DefaultAwsConfig(*settings)
 	svc := awsConfig.AppmeshClient()
 	unserviced := helpers.GetAllUnservicedAppMeshNodes(meshname, svc)
 	keys := []string{"Virtual Node"}
-	output := format.OutputArray{Keys: keys, Settings: settings.NewOutputSettings()}
-	output.Settings.Title = resultTitle
+	rows := []map[string]any{}
 	for _, node := range unserviced {
 		content := make(map[string]any)
 		content["Virtual Node"] = node
-		holder := format.OutputHolder{Contents: content}
-		output.AddHolder(holder)
+		rows = append(rows, content)
 	}
-	output.Write()
-
+	doc := output.New().
+		Table(resultTitle, rows, output.WithKeys(keys...)).
+		Build()
+	return settings.RenderDocument(cmd.Context(), doc)
 }
