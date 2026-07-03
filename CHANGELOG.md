@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Central go-output v2 render helper in the config package (go-output-v2 migration, Config core phase): `DocumentSet`, `RenderDocuments`/`RenderDocument` with per-destination format dispatch, file append/overwrite wiring, emoji transformer, and v1-compatible unsupported-format guards, with a full test suite
 - go-output v2.7.0 dependency alongside v1 (go-output-v2 migration, Setup phase); pulls minor AWS SDK updates (aws-sdk-go-v2 v1.39.3, service/s3 v1.88.5, smithy-go v1.23.1)
 - Specification for the go-output v2.7.0 migration (`specs/go-output-v2/`): requirements, design, decision log, and task list covering the switch from go-output v1.4.0 to v2 across all commands
 - Makefile targets for code quality: `fmt`, `vet`, `modernize`, `check`, `security-scan`
@@ -22,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `names` and `organizations names` no longer use go-output: direct JSON write to file or stdout with identical semantics, dead S3 output path removed, errors returned instead of exiting (go-output-v2 migration, task 22)
 - `clean` target now also removes coverage artifacts
 - Formatting fix in `helpers/organizations_test.go`
 - Enhanced Transit Gateway route table visualization to use actual resource types from AWS API
