@@ -98,7 +98,7 @@ references:
 
 ## Graph and drawio commands
 
-- [ ] 11. Migrate appmeshshowmesh <!-- id:1hi7wje -->
+- [x] 11. Migrate appmeshshowmesh <!-- id:1hi7wje -->
   - DocumentSet: Table always; Graph flavor when NeedsGraphFormat (Name->Endpoints via graphEdges); DrawIO flavor when IsDrawIO with createAppmeshShowmeshDrawIOHeader converted to output.DrawIOHeader public fields
   - flavor construction additive, never exclusive if/else
   - RunE conversion
@@ -106,7 +106,7 @@ references:
   - Stream: 2
   - Requirements: [2.3](requirements.md#2.3), [5.1](requirements.md#5.1), [5.2](requirements.md#5.2), [9.1](requirements.md#9.1)
 
-- [ ] 12. Migrate iamrolelist + iamuserlist <!-- id:1hi7wjf -->
+- [x] 12. Migrate iamrolelist + iamuserlist <!-- id:1hi7wjf -->
   - heterogeneous rows preserved: one table, union WithKeys, absent cells empty
   - graph: Name->Policies / Name->Groups; drawio headers use Identity=DrawioID, Layout=DrawIOLayoutHorizontalFlow; iamuserlist has two connections in verbose
   - rows for drawio declared []output.Record (defined type, no implicit conversion)

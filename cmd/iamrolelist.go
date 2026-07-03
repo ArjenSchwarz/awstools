@@ -15,8 +15,7 @@
 package cmd
 
 import (
-	format "github.com/ArjenSchwarz/go-output"
-	"github.com/ArjenSchwarz/go-output/drawio"
+	output "github.com/ArjenSchwarz/go-output/v2"
 
 	"github.com/ArjenSchwarz/awstools/config"
 	"github.com/ArjenSchwarz/awstools/helpers"
@@ -31,10 +30,10 @@ var rolelistCmd = &cobra.Command{
 The policies themselves are also shown separately.
 
 The drawio output format links the users to policies.`,
-	Run: iamrolelist,
+	RunE: iamrolelist,
 }
 
-func iamrolelist(_ *cobra.Command, _ []string) {
+func iamrolelist(cmd *cobra.Command, _ []string) error {
 	awsConfig := config.DefaultAwsConfig(*settings)
 	resultTitle := "IAM Role overview for account " + getName(helpers.GetAccountID(awsConfig.StsClient()))
 	roles, policies := helpers.GetRolesAndPolicies(settings.IsVerbose(), awsConfig.IamClient())
@@ -43,14 +42,7 @@ func iamrolelist(_ *cobra.Command, _ []string) {
 		keys = append(keys, imageColumn)
 		keys = append(keys, "DrawioID")
 	}
-	output := format.OutputArray{Keys: keys, Settings: settings.NewOutputSettings()}
-	output.Settings.Title = resultTitle
-	if settings.IsDrawIO() {
-		output.Settings.DrawIOHeader = createIamrolelistDrawIOHeader()
-	}
-	if output.Settings.NeedsFromToColumns() {
-		output.Settings.AddFromToColumns(nameColumn, "Policies")
-	}
+	rows := []output.Record{}
 	for _, role := range roles {
 		content := make(map[string]any)
 		content[nameColumn] = role.Name
@@ -59,39 +51,56 @@ func iamrolelist(_ *cobra.Command, _ []string) {
 		content["Policies"] = role.GetPolicyNames()
 		if settings.IsDrawIO() {
 			content["DrawioID"] = role.ID
-			content[imageColumn] = drawio.AWSShape("Security Identity Compliance", "Role")
+			content[imageColumn] = awsShape("Security Identity Compliance", "Role")
 		}
-		holder := format.OutputHolder{Contents: content}
-		output.AddHolder(holder)
+		rows = append(rows, content)
 	}
 	for policyname, policy := range policies {
 		content := make(map[string]any)
 		content[nameColumn] = policyname
 		if settings.IsDrawIO() {
 			content["DrawioID"] = policyname
-			content[imageColumn] = drawio.AWSShape("Security Identity Compliance", "Permissions")
+			content[imageColumn] = awsShape("Security Identity Compliance", "Permissions")
 		}
 		content[typeColumn] = policy.Type
 		content["Roles"] = policy.GetRoleNames()
-		holder := format.OutputHolder{Contents: content}
-		output.AddHolder(holder)
+		rows = append(rows, content)
 	}
-	output.Write()
+
+	docs := config.DocumentSet{
+		Table: output.New().
+			Table(resultTitle, rows, output.WithKeys(keys...)).
+			Build(),
+	}
+	if settings.NeedsGraphFormat() {
+		graphRows := make([]map[string]any, len(rows))
+		for i, row := range rows {
+			graphRows[i] = row
+		}
+		docs.Graph = output.New().
+			Graph(resultTitle, graphEdges(graphRows, nameColumn, "Policies")).
+			Build()
+	}
+	if settings.IsDrawIO() {
+		docs.DrawIO = output.New().
+			DrawIO(resultTitle, rows, createIamrolelistDrawIOHeader()).
+			Build()
+	}
+	return settings.RenderDocuments(cmd.Context(), docs)
 }
 
 // createIamrolelistDrawIOHeader creates and configures the draw.io header settings
-func createIamrolelistDrawIOHeader() drawio.Header {
-	drawioheader := drawio.NewHeader("%Name%", "%Image%", "Image,DrawioID")
-	drawioheader.SetHeightAndWidth("78", "78")
-	drawioheader.SetIdentity("DrawioID")
-	drawioheader.SetLayout(drawio.LayoutHorizontalFlow)
-	connection := drawio.NewConnection()
+func createIamrolelistDrawIOHeader() output.DrawIOHeader {
+	header := drawIOBaseHeader("%Name%", "%Image%", "Image,DrawioID")
+	header.Identity = "DrawioID"
+	header.Layout = output.DrawIOLayoutHorizontalFlow
+	connection := drawIOConnection()
 	connection.From = "Policies"
 	connection.To = nameColumn
 	connection.Invert = false
 	connection.Label = "Has Policy"
-	drawioheader.AddConnection(connection)
-	return drawioheader
+	header.Connections = append(header.Connections, connection)
+	return header
 }
 
 func init() {
