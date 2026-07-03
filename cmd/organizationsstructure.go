@@ -1,12 +1,9 @@
 package cmd
 
 import (
-	"log"
-
 	"github.com/ArjenSchwarz/awstools/config"
 	"github.com/ArjenSchwarz/awstools/helpers"
-	format "github.com/ArjenSchwarz/go-output"
-	"github.com/ArjenSchwarz/go-output/drawio"
+	output "github.com/ArjenSchwarz/go-output/v2"
 	"github.com/spf13/cobra"
 )
 
@@ -22,67 +19,75 @@ Examples:
 	awstools organizations structure -o drawio | pbcopy
 
 Using the dot output format you can turn this into an image, and using drawio you will get a CSV that you can import into draw.io with its CSV import functionality. `,
-	Run: orgstructure,
+	RunE: orgstructure,
 }
 
 func init() {
 	organizationsCmd.AddCommand(structureCmd)
 }
 
-func orgstructure(_ *cobra.Command, _ []string) {
+func orgstructure(cmd *cobra.Command, _ []string) error {
 	awsConfig := config.DefaultAwsConfig(*settings)
 	resultTitle := "AWS Organization Structure"
 	organization, err := helpers.GetFullOrganization(awsConfig.OrganizationsClient())
 	if err != nil {
-		log.Fatal(err.Error())
+		return err
 	}
 	keys := []string{nameColumn, typeColumn, childrenColumn}
+	rows := []output.Record{}
+	traverseOrgStructureEntry(organization, &rows)
+	docs := config.DocumentSet{
+		Table: output.New().
+			Table(resultTitle, rows, output.WithKeys(keys...)).
+			Build(),
+	}
+	if settings.NeedsGraphFormat() {
+		graphRows := make([]map[string]any, len(rows))
+		for index, row := range rows {
+			graphRows[index] = row
+		}
+		docs.Graph = output.New().
+			Graph(resultTitle, graphEdges(graphRows, nameColumn, childrenColumn)).
+			Build()
+	}
 	if settings.IsDrawIO() {
-		keys = append(keys, imageColumn)
+		docs.DrawIO = output.New().
+			DrawIO(resultTitle, rows, createOrganizationsStructureDrawIOHeader()).
+			Build()
 	}
-	output := format.OutputArray{Keys: keys, Settings: settings.NewOutputSettings()}
-	output.Settings.Title = resultTitle
-	if settings.IsDrawIO() {
-		output.Settings.DrawIOHeader = createOrganizationsStructureDrawIOHeader()
-	}
-	if output.Settings.NeedsFromToColumns() {
-		output.Settings.AddFromToColumns(nameColumn, childrenColumn)
-	}
-	traverseOrgStructureEntry(organization, &output)
-	output.Write()
+	return settings.RenderDocuments(cmd.Context(), docs)
 }
 
-func traverseOrgStructureEntry(entry helpers.OrganizationEntry, output *format.OutputArray) {
-	imageConversion := map[string]string{
-		"ROOT":                drawio.AWSShape("Management Governance", "Organizations"),
-		"ORGANIZATIONAL_UNIT": drawio.AWSShape("Management Governance", "Organizational Unit"),
-		"ACCOUNT":             drawio.AWSShape("Management Governance", accountColumn),
-	}
+func traverseOrgStructureEntry(entry helpers.OrganizationEntry, rows *[]output.Record) {
 	content := make(map[string]any)
 	content[nameColumn] = entry.String()
 	content[typeColumn] = entry.Type
-	content[childrenColumn] = entry.String()
 	if settings.IsDrawIO() {
+		imageConversion := map[string]string{
+			"ROOT":                awsShape("Management Governance", "Organizations"),
+			"ORGANIZATIONAL_UNIT": awsShape("Management Governance", "Organizational Unit"),
+			"ACCOUNT":             awsShape("Management Governance", accountColumn),
+		}
 		content[imageColumn] = imageConversion[entry.Type]
 	}
 	children := []string{}
 	for _, child := range entry.Children {
 		children = append(children, child.String())
-		traverseOrgStructureEntry(child, output)
+		traverseOrgStructureEntry(child, rows)
 	}
 	content[childrenColumn] = children
-	holder := format.OutputHolder{Contents: content}
-	output.AddHolder(holder)
+	*rows = append(*rows, content)
 }
 
-func createOrganizationsStructureDrawIOHeader() drawio.Header {
-	drawioheader := drawio.DefaultHeader()
-	drawioheader.SetHeightAndWidth("78", "78")
-	drawioheader.SetLayout(drawio.LayoutVerticalTree)
-	connection := drawio.NewConnection()
+func createOrganizationsStructureDrawIOHeader() output.DrawIOHeader {
+	drawioheader := output.DefaultDrawIOHeader()
+	drawioheader.Height = "78"
+	drawioheader.Width = "78"
+	drawioheader.Layout = output.DrawIOLayoutVerticalTree
+	connection := drawIOConnection()
 	connection.Invert = false
 	connection.From = childrenColumn
 	connection.To = nameColumn
-	drawioheader.AddConnection(connection)
+	drawioheader.Connections = append(drawioheader.Connections, connection)
 	return drawioheader
 }
