@@ -87,7 +87,7 @@ references:
   - Stream: 3
   - Requirements: [2.1](requirements.md#2.1), [3.4](requirements.md#3.4), [3.5](requirements.md#3.5), [9.1](requirements.md#9.1)
 
-- [ ] 10. Migrate cfn + tgw + vpc canonical commands (cfnresources, tgwdangling, vpcroutes) <!-- id:1hi7wjd -->
+- [x] 10. Migrate cfn + tgw + vpc canonical commands (cfnresources, tgwdangling, vpcroutes) <!-- id:1hi7wjd -->
   - cmd/cfnresources.go, cmd/tgwdangling.go, cmd/vpcroutes.go
   - cfnresources keeps verbose column additions
   - vpcroutes: raw []string cells adopt v2 default rendering per Decision 7; drawio remnants stay commented

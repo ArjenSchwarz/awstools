@@ -3,7 +3,7 @@ package cmd
 import (
 	"github.com/ArjenSchwarz/awstools/config"
 	"github.com/ArjenSchwarz/awstools/helpers"
-	format "github.com/ArjenSchwarz/go-output"
+	output "github.com/ArjenSchwarz/go-output/v2"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
 	"github.com/spf13/cobra"
@@ -59,7 +59,7 @@ func buildCfnResource(resource types.StackResource, nameResolver func(string) st
 	}
 }
 
-func listResources(_ *cobra.Command, _ []string) error {
+func listResources(cmd *cobra.Command, _ []string) error {
 	awsConfig := config.DefaultAwsConfig(*settings)
 	resultTitle := "CloudFormation resources for stack " + *stackname
 	unparsedResources, err := helpers.GetNestedCloudFormationResources(stackname, awsConfig.CloudformationClient())
@@ -82,8 +82,7 @@ func listResources(_ *cobra.Command, _ []string) error {
 		keys = append(keys, "Status")
 		keys = append(keys, "LogicalName")
 	}
-	output := format.OutputArray{Keys: keys, Settings: settings.NewOutputSettings()}
-	output.Settings.Title = resultTitle
+	rows := make([]map[string]any, 0, len(resources))
 	for _, resource := range resources {
 		content := make(map[string]any)
 		content["ResourceID"] = resource.ResourceID
@@ -94,9 +93,10 @@ func listResources(_ *cobra.Command, _ []string) error {
 			content["Status"] = resource.Status
 			content["LogicalName"] = resource.LogicalName
 		}
-		holder := format.OutputHolder{Contents: content}
-		output.AddHolder(holder)
+		rows = append(rows, content)
 	}
-	output.Write()
-	return nil
+	doc := output.New().
+		Table(resultTitle, rows, output.WithKeys(keys...)).
+		Build()
+	return settings.RenderDocument(cmd.Context(), doc)
 }

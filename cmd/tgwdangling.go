@@ -3,7 +3,7 @@ package cmd
 import (
 	"github.com/ArjenSchwarz/awstools/config"
 	"github.com/ArjenSchwarz/awstools/helpers"
-	format "github.com/ArjenSchwarz/go-output"
+	output "github.com/ArjenSchwarz/go-output/v2"
 	"github.com/spf13/cobra"
 )
 
@@ -16,22 +16,21 @@ var tgwdanglingCmd = &cobra.Command{
 	An incomplete route is defined as one that goes in only a single
 	direction. e.g. while VPC1 connects to VPC2, there is no returning
 	connection.`,
-	Run: tgwdangling,
+	RunE: tgwdangling,
 }
 
 func init() {
 	tgwCmd.AddCommand(tgwdanglingCmd)
 }
 
-func tgwdangling(_ *cobra.Command, _ []string) {
+func tgwdangling(cmd *cobra.Command, _ []string) error {
 	awsConfig := config.DefaultAwsConfig(*settings)
 	resultTitle := "Transit Gateway uni-directional routes"
 	gateways := helpers.GetAllTransitGateways(awsConfig.Ec2Client())
 	keys := []string{vpcColumn, "VPCName", "DestinationVPC", "DestinationName"}
-	output := format.OutputArray{Keys: keys, Settings: settings.NewOutputSettings()}
-	output.Settings.Title = resultTitle
 	vpcs := danglingRouteTargets(gateways)
 
+	rows := []map[string]any{}
 	for vpcid, targets := range vpcs {
 		for _, target := range targets {
 			if !contains(vpcs[target], vpcid) {
@@ -40,14 +39,15 @@ func tgwdangling(_ *cobra.Command, _ []string) {
 				content["VPCName"] = getName(vpcid)
 				content["DestinationVPC"] = target
 				content["DestinationName"] = getName(target)
-				holder := format.OutputHolder{Contents: content}
-				output.AddHolder(holder)
+				rows = append(rows, content)
 			}
 		}
 
 	}
-	// fmt.Printf("%v", vpcs)
-	output.Write()
+	doc := output.New().
+		Table(resultTitle, rows, output.WithKeys(keys...)).
+		Build()
+	return settings.RenderDocument(cmd.Context(), doc)
 }
 
 // danglingRouteTargets builds, for each source attachment, the list of resource
