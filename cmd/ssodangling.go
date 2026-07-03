@@ -3,7 +3,7 @@ package cmd
 import (
 	"github.com/ArjenSchwarz/awstools/config"
 	"github.com/ArjenSchwarz/awstools/helpers"
-	format "github.com/ArjenSchwarz/go-output"
+	output "github.com/ArjenSchwarz/go-output/v2"
 	"github.com/spf13/cobra"
 )
 
@@ -14,23 +14,22 @@ var ssoDanglingCmd = &cobra.Command{
 	Long: `Lists all permission sets that aren't assigned to an account
 
 Includes full details on the managed and inline policies.`,
-	Run: ssoDangling,
+	RunE: ssoDangling,
 }
 
 func init() {
 	ssoCmd.AddCommand(ssoDanglingCmd)
 }
 
-func ssoDangling(_ *cobra.Command, _ []string) {
+func ssoDangling(cmd *cobra.Command, _ []string) error {
 	awsConfig := config.DefaultAwsConfig(*settings)
 	resultTitle := "Dangling Permission Sets"
 	ssoInstance, err := helpers.GetSSOAccountInstance(awsConfig.SsoClient())
 	if err != nil {
-		panic(err)
+		return err
 	}
 	keys := []string{permissionSetColumn, "Arn", "ManagedPolicies", "InlinePolicy"}
-	output := format.OutputArray{Keys: keys, Settings: settings.NewOutputSettings()}
-	output.Settings.Title = resultTitle
+	rows := []map[string]any{}
 	for _, permissionset := range ssoInstance.PermissionSets {
 		if len(permissionset.Accounts) == 0 {
 			content := make(map[string]any)
@@ -38,9 +37,11 @@ func ssoDangling(_ *cobra.Command, _ []string) {
 			content["Arn"] = permissionset.Arn
 			content["ManagedPolicies"] = permissionset.GetManagedPolicyNames()
 			content["InlinePolicy"] = permissionset.InlinePolicy
-			holder := format.OutputHolder{Contents: content}
-			output.AddHolder(holder)
+			rows = append(rows, content)
 		}
 	}
-	output.Write()
+	doc := output.New().
+		Table(resultTitle, rows, output.WithKeys(keys...)).
+		Build()
+	return settings.RenderDocument(cmd.Context(), doc)
 }
