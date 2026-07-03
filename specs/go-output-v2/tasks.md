@@ -131,7 +131,7 @@ references:
   - Stream: 3
   - Requirements: [2.3](requirements.md#2.3), [3.4](requirements.md#3.4), [5.1](requirements.md#5.1), [5.2](requirements.md#5.2), [9.1](requirements.md#9.1)
 
-- [ ] 15. Migrate tgwroutes (both render paths) <!-- id:1hi7wji -->
+- [x] 15. Migrate tgwroutes (both render paths) <!-- id:1hi7wji -->
   - main path AND simplelistOnly path must each populate the Graph flavor when NeedsGraphFormat holds (design invariant: guard must not fire on a capable command's alternate path)
   - graph Destinations->ID; drawio header has two connections
   - RunE conversion
@@ -139,7 +139,7 @@ references:
   - Stream: 4
   - Requirements: [2.3](requirements.md#2.3), [3.4](requirements.md#3.4), [5.1](requirements.md#5.1), [5.2](requirements.md#5.2), [9.1](requirements.md#9.1)
 
-- [ ] 16. Migrate tgwoverview (drawio + combine + emoji-in-data) <!-- id:1hi7wjj -->
+- [x] 16. Migrate tgwoverview (drawio + combine + emoji-in-data) <!-- id:1hi7wjj -->
   - combine port: drawio.GetHeaderAndContentsFromFile -> output.ParseDrawIOFile keyed records; ID-keyed merge logic unchanged; pass WithFileOverwrite() when ShouldCombineAndAppend was true
   - emoji: read settings.GetBool(output.use-emoji) instead of Settings.UseEmoji for the manual checkmark/cross prefixes
   - R2.8: targetTgwMapping map iteration (tgwoverview.go:168) needs deterministic order - sort keys before ranging
@@ -149,7 +149,7 @@ references:
   - Stream: 4
   - Requirements: [2.8](requirements.md#2.8), [5.1](requirements.md#5.1), [5.4](requirements.md#5.4), [9.1](requirements.md#9.1)
 
-- [ ] 17. Migrate vpcpeerings (graph + drawio + combine) <!-- id:1hi7wjk -->
+- [x] 17. Migrate vpcpeerings (graph + drawio + combine) <!-- id:1hi7wjk -->
   - combine port to ParseDrawIOFile keyed records preserving unique() dedup; WithFileOverwrite() when merged
   - keeps raw connection style string curved=1;endArrow=none;endFill=1;fontSize=11; (R5.2)
   - graph ID->PeeringIDs (multi-value cells exercise graphEdges split)

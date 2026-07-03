@@ -4,8 +4,25 @@ import (
 	"testing"
 
 	"github.com/ArjenSchwarz/awstools/helpers"
+	output "github.com/ArjenSchwarz/go-output/v2"
 	"github.com/stretchr/testify/assert"
 )
+
+// TestDrawIORecordString pins the read-back conversion used by the
+// combine-and-append flows: parsed drawio cells are plain strings, empty and
+// missing cells both read as "".
+func TestDrawIORecordString(t *testing.T) {
+	record := output.Record{
+		"ID":       "tgw-1",
+		"Empty":    "",
+		"NotAText": 42,
+	}
+
+	assert.Equal(t, "tgw-1", drawIORecordString(record, "ID"))
+	assert.Equal(t, "", drawIORecordString(record, "Empty"))
+	assert.Equal(t, "", drawIORecordString(record, "Missing"), "missing keys must read as empty")
+	assert.Equal(t, "", drawIORecordString(record, "NotAText"), "non-string cells must read as empty")
+}
 
 // TestFilterGateway_IncludesNonVPCAttachments verifies that filterGateway
 // returns non-VPC resources (VPN, DX gateway, peering) from both route
