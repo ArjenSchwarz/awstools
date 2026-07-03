@@ -131,7 +131,7 @@ references:
   - Stream: 3
   - Requirements: [2.3](requirements.md#2.3), [3.4](requirements.md#3.4), [5.1](requirements.md#5.1), [5.2](requirements.md#5.2), [9.1](requirements.md#9.1)
 
-- [ ] 15. Migrate tgwroutes (both render paths) <!-- id:1hi7wji -->
+- [x] 15. Migrate tgwroutes (both render paths) <!-- id:1hi7wji -->
   - main path AND simplelistOnly path must each populate the Graph flavor when NeedsGraphFormat holds (design invariant: guard must not fire on a capable command's alternate path)
   - graph Destinations->ID; drawio header has two connections
   - RunE conversion
