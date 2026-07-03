@@ -2,11 +2,10 @@ package cmd
 
 import (
 	"encoding/json"
-	"log"
+	"os"
 
 	"github.com/ArjenSchwarz/awstools/config"
 	"github.com/ArjenSchwarz/awstools/helpers"
-	format "github.com/ArjenSchwarz/go-output"
 	"github.com/spf13/cobra"
 )
 
@@ -18,14 +17,14 @@ var namesCmd = &cobra.Command{
 	This is especially useful for commands that deal with multiple accounts.
 
 	Only outputs as JSON.`,
-	Run: names,
+	RunE: names,
 }
 
 func init() {
 	rootCmd.AddCommand(namesCmd)
 }
 
-func names(_ *cobra.Command, _ []string) {
+func names(_ *cobra.Command, _ []string) error {
 	awsConfig := config.DefaultAwsConfig(*settings)
 	var names []map[string]string
 	if settings.ShouldCombineAndAppend() {
@@ -35,9 +34,20 @@ func names(_ *cobra.Command, _ []string) {
 	names = append(names, helpers.GetAllRdsResourceNames(awsConfig.RdsClient()))
 	names = append(names, helpers.GetAccountAlias(awsConfig.IamClient(), awsConfig.StsClient()))
 	allNames := helpers.FlattenStringMaps(names)
-	jsonString, _ := json.Marshal(allNames)
-	err := format.PrintByteSlice(jsonString, settings.GetString("output.file"), format.NewOutputSettings().S3Bucket)
+	jsonString, err := json.Marshal(allNames)
 	if err != nil {
-		log.Fatal(err.Error())
+		return err
 	}
+	return writeToFileOrStdout(jsonString, settings.GetString("output.file"))
+}
+
+// writeToFileOrStdout writes the contents to the provided file when one is
+// set, otherwise it prints the contents to stdout. This mirrors v1's
+// PrintByteSlice semantics: a single destination, never both.
+func writeToFileOrStdout(contents []byte, outputFile string) error {
+	if outputFile == "" {
+		_, err := os.Stdout.Write(contents)
+		return err
+	}
+	return os.WriteFile(outputFile, contents, 0o666)
 }
