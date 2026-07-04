@@ -218,13 +218,13 @@ references:
   - Stream: 1
   - Requirements: [2.1](requirements.md#2.1), [2.2](requirements.md#2.2), [2.3](requirements.md#2.3), [2.4](requirements.md#2.4), [2.5](requirements.md#2.5), [2.7](requirements.md#2.7), [8.1](requirements.md#8.1), [9.3](requirements.md#9.3)
 
-- [ ] 24. Write verbose-dimension equivalence test <!-- id:1hi7wjr -->
+- [x] 24. Write verbose-dimension equivalence test <!-- id:1hi7wjr -->
   - exercise one command's row/key builder verbose on and off (cfnresources or iamuserlist), assert the column/row delta
   - Blocked-by: 1hi7wjd (Migrate cfn + tgw + vpc canonical commands (cfnresources, tgwdangling, vpcroutes)), 1hi7wjf (Migrate iamrolelist + iamuserlist)
   - Stream: 1
   - Requirements: [2.6](requirements.md#2.6), [8.2](requirements.md#8.2)
 
-- [ ] 25. Write drawio combine-and-append test <!-- id:1hi7wjs -->
+- [x] 25. Write drawio combine-and-append test <!-- id:1hi7wjs -->
   - write drawio CSV via v2, run the ported merge logic plus new records, assert combined ID set, dedup, and column order
   - Blocked-by: 1hi7wjj (Migrate tgwoverview (drawio + combine + emoji-in-data)), combine, 1hi7wjk (Migrate vpcpeerings (graph + drawio + combine))
   - Stream: 1
