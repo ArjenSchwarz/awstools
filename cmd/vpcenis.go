@@ -2,11 +2,13 @@ package cmd
 
 import (
 	"fmt"
+	"maps"
+	"slices"
 	"strings"
 
 	"github.com/ArjenSchwarz/awstools/config"
 	"github.com/ArjenSchwarz/awstools/helpers"
-	format "github.com/ArjenSchwarz/go-output"
+	output "github.com/ArjenSchwarz/go-output/v2"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	"github.com/spf13/cobra"
@@ -33,9 +35,9 @@ func init() {
 
 // enisGraphFormatError reports whether the requested output format is a graph
 // format the enis command cannot produce. ENIs have no from/to relationship to
-// diagram, so dot and drawio are rejected with a clear error instead of letting
-// go-output log.Fatal (non-split) or silently emit nothing (split). The
-// comparison is case-insensitive to match the format normalisation in config.
+// diagram, so dot and drawio are rejected with a clear error instead of falling
+// through to the generic unsupported-format handling. The comparison is
+// case-insensitive to match the format normalisation in config.
 func enisGraphFormatError(format string) error {
 	switch strings.ToLower(format) {
 	case "dot", "drawio":
@@ -45,7 +47,7 @@ func enisGraphFormatError(format string) error {
 	}
 }
 
-func enis(_ *cobra.Command, _ []string) error {
+func enis(cmd *cobra.Command, _ []string) error {
 	if err := enisGraphFormatError(settings.GetOutputFormat()); err != nil {
 		return err
 	}
@@ -61,49 +63,13 @@ func enis(_ *cobra.Command, _ []string) error {
 		return helpers.GetAttachmentFromCache(eni, cache)
 	}
 
+	var doc *output.Document
 	if vpceenisSplit {
-		writeENIsBySubnet(interfaces, names, resultTitle, attachmentFor)
-		return nil
+		doc = buildENIsBySubnetDocument(interfaces, names, resultTitle, attachmentFor)
+	} else {
+		doc = buildENIsDocument(interfaces, names, resultTitle, attachmentFor)
 	}
-
-	writeENIs(interfaces, names, resultTitle, attachmentFor)
-	return nil
-}
-
-// writeENIs renders the single (non-split) ENI table. It writes the populated
-// OutputArray directly so both stdout and --file serialize the same ENI rows
-// (T-1294). Routing through the shared package buffer would leave --file empty
-// because Write() resets the buffer after the stdout pass and before the file
-// pass.
-func writeENIs(interfaces []types.NetworkInterface, names map[string]string, resultTitle string, attachmentFor func(types.NetworkInterface) string) {
-	output := buildENIOutput(interfaces, names, resultTitle, false, attachmentFor)
-	output.Write()
-}
-
-// writeENIsBySubnet renders one separate table per subnet group. Each group is
-// pushed to the shared buffer for stdout fidelity (separate, per-subnet titled
-// tables). The final Write() is called on a populated OutputArray that holds
-// every row across all groups so the --file branch has real data to serialize
-// even after Write() resets the buffer following the stdout pass (T-1294).
-func writeENIsBySubnet(interfaces []types.NetworkInterface, names map[string]string, resultTitle string, attachmentFor func(types.NetworkInterface) string) {
-	groups := splitBySubnet(interfaces)
-
-	combined := format.OutputArray{Keys: splitENIKeys, Settings: settings.NewOutputSettings()}
-	combined.Settings.SeparateTables = true
-	combined.Settings.Title = resultTitle
-	combined.Settings.SortKey = attachmentColumn
-
-	for subnet, group := range groups {
-		groupTitle := fmt.Sprintf("%s - %s: %s", resultTitle, getNameAndIDFromMap(aws.ToString(group[0].VpcId), names), getNameAndIDFromMap(subnet, names))
-		groupOutput := buildENIOutput(group, names, groupTitle, true, attachmentFor)
-		// Accumulate each row into the combined array so the final Write() has
-		// real contents for the --file branch.
-		for _, holder := range groupOutput.Contents {
-			combined.AddContents(holder.Contents)
-		}
-		groupOutput.AddToBuffer()
-	}
-	combined.Write()
+	return settings.RenderDocument(cmd.Context(), doc)
 }
 
 const (
@@ -114,21 +80,39 @@ const (
 var fullENIKeys = []string{eniColumn, typeColumn, attachmentColumn, ipsColumn, vpcColumn, subnetColumn}
 var splitENIKeys = []string{eniColumn, typeColumn, attachmentColumn, ipsColumn}
 
-// buildENIOutput constructs a populated OutputArray for the supplied ENIs. The
-// attachmentFor resolver decouples row construction from the AWS-backed
-// ENILookupCache so the output shape is unit testable (T-1294).
-func buildENIOutput(interfaces []types.NetworkInterface, names map[string]string, resultTitle string, split bool, attachmentFor func(types.NetworkInterface) string) format.OutputArray {
-	keys := fullENIKeys
-	output := format.OutputArray{Keys: keys, Settings: settings.NewOutputSettings()}
-	output.Settings.Title = resultTitle
-	output.Settings.SortKey = subnetColumn
-	if split {
-		// unset VPC and subnet
-		output.Keys = splitENIKeys
-		output.Settings.SeparateTables = true
-		output.Settings.SortKey = attachmentColumn
-	}
+// buildENIsDocument constructs the single-table (non-split) ENI document. One
+// document serves both stdout and --file, so both destinations always carry
+// the same rows (T-1294). The attachmentFor resolver decouples row
+// construction from the AWS-backed ENILookupCache so the output shape is unit
+// testable.
+func buildENIsDocument(interfaces []types.NetworkInterface, names map[string]string, resultTitle string, attachmentFor func(types.NetworkInterface) string) *output.Document {
+	return output.New().
+		Table(resultTitle, eniRows(interfaces, names, false, attachmentFor),
+			output.WithKeys(fullENIKeys...), config.SortOption(subnetColumn)).
+		Build()
+}
 
+// buildENIsBySubnetDocument constructs the --split document: one table per
+// subnet group, each with the v1 group title and the reduced split key set.
+// All groups live in a single document so one render serves both stdout and
+// --file with every subnet table (R7.2, T-1294). Subnet keys are sorted so
+// table order is deterministic between runs (R2.8).
+func buildENIsBySubnetDocument(interfaces []types.NetworkInterface, names map[string]string, resultTitle string, attachmentFor func(types.NetworkInterface) string) *output.Document {
+	groups := splitBySubnet(interfaces)
+	builder := output.New()
+	for _, subnet := range slices.Sorted(maps.Keys(groups)) {
+		group := groups[subnet]
+		groupTitle := fmt.Sprintf("%s - %s: %s", resultTitle, getNameAndIDFromMap(aws.ToString(group[0].VpcId), names), getNameAndIDFromMap(subnet, names))
+		builder = builder.Table(groupTitle, eniRows(group, names, true, attachmentFor),
+			output.WithKeys(splitENIKeys...), config.SortOption(attachmentColumn))
+	}
+	return builder.Build()
+}
+
+// eniRows builds the table rows for the supplied ENIs. Split rows omit the VPC
+// and subnet columns because the split table's title already carries them.
+func eniRows(interfaces []types.NetworkInterface, names map[string]string, split bool, attachmentFor func(types.NetworkInterface) string) []map[string]any {
+	rows := make([]map[string]any, 0, len(interfaces))
 	for _, netinterface := range interfaces {
 		content := make(map[string]any)
 		iparray := make([]string, 0)
@@ -144,11 +128,13 @@ func buildENIOutput(interfaces []types.NetworkInterface, names map[string]string
 		content[typeColumn] = netinterface.InterfaceType
 		content[attachmentColumn] = getNameAndIDFromMap(attachmentFor(netinterface), names)
 		content[ipsColumn] = iparray
-		content[vpcColumn] = getNameAndIDFromMap(aws.ToString(netinterface.VpcId), names)
-		content[subnetColumn] = getNameAndIDFromMap(aws.ToString(netinterface.SubnetId), names)
-		output.AddContents(content)
+		if !split {
+			content[vpcColumn] = getNameAndIDFromMap(aws.ToString(netinterface.VpcId), names)
+			content[subnetColumn] = getNameAndIDFromMap(aws.ToString(netinterface.SubnetId), names)
+		}
+		rows = append(rows, content)
 	}
-	return output
+	return rows
 }
 
 func splitBySubnet(interfaces []types.NetworkInterface) map[string][]types.NetworkInterface {
