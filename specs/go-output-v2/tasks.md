@@ -184,7 +184,7 @@ references:
   - Stream: 3
   - Requirements: [2.7](requirements.md#2.7), [7.3](requirements.md#7.3), [9.1](requirements.md#9.1)
 
-- [ ] 21. Migrate demotables with style-drift test <!-- id:1hi7wjo -->
+- [x] 21. Migrate demotables with style-drift test <!-- id:1hi7wjo -->
   - hardcode the 16 v1 style names; loop renders one single-table Document per style via inline Output with output.TableWithStyle(name)
   - --file support intentionally dropped (demo command, per design)
   - test: every hardcoded name accepted by TableWithStyle (drift guard)
