@@ -3,7 +3,7 @@ package cmd
 import (
 	"github.com/ArjenSchwarz/awstools/config"
 	"github.com/ArjenSchwarz/awstools/helpers"
-	format "github.com/ArjenSchwarz/go-output"
+	output "github.com/ArjenSchwarz/go-output/v2"
 	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	"github.com/spf13/cobra"
 )
@@ -20,7 +20,7 @@ The command shows separate tables for each VPC, displaying:
 - Summary statistics
 
 Use --vpc to filter results to a specific VPC.`,
-	Run: vpcOverview,
+	RunE: vpcOverview,
 }
 
 var vpcIDFilter string
@@ -35,7 +35,7 @@ func getResourceDisplayName(resourceID string, tags []types.Tag) string {
 	return helpers.GetResourceDisplayNameWithGlobalLookup(resourceID, tags, getName)
 }
 
-func vpcOverview(_ *cobra.Command, _ []string) {
+func vpcOverview(cmd *cobra.Command, _ []string) error {
 	awsConfig := config.DefaultAwsConfig(*settings)
 	accountName := getName(helpers.GetAccountID(awsConfig.StsClient()))
 
@@ -59,16 +59,17 @@ func vpcOverview(_ *cobra.Command, _ []string) {
 		}
 	}
 
-	// Create separate subnet overview tables for each VPC
+	// All tables accumulate on a single builder and render in one pass.
+	builder := output.New()
+
+	// Separate subnet overview tables for each VPC
 	subnetKeys := []string{subnetColumn, cidrColumn, typeColumn, routeTableColumn, routesColumn, "Total IPs", "Available IPs", "Used IPs"}
 
 	for _, vpc := range filteredVPCs {
 		vpcDisplay := getResourceDisplayName(vpc.ID, vpc.Tags)
-		subnetOutput := format.OutputArray{Keys: subnetKeys, Settings: settings.NewOutputSettings()}
-		subnetOutput.Settings.Title = "Subnet Overview for " + vpcDisplay + " in account " + accountName
-		subnetOutput.Settings.SortKey = cidrColumn
-		subnetOutput.Settings.SeparateTables = true
+		subnetTitle := "Subnet Overview for " + vpcDisplay + " in account " + accountName
 
+		subnetRows := []map[string]any{}
 		for _, subnet := range vpc.Subnets {
 			// Use tiered name lookup for subnet
 			subnetDisplay := getResourceDisplayName(subnet.ID, subnet.Tags)
@@ -91,10 +92,9 @@ func vpcOverview(_ *cobra.Command, _ []string) {
 			content["Available IPs"] = subnet.AvailableIPs
 			content["Used IPs"] = subnet.UsedIPs
 
-			holder := format.OutputHolder{Contents: content}
-			subnetOutput.AddHolder(holder)
+			subnetRows = append(subnetRows, content)
 		}
-		subnetOutput.Write()
+		builder = builder.Table(subnetTitle, subnetRows, output.WithKeys(subnetKeys...), config.SortOption(cidrColumn))
 	}
 
 	// Individual tables for each subnet's IP details
@@ -102,15 +102,14 @@ func vpcOverview(_ *cobra.Command, _ []string) {
 		for _, subnet := range vpc.Subnets {
 			if len(subnet.IPDetails) > 0 {
 				ipKeys := []string{"IP Address", "Usage Type", "Attachment Info", "Public IP"}
-				ipOutput := format.OutputArray{Keys: ipKeys, Settings: settings.NewOutputSettings()}
-				ipOutput.Settings.SeparateTables = true
 
 				// Use tiered name lookup for consistent formatting
 				subnetDisplay := getResourceDisplayName(subnet.ID, subnet.Tags)
 				vpcDisplay := getResourceDisplayName(vpc.ID, vpc.Tags)
 
-				ipOutput.Settings.Title = "IP Details for subnet " + subnetDisplay + " in VPC " + vpcDisplay
+				ipTitle := "IP Details for subnet " + subnetDisplay + " in VPC " + vpcDisplay
 
+				ipRows := []map[string]any{}
 				for _, ipDetail := range subnet.IPDetails {
 					ipContent := make(map[string]any)
 					ipContent["IP Address"] = ipDetail.IPAddress
@@ -118,18 +117,15 @@ func vpcOverview(_ *cobra.Command, _ []string) {
 					ipContent["Attachment Info"] = ipDetail.AttachmentInfo
 					ipContent["Public IP"] = ipDetail.PublicIP
 
-					ipHolder := format.OutputHolder{Contents: ipContent}
-					ipOutput.AddHolder(ipHolder)
+					ipRows = append(ipRows, ipContent)
 				}
-				ipOutput.Write()
+				builder = builder.Table(ipTitle, ipRows, output.WithKeys(ipKeys...))
 			}
 		}
 	}
 
 	// Third table: Summary Statistics
 	summaryKeys := []string{"Metric", "Count"}
-	summaryOutput := format.OutputArray{Keys: summaryKeys, Settings: settings.NewOutputSettings()}
-	summaryOutput.Settings.SeparateTables = true
 
 	// Calculate summary for filtered VPCs. SummarizeVPCUsage uses saturating
 	// addition so VPCs with multiple IPv6-only subnets (each reporting a
@@ -138,14 +134,15 @@ func vpcOverview(_ *cobra.Command, _ []string) {
 	filteredSummary := helpers.SummarizeVPCUsage(filteredVPCs)
 
 	// Set title based on filter
+	var summaryTitle string
 	if vpcIDFilter != "" {
 		vpcDisplay := ""
 		if len(filteredVPCs) > 0 {
 			vpcDisplay = getResourceDisplayName(filteredVPCs[0].ID, filteredVPCs[0].Tags)
 		}
-		summaryOutput.Settings.Title = "VPC Usage Summary for " + vpcDisplay + " in account " + accountName
+		summaryTitle = "VPC Usage Summary for " + vpcDisplay + " in account " + accountName
 	} else {
-		summaryOutput.Settings.Title = "VPC Usage Summary for account " + accountName
+		summaryTitle = "VPC Usage Summary for account " + accountName
 	}
 
 	summaryData := []struct {
@@ -161,13 +158,15 @@ func vpcOverview(_ *cobra.Command, _ []string) {
 		{"Available IP Addresses", filteredSummary.AvailableIPs},
 	}
 
+	summaryRows := []map[string]any{}
 	for _, item := range summaryData {
 		summaryContent := make(map[string]any)
 		summaryContent["Metric"] = item.metric
 		summaryContent["Count"] = item.count
 
-		summaryHolder := format.OutputHolder{Contents: summaryContent}
-		summaryOutput.AddHolder(summaryHolder)
+		summaryRows = append(summaryRows, summaryContent)
 	}
-	summaryOutput.Write()
+	builder = builder.Table(summaryTitle, summaryRows, output.WithKeys(summaryKeys...))
+
+	return settings.RenderDocument(cmd.Context(), builder.Build())
 }

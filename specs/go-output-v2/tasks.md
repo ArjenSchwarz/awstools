@@ -176,7 +176,7 @@ references:
   - Stream: 2
   - Requirements: [7.2](requirements.md#7.2), [9.1](requirements.md#9.1), [9.2](requirements.md#9.2)
 
-- [ ] 20. Migrate vpcoverview (multi-table single render) <!-- id:1hi7wjn -->
+- [x] 20. Migrate vpcoverview (multi-table single render) <!-- id:1hi7wjn -->
   - three per-loop OutputArray+Write blocks -> one Document: per-VPC subnet tables + per-subnet IP tables + summary table, each .Table with own WithKeys
   - known accepted change: one JSON document instead of v1 concatenated JSON fragments (design/D5)
   - RunE conversion
