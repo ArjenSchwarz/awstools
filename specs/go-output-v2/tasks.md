@@ -203,7 +203,7 @@ references:
   - Stream: 4
   - Requirements: [6.1](requirements.md#6.1), [6.2](requirements.md#6.2), [6.3](requirements.md#6.3), [9.1](requirements.md#9.1)
 
-- [ ] 23. Migrate vpcipfinder (canonical, missed by original spec)
+- [x] 23. Migrate vpcipfinder (canonical, missed by original spec)
   - cmd/vpcipfinder.go was not in design.md's v1-using file table; discovered during phase review
   - canonical single-table migration: format.OutputArray -> output.New().Table(...).Build() + settings.RenderDocument
   - keep keys/title/row values identical; command is already RunE (T-1370), keep returning errors
