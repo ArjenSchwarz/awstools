@@ -218,7 +218,7 @@ references:
   - Stream: 1
   - Requirements: [2.1](requirements.md#2.1), [2.2](requirements.md#2.2), [2.3](requirements.md#2.3), [2.4](requirements.md#2.4), [2.5](requirements.md#2.5), [2.7](requirements.md#2.7), [8.1](requirements.md#8.1), [9.3](requirements.md#9.3)
 
-- [ ] 24. Write verbose-dimension equivalence test <!-- id:1hi7wjr -->
+- [x] 24. Write verbose-dimension equivalence test <!-- id:1hi7wjr -->
   - exercise one command's row/key builder verbose on and off (cfnresources or iamuserlist), assert the column/row delta
   - Blocked-by: 1hi7wjd (Migrate cfn + tgw + vpc canonical commands (cfnresources, tgwdangling, vpcroutes)), 1hi7wjf (Migrate iamrolelist + iamuserlist)
   - Stream: 1
