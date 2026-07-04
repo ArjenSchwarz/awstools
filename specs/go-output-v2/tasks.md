@@ -203,9 +203,17 @@ references:
   - Stream: 4
   - Requirements: [6.1](requirements.md#6.1), [6.2](requirements.md#6.2), [6.3](requirements.md#6.3), [9.1](requirements.md#9.1)
 
+- [ ] 23. Migrate vpcipfinder (canonical, missed by original spec)
+  - cmd/vpcipfinder.go was not in design.md's v1-using file table; discovered during phase review
+  - canonical single-table migration: format.OutputArray -> output.New().Table(...).Build() + settings.RenderDocument
+  - keep keys/title/row values identical; command is already RunE (T-1370), keep returning errors
+  - removes the last cmd/ v1 import ahead of the v1 dependency removal
+  - Stream: 1
+  - Requirements: [2.1](requirements.md#2.1), [9.1](requirements.md#9.1)
+
 ## Verification and cleanup
 
-- [ ] 23. Write per-format equivalence oracle tests <!-- id:1hi7wjq -->
+- [ ] 24. Write per-format equivalence oracle tests <!-- id:1hi7wjq -->
   - fixed in-memory rows, no AWS calls; JSON representative must render through go-output, not names (R8.1)
   - json/yaml: unmarshal deep-equal + key order via json.Decoder token stream
   - csv: header order + scalar cells; multi-value/bool cells asserted against v2 defaults (D7)
@@ -218,19 +226,19 @@ references:
   - Stream: 1
   - Requirements: [2.1](requirements.md#2.1), [2.2](requirements.md#2.2), [2.3](requirements.md#2.3), [2.4](requirements.md#2.4), [2.5](requirements.md#2.5), [2.7](requirements.md#2.7), [8.1](requirements.md#8.1), [9.3](requirements.md#9.3)
 
-- [x] 24. Write verbose-dimension equivalence test <!-- id:1hi7wjr -->
+- [x] 25. Write verbose-dimension equivalence test <!-- id:1hi7wjr -->
   - exercise one command's row/key builder verbose on and off (cfnresources or iamuserlist), assert the column/row delta
   - Blocked-by: 1hi7wjd (Migrate cfn + tgw + vpc canonical commands (cfnresources, tgwdangling, vpcroutes)), 1hi7wjf (Migrate iamrolelist + iamuserlist)
   - Stream: 1
   - Requirements: [2.6](requirements.md#2.6), [8.2](requirements.md#8.2)
 
-- [x] 25. Write drawio combine-and-append test <!-- id:1hi7wjs -->
+- [x] 26. Write drawio combine-and-append test <!-- id:1hi7wjs -->
   - write drawio CSV via v2, run the ported merge logic plus new records, assert combined ID set, dedup, and column order
   - Blocked-by: 1hi7wjj (Migrate tgwoverview (drawio + combine + emoji-in-data)), combine, 1hi7wjk (Migrate vpcpeerings (graph + drawio + combine))
   - Stream: 1
   - Requirements: [5.4](requirements.md#5.4), [8.4](requirements.md#8.4)
 
-- [ ] 26. Remove v1 dependency and finish cleanup <!-- id:1hi7wjt -->
+- [ ] 27. Remove v1 dependency and finish cleanup <!-- id:1hi7wjt -->
   - delete config.NewOutputSettings, dead GetSeparator, their old tests, and all remaining v1 imports
   - go.mod/go.sum: drop github.com/ArjenSchwarz/go-output v1.4.0 + delete stale commented replace ../go-output2 line
   - grep-verify zero references to ArjenSchwarz/go-output without /v2

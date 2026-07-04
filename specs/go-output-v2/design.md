@@ -104,6 +104,7 @@ Every v1-using file, its class, and what changes:
 | `cmd/tgwdangling.go` | canonical | |
 | `cmd/sso.go` | canonical | table in `displayEnhancedProfileResults` |
 | `cmd/vpcroutes.go` | canonical | raw `[]string` cells → v2 default rendering (D7); drawio remnants stay commented |
+| `cmd/vpcipfinder.go` | canonical | missed by the original table; added during phase review (task 23) |
 | `cmd/appmeshshowmesh.go` | graph+drawio | |
 | `cmd/iamrolelist.go` | graph+drawio | heterogeneous rows (roles + policies in one table) |
 | `cmd/iamuserlist.go` | graph+drawio | heterogeneous rows; two connections |
