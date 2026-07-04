@@ -238,7 +238,7 @@ references:
   - Stream: 1
   - Requirements: [5.4](requirements.md#5.4), [8.4](requirements.md#8.4)
 
-- [ ] 27. Remove v1 dependency and finish cleanup <!-- id:1hi7wjt -->
+- [x] 27. Remove v1 dependency and finish cleanup <!-- id:1hi7wjt -->
   - delete config.NewOutputSettings, dead GetSeparator, their old tests, and all remaining v1 imports
   - go.mod/go.sum: drop github.com/ArjenSchwarz/go-output v1.4.0 + delete stale commented replace ../go-output2 line
   - grep-verify zero references to ArjenSchwarz/go-output without /v2

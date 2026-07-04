@@ -395,7 +395,7 @@ func sampleENIs() []types.NetworkInterface {
 }
 
 // configureOutput sets the viper-backed output settings consumed by
-// settings.NewOutputSettings() and resets them when the test finishes.
+// settings.RenderDocuments() and resets them when the test finishes.
 func configureOutput(t *testing.T, format, file string) {
 	t.Helper()
 	viper.Set("output.format", format)
