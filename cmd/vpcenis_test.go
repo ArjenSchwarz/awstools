@@ -1,8 +1,11 @@
 package cmd
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -406,23 +409,51 @@ func configureOutput(t *testing.T, format, file string) {
 // noAttachment is a stub resolver so output-path tests do not need AWS clients.
 func noAttachment(types.NetworkInterface) string { return "" }
 
-// TestEnisFileOutput_NonSplit_NotEmpty_T1294 is the regression test for
-// T-1294: `awstools vpc enis --file <path>` wrote empty/incorrect content to
-// the file because the ENI rows were routed through the shared package buffer
-// while Write() was called on an empty outer OutputArray. Write() prints the
-// buffer to stdout and resets it before the --file branch runs, so the file
-// branch serialized the empty array.
-//
-// The fix builds a populated OutputArray and calls Write() on it directly. This
-// test drives that exact path: build the non-split ENI output and write it to a
-// temp file, then assert the file contains the ENI rows (not an empty JSON
-// array).
-func TestEnisFileOutput_NonSplit_NotEmpty_T1294(t *testing.T) {
+// captureRenderedStdout redirects os.Stdout to a pipe while fn runs and
+// returns the bytes written. RenderDocument constructs its stdout writer
+// during the call, so redirecting beforehand captures the stdout rendering.
+func captureRenderedStdout(t *testing.T, fn func() error) []byte {
+	t.Helper()
+	old := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("creating pipe: %v", err)
+	}
+	os.Stdout = w
+	t.Cleanup(func() { os.Stdout = old })
+
+	fnErr := fn()
+
+	if err := w.Close(); err != nil {
+		t.Fatalf("closing pipe writer: %v", err)
+	}
+	os.Stdout = old
+	data, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatalf("reading captured stdout: %v", err)
+	}
+	if fnErr != nil {
+		t.Fatalf("render failed: %v", fnErr)
+	}
+	return data
+}
+
+// TestEnisRender_NonSplit_FileMatchesStdout_T1294 preserves the T-1294 intent
+// for the single-Document flow: `awstools vpc enis --file <path>` must write
+// the ENI rows to the file (v1 routed rows through a shared package buffer
+// that Write() reset between the stdout and file passes, leaving the file
+// empty). In v2 one Document is rendered to both destinations, so the file
+// must contain every ENI row and — with matching formats — carry the same
+// content as stdout (R4.6).
+func TestEnisRender_NonSplit_FileMatchesStdout_T1294(t *testing.T) {
 	dir := t.TempDir()
 	outFile := filepath.Join(dir, "enis.json")
 	configureOutput(t, "json", outFile)
 
-	writeENIs(sampleENIs(), map[string]string{}, "VPC ENIs", noAttachment)
+	doc := buildENIsDocument(sampleENIs(), map[string]string{}, "VPC ENIs", noAttachment)
+	stdout := captureRenderedStdout(t, func() error {
+		return settings.RenderDocument(t.Context(), doc)
+	})
 
 	data, err := os.ReadFile(outFile)
 	if err != nil {
@@ -432,21 +463,36 @@ func TestEnisFileOutput_NonSplit_NotEmpty_T1294(t *testing.T) {
 	if contents == "" || contents == "[]" || contents == "null" {
 		t.Fatalf("output file is empty/has no ENI rows: %q", contents)
 	}
+	if !json.Valid(data) {
+		t.Fatalf("output file is not a single valid JSON document: %q", contents)
+	}
 	if !strings.Contains(contents, "eni-aaa111") || !strings.Contains(contents, "eni-bbb222") {
 		t.Fatalf("output file missing expected ENI rows, got: %q", contents)
 	}
+	// The stdout writer appends a trailing newline for terminal friendliness;
+	// the file writer writes the rendered bytes verbatim. R4.6 is about content
+	// equality, so compare with the trailing newline normalized.
+	if !bytes.Equal(bytes.TrimRight(stdout, "\n"), bytes.TrimRight(data, "\n")) {
+		t.Errorf("file content differs from stdout content for matching formats (R4.6)\nstdout: %q\nfile:   %q", stdout, data)
+	}
 }
 
-// TestEnisFileOutput_Split_NotEmpty_T1294 covers the --split path: every
-// subnet group must reach the --file output. The split path accumulates real
-// OutputArray data for the final Write() so the file branch has content even
-// after the buffer is reset following the stdout pass (T-1294).
-func TestEnisFileOutput_Split_NotEmpty_T1294(t *testing.T) {
+// TestEnisRender_Split_FileContainsAllSubnetTables_T1294 covers the --split
+// path against the single-Document flow: one Document holds one table per
+// subnet group, and a single render serves both destinations (R7.2). The file
+// must contain the rows of ALL subnet groups as one valid JSON document (v1
+// wrote a flattened combined array to the file while stdout got separate
+// per-group tables, so stdout and file disagreed), and with matching formats
+// the file must carry the same content as stdout (R4.6).
+func TestEnisRender_Split_FileContainsAllSubnetTables_T1294(t *testing.T) {
 	dir := t.TempDir()
 	outFile := filepath.Join(dir, "enis-split.json")
 	configureOutput(t, "json", outFile)
 
-	writeENIsBySubnet(sampleENIs(), map[string]string{}, "VPC ENIs", noAttachment)
+	doc := buildENIsBySubnetDocument(sampleENIs(), map[string]string{}, "VPC ENIs", noAttachment)
+	stdout := captureRenderedStdout(t, func() error {
+		return settings.RenderDocument(t.Context(), doc)
+	})
 
 	data, err := os.ReadFile(outFile)
 	if err != nil {
@@ -456,8 +502,44 @@ func TestEnisFileOutput_Split_NotEmpty_T1294(t *testing.T) {
 	if contents == "" || contents == "[]" || contents == "null" {
 		t.Fatalf("split output file is empty/has no ENI rows: %q", contents)
 	}
+	if !json.Valid(data) {
+		t.Fatalf("split output file is not a single valid JSON document: %q", contents)
+	}
 	// Both subnet groups' ENIs must be present in the file output.
 	if !strings.Contains(contents, "eni-aaa111") || !strings.Contains(contents, "eni-bbb222") {
 		t.Fatalf("split output file missing ENI rows from one or more subnet groups, got: %q", contents)
+	}
+	// The stdout writer appends a trailing newline for terminal friendliness;
+	// the file writer writes the rendered bytes verbatim. R4.6 is about content
+	// equality, so compare with the trailing newline normalized.
+	if !bytes.Equal(bytes.TrimRight(stdout, "\n"), bytes.TrimRight(data, "\n")) {
+		t.Errorf("split file content differs from stdout content for matching formats (R4.6)\nstdout: %q\nfile:   %q", stdout, data)
+	}
+}
+
+// TestEnisSplitDocument_PerSubnetTables pins the v1 table shape of the split
+// document (R7.2): one table per subnet group, each carrying the v1 group
+// title ("<title> - <vpc>: <subnet>") with rows from that subnet only. Table
+// format renders titles, so both group titles and both ENIs must appear.
+func TestEnisSplitDocument_PerSubnetTables(t *testing.T) {
+	configureOutput(t, "table", "")
+
+	doc := buildENIsBySubnetDocument(sampleENIs(), map[string]string{}, "VPC ENIs", noAttachment)
+	stdout := string(captureRenderedStdout(t, func() error {
+		return settings.RenderDocument(t.Context(), doc)
+	}))
+
+	for _, groupTitle := range []string{
+		"VPC ENIs - vpc-111: subnet-a",
+		"VPC ENIs - vpc-111: subnet-b",
+	} {
+		if !strings.Contains(stdout, groupTitle) {
+			t.Errorf("split output missing per-subnet table title %q, got:\n%s", groupTitle, stdout)
+		}
+	}
+	for _, eni := range []string{"eni-aaa111", "eni-bbb222"} {
+		if !strings.Contains(stdout, eni) {
+			t.Errorf("split output missing ENI row %q, got:\n%s", eni, stdout)
+		}
 	}
 }

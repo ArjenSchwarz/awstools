@@ -160,7 +160,7 @@ references:
 
 ## Special cases
 
-- [ ] 18. Rewrite vpcenis tests against single-Document flow (red) <!-- id:1hi7wjl -->
+- [x] 18. Rewrite vpcenis tests against single-Document flow (red) <!-- id:1hi7wjl -->
   - cmd/vpcenis_test.go currently encodes v1 buffer semantics (T-1294 workaround)
   - preserve test intent: file output contains ALL per-subnet tables; stdout equals file when formats match (R4.6)
   - tests must fail against the unmigrated vpcenis
@@ -168,7 +168,7 @@ references:
   - Stream: 2
   - Requirements: [7.2](requirements.md#7.2)
 
-- [ ] 19. Migrate vpcenis (green) <!-- id:1hi7wjm -->
+- [x] 19. Migrate vpcenis (green) <!-- id:1hi7wjm -->
   - delete AddToBuffer/combined-array choreography; one builder, one .Table per subnet group with own WithKeys, single RenderDocument
   - keep enisGraphFormatError guard unchanged (fires pre-build, central guard unreachable, message preserved)
   - RunE conversion
