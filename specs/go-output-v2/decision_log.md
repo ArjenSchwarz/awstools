@@ -321,3 +321,37 @@ The v1 behavior is an artifact of `fmt.Sprintf("%s", nil)`, not intentional desi
 - dot/mermaid output is not byte-identical to v1 for rows with nil to-cells; the per-format equivalence tests (task 23) must account for this documented deviation.
 
 ---
+
+## Decision 11: Accept go-output v2's JSON/YAML document envelope
+
+**Date**: 2026-07-05
+**Status**: accepted
+
+### Context
+
+v1 rendered `json`/`yaml` output as a bare top-level array of row objects, which downstream tooling consumed directly (e.g. `awstools s3 list | jq '.[]'`). go-output v2.7.0 always wraps table output in a document envelope — `{"title": ..., "data": [rows], "schema": {"keys": [...], "fields": [...]}}` — and exposes no data-only rendering option. The pre-push review found this divergence was shipped (and pinned by the per-format oracle tests) without being documented; requirement 2.1 and Decision 7 still claimed pretty-printing was the only JSON delta.
+
+### Decision
+
+Accept v2's document envelope for `json` and `yaml` output as a documented breaking change. Row data inside `data` keeps v1's fields, native value types, and key order; the envelope adds `title` and `schema` around it.
+
+### Rationale
+
+v2.7.0 offers no way to emit a bare array, so restoring v1's shape would require a custom Format or post-render transformer in the config package — permanent bespoke rendering code maintained solely to strip metadata that is also useful (the schema records column order, which raw JSON objects cannot express). The migration already accepts v2's rendering defaults for CSV cells (D7), HTML documents (D4), and the append marker (D3); the envelope is the same class of change. Downstream `jq` pipelines migrate mechanically (`.[]` → `.data[]`).
+
+### Alternatives Considered
+
+- **Custom unwrapping Format in config**: Restores byte-level v1 shape - Rejected because it adds permanent bespoke renderer code for all JSON/YAML output, contradicting the migration's goal of adopting v2's pipeline, and discards useful schema metadata.
+- **Post-render transformer stripping the envelope**: Smaller code footprint - Rejected for the same maintenance reason; it would also break the file/stdout byte-equality invariant (R4.6) if applied to only one destination.
+
+### Consequences
+
+**Positive:**
+- Zero custom rendering code; oracle tests pin v2's canonical shape.
+- `schema.keys` preserves column order in JSON/YAML, which v1's bare arrays could not express.
+
+**Negative:**
+- Existing `jq`/YAML pipelines that index the top-level array break and must switch to `.data[]` (documented in README and CHANGELOG).
+- Requirement 2.1's original strict-parity wording was amended after implementation rather than before — caught in review, not planning.
+
+---

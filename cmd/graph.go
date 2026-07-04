@@ -13,7 +13,9 @@ import (
 // are joined with ",", v1's dot-format separator), split on ",", and each
 // non-empty element becomes one edge; the from-value is stringified the same
 // way. Empty targets are skipped, matching v1's toDot/toMermaid edge loops.
-func graphEdges(rows []map[string]any, fromCol, toCol string) []output.Edge {
+// Generic over the map type so both []map[string]any and []output.Record rows
+// can be passed directly.
+func graphEdges[M ~map[string]any](rows []M, fromCol, toCol string) []output.Edge {
 	edges := make([]output.Edge, 0, len(rows))
 	for _, row := range rows {
 		from := graphCellString(row[fromCol])

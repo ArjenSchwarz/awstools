@@ -33,7 +33,7 @@ awstools renders all command output through go-output v1.4.0, using its `OutputA
 
 **Acceptance Criteria:**
 
-1. <a name="2.1"></a>For the `json` and `yaml` formats, the system SHALL produce output with the same fields, the same native value types (arrays stay arrays, booleans stay booleans), and the same key/column order as v1; JSON MAY be pretty-printed where v1 emitted compact JSON (a whitespace-only difference).  
+1. <a name="2.1"></a>For the `json` and `yaml` formats, the system SHALL produce row data with the same fields, the same native value types (arrays stay arrays, booleans stay booleans), and the same key/column order as v1; JSON MAY be pretty-printed where v1 emitted compact JSON. The rows move from v1's bare top-level array into v2's document envelope (`{"title": ..., "data": [rows], "schema": {"keys": [...]}}`) — an accepted breaking change to the wrapper, not the row data (Decision 11).  
 2. <a name="2.2"></a>For the `csv` format, the system SHALL produce the same columns in the same order, with the same scalar cell values, as v1; multi-value (list) and boolean cells adopt go-output v2's default rendering (e.g. `[a b c]`, `true`/`false`) — a known divergence from v1's newline-joined lists and `Yes`/`No` booleans, accepted and tracked for follow-up review (decision log Decision 7).  
 3. <a name="2.3"></a>For the `table` and `markdown` formats, the system SHALL produce the same columns, column order, and row data as v1; cell styling and multi-value/boolean cell formatting MAY differ where v2 renders differently.  
 4. <a name="2.4"></a>For the `dot`, `mermaid`, and `drawio` formats, the system SHALL produce the same set of nodes, the same set of directed edges, and (for drawio) the same AWS shape assignments as v1.  
@@ -108,7 +108,7 @@ The draw.io-emitting commands are the nine that assign a draw.io header: `appmes
 
 **Acceptance Criteria:**
 
-1. <a name="8.1"></a>The system SHALL include tests that assert data-level output equivalence (per Requirement 2) for at least one command per output format; the JSON representative SHALL be a command that renders through go-output (not `names`/`organizations names`, which marshal JSON directly and would not exercise the renderer).  
+1. <a name="8.1"></a>The system SHALL include tests that assert data-level output equivalence (per Requirement 2) for every output format, rendered through the production go-output pipeline; per the design's testing strategy these are fixture-driven per-format oracle tests (fixed in-memory rows rendered through `config.DocumentSet`) rather than per-command AWS data, and the JSON path is exercised through the renderer (not `names`/`organizations names`, which marshal JSON directly).  
 2. <a name="8.2"></a>The equivalence tests SHALL include at least one command exercised with `--verbose` enabled, covering the verbose column/row changes (AC [2.6](#2.6)).  
 3. <a name="8.3"></a>The system SHALL include a test proving the divergent `--file-format` path writes the file in the requested format while stdout uses `--output` (replacing the equivalent v1 test).  
 4. <a name="8.4"></a>The system SHALL include a test covering the draw.io combine-and-append read-back-and-merge path (AC [5.4](#5.4)).  

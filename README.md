@@ -94,7 +94,7 @@ Flags:
 Use "awstools [command] --help" for more information about a command.
 ```
 
-Output options are csv, table, json, yaml, html, markdown, mermaid, dot, and drawio with json being the default so you can easily pass it to a tool like [jq](https://stedolan.github.io/jq/). The dot, mermaid, and drawio formats are input for graphical tools and only available for certain actions. You can also directly save the output into a file, and with `--file-format` the file can use a different format than what is shown on screen (for example a table on screen and json in the file). Most commands will have a verbose option that will show some additional information that you often won't need.
+Output options are csv, table, json, yaml, html, markdown, mermaid, dot, and drawio with json being the default so you can easily pass it to a tool like [jq](https://stedolan.github.io/jq/). JSON and YAML output wrap the rows in a document envelope, so the rows live under the `data` key (e.g. `awstools s3 list | jq '.data[]'`). The dot, mermaid, and drawio formats are input for graphical tools and only available for certain actions. You can also directly save the output into a file, and with `--file-format` the file can use a different format than what is shown on screen (for example a table on screen and json in the file). Most commands will have a verbose option that will show some additional information that you often won't need.
 
 ## Pretty names
 
@@ -127,7 +127,7 @@ The main limitation currently is within SSO. Due to API limitations, it is not p
 
 ## Multi-account data
 
-If you're collating data from multiple accounts (VPC peering connections for example), you can collate this for all output formats except for the dot format. This works just as for the `names` command by adding the `--append` flag in combination with the `--file` flag.
+If you're collating data from multiple accounts (VPC peering connections for example), you can collate this for all output formats except for the html format. This works just as for the `names` command by adding the `--append` flag in combination with the `--file` flag. Note that appending to an HTML file created before the go-output v2 migration is not supported; regenerate the file first.
 
 ```bash
 # in account 1
@@ -235,12 +235,13 @@ Base output formats:
 - json: prints a json struct
 - markdown: prints a markdown table
 - table: prints a graphical CLI table
+- yaml: prints a yaml struct
 
 Graphical output formats:
 
 - dot: prints a dot file that can be used with graphviz
 - drawio: prints a CSV file that can be imported into diagrams.net aka draw.io
-- mermaid: (planned feature - not yet implemented)
+- mermaid: prints a mermaid flowchart definition
 
 Some of these are explained in more detail below.
 ### Table format
@@ -499,7 +500,7 @@ go fmt ./...
 
 ### Configuration for Development
 
-The project includes development guidance in `CLAUDE.md` for AI-assisted development and uses `github.com/ArjenSchwarz/go-output` for consistent output formatting across all commands.
+The project includes development guidance in `CLAUDE.md` for AI-assisted development and uses `github.com/ArjenSchwarz/go-output/v2` for consistent output formatting across all commands.
 
 ### Release Process
 

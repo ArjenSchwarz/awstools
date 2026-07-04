@@ -42,17 +42,13 @@ func orgstructure(cmd *cobra.Command, _ []string) error {
 			Build(),
 	}
 	if settings.NeedsGraphFormat() {
-		graphRows := make([]map[string]any, len(rows))
-		for index, row := range rows {
-			graphRows[index] = row
-		}
 		docs.Graph = output.New().
-			Graph(resultTitle, graphEdges(graphRows, nameColumn, childrenColumn)).
+			Graph(resultTitle, graphEdges(rows, nameColumn, childrenColumn)).
 			Build()
 	}
 	if settings.IsDrawIO() {
 		docs.DrawIO = output.New().
-			DrawIO(resultTitle, rows, createOrganizationsStructureDrawIOHeader()).
+			DrawIO(resultTitle, drawIORecords(rows), createOrganizationsStructureDrawIOHeader()).
 			Build()
 	}
 	return settings.RenderDocuments(cmd.Context(), docs)
@@ -80,9 +76,7 @@ func traverseOrgStructureEntry(entry helpers.OrganizationEntry, rows *[]output.R
 }
 
 func createOrganizationsStructureDrawIOHeader() output.DrawIOHeader {
-	drawioheader := output.DefaultDrawIOHeader()
-	drawioheader.Height = "78"
-	drawioheader.Width = "78"
+	drawioheader := drawIOBaseHeader("%Name%", "%Image%", imageColumn)
 	drawioheader.Layout = output.DrawIOLayoutVerticalTree
 	connection := drawIOConnection()
 	connection.Invert = false

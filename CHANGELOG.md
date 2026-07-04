@@ -25,6 +25,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Breaking:** JSON and YAML output now wrap rows in go-output v2's document envelope (`{"title", "data", "schema"}`); jq pipelines change from `.[]` to `.data[]` (Decision 11)
+- Multi-value cells in drawio output are comma-joined in all graph-capable commands, restoring v1 edge resolution (pre-push review fix); sso overview-by-account output is now deterministically ordered
 - `vpc ip-finder` migrated to go-output v2 (task 23, added after review found it missing from the migration spec) — the last cmd/ file using v1
 - Special-case commands migrated to go-output v2 (Special cases phase): vpc enis (single-document flow with rewritten tests), vpc overview (all tables rendered in one pass), demo tables (16 styles with a style-drift guard test); plus verbose-dimension and drawio combine-and-append equivalence tests
 - Graph and drawio commands migrated to go-output v2 (Graph and drawio commands phase): appmesh showmesh, iam rolelist/userlist, organizations structure, sso overview (by account and by permission set), tgw routes/overview, vpc peerings — per-format document flavors built additively, drawio combine/append flows ported to v2's CSV read-back, and `tgw routes --list` now supports graph/drawio output instead of erroring

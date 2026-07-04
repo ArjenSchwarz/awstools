@@ -64,17 +64,13 @@ func ssoOverviewByPermissionSet(cmd *cobra.Command, _ []string) error {
 	if settings.NeedsGraphFormat() || settings.IsDrawIO() {
 		records := createSSOPermissionsetsDrawIOContents(ssoInstance)
 		if settings.NeedsGraphFormat() {
-			graphRows := make([]map[string]any, len(records))
-			for index, record := range records {
-				graphRows[index] = record
-			}
 			docs.Graph = output.New().
-				Graph(resultTitle, graphEdges(graphRows, drawIOIDColumn, childrenColumn)).
+				Graph(resultTitle, graphEdges(records, drawIOIDColumn, childrenColumn)).
 				Build()
 		}
 		if settings.IsDrawIO() {
 			docs.DrawIO = output.New().
-				DrawIO(resultTitle, records, createSSOPermissionsetsDrawIOHeader()).
+				DrawIO(resultTitle, drawIORecords(records), createSSOOverviewDrawIOHeader()).
 				Build()
 		}
 	}
@@ -88,19 +84,6 @@ func filteredSSOPermissionSet(permissionset helpers.SSOPermissionSet) bool {
 		return true
 	}
 	return false
-}
-
-func createSSOPermissionsetsDrawIOHeader() output.DrawIOHeader {
-	drawioheader := output.DefaultDrawIOHeader()
-	drawioheader.Height = "78"
-	drawioheader.Width = "78"
-	drawioheader.Layout = output.DrawIOLayoutHorizontalTree
-	connection := drawIOConnection()
-	connection.Invert = false
-	connection.From = childrenColumn
-	connection.To = drawIOIDColumn
-	drawioheader.Connections = append(drawioheader.Connections, connection)
-	return drawioheader
 }
 
 func createSSOPermissionsetsDrawIOContents(instance helpers.SSOInstance) []output.Record {

@@ -42,7 +42,7 @@ awstools is a CLI application built with Go and the Cobra framework for AWS reso
 
 1. **Command Pattern**: Each AWS service has its own command file in cmd/ with corresponding helper functions
 2. **Configuration Management**: Uses Viper for config files (.awstools.yaml) and environment variables
-3. **Output Flexibility**: Supports multiple output formats (JSON, CSV, table, HTML, dot, drawio, mermaid) via github.com/ArjenSchwarz/go-output
+3. **Output Flexibility**: Supports multiple output formats (JSON, YAML, CSV, table, markdown, HTML, dot, drawio, mermaid) via github.com/ArjenSchwarz/go-output/v2
 4. **AWS SDK v2**: Uses aws-sdk-go-v2 for all AWS interactions
 5. **Naming Resolution**: Optional naming files for human-readable resource names
 

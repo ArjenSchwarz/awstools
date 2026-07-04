@@ -37,8 +37,9 @@ func iamrolelist(cmd *cobra.Command, _ []string) error {
 	awsConfig := config.DefaultAwsConfig(*settings)
 	resultTitle := "IAM Role overview for account " + getName(helpers.GetAccountID(awsConfig.StsClient()))
 	roles, policies := helpers.GetRolesAndPolicies(settings.IsVerbose(), awsConfig.IamClient())
+	isDrawIO := settings.IsDrawIO()
 	keys := []string{nameColumn, typeColumn, "AssumedFrom", "Policies", "Roles"}
-	if settings.IsDrawIO() {
+	if isDrawIO {
 		keys = append(keys, imageColumn)
 		keys = append(keys, "DrawioID")
 	}
@@ -49,7 +50,7 @@ func iamrolelist(cmd *cobra.Command, _ []string) error {
 		content["AssumedFrom"] = role.CanBeAssumedFrom()
 		content[typeColumn] = role.Type
 		content["Policies"] = role.GetPolicyNames()
-		if settings.IsDrawIO() {
+		if isDrawIO {
 			content["DrawioID"] = role.ID
 			content[imageColumn] = awsShape("Security Identity Compliance", "Role")
 		}
@@ -58,7 +59,7 @@ func iamrolelist(cmd *cobra.Command, _ []string) error {
 	for policyname, policy := range policies {
 		content := make(map[string]any)
 		content[nameColumn] = policyname
-		if settings.IsDrawIO() {
+		if isDrawIO {
 			content["DrawioID"] = policyname
 			content[imageColumn] = awsShape("Security Identity Compliance", "Permissions")
 		}
@@ -73,17 +74,13 @@ func iamrolelist(cmd *cobra.Command, _ []string) error {
 			Build(),
 	}
 	if settings.NeedsGraphFormat() {
-		graphRows := make([]map[string]any, len(rows))
-		for i, row := range rows {
-			graphRows[i] = row
-		}
 		docs.Graph = output.New().
-			Graph(resultTitle, graphEdges(graphRows, nameColumn, "Policies")).
+			Graph(resultTitle, graphEdges(rows, nameColumn, "Policies")).
 			Build()
 	}
-	if settings.IsDrawIO() {
+	if isDrawIO {
 		docs.DrawIO = output.New().
-			DrawIO(resultTitle, rows, createIamrolelistDrawIOHeader()).
+			DrawIO(resultTitle, drawIORecords(rows), createIamrolelistDrawIOHeader()).
 			Build()
 	}
 	return settings.RenderDocuments(cmd.Context(), docs)

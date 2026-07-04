@@ -86,12 +86,17 @@ func (config *Config) ShouldCombineAndAppend() bool {
 	}
 	// The HTML exclusion concerns the file being appended to, so it has to
 	// look at the format the file is written in, not the stdout format.
-	return config.effectiveFileFormat() != "html"
+	return config.effectiveFileFormat() != output.FormatHTML
 }
 
 // IsVerbose returns whether verbose output is enabled
 func (config *Config) IsVerbose() bool {
 	return config.GetBool("output.verbose")
+}
+
+// UseEmoji returns whether emoji output is enabled
+func (config *Config) UseEmoji() bool {
+	return config.GetBool("output.use-emoji")
 }
 
 // DocumentSet holds per-format-family document flavors. Table is required;
@@ -203,7 +208,7 @@ func (config *Config) outputOptions(formatName string, writer output.Writer) []o
 		output.WithFormat(formatFor(formatName, config)),
 		output.WithWriter(writer),
 	}
-	if config.GetBool("output.use-emoji") {
+	if config.UseEmoji() {
 		opts = append(opts, output.WithTransformer(&output.EmojiTransformer{}))
 	}
 	return opts
@@ -214,18 +219,18 @@ func (config *Config) outputOptions(formatName string, writer output.Writer) []o
 // --output and --file-format (R3.1, R3.6).
 func formatFor(name string, config *Config) output.Format {
 	switch name {
-	case "yaml":
+	case output.FormatYAML:
 		return output.YAML()
-	case "csv":
+	case output.FormatCSV:
 		return output.CSV()
-	case "table":
+	case output.FormatTable:
 		return output.TableWithStyleAndMaxColumnWidth(
 			config.GetString("output.table.style"),
 			config.GetInt("output.table.max-column-width"),
 		)
-	case "markdown":
+	case output.FormatMarkdown:
 		return output.Markdown()
-	case "html":
+	case output.FormatHTML:
 		return output.HTMLWithTemplate(output.DefaultHTMLTemplate)
 	case output.FormatDOT:
 		return output.DOT()

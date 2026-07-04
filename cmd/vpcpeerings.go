@@ -31,8 +31,9 @@ func peerings(cmd *cobra.Command, _ []string) error {
 	awsConfig := config.DefaultAwsConfig(*settings)
 	resultTitle := "VPC Peerings for account " + getName(helpers.GetAccountID(awsConfig.StsClient()))
 	peerings := helpers.GetAllVpcPeers(awsConfig.Ec2Client())
+	isDrawIO := settings.IsDrawIO()
 	keys := []string{"ID", nameColumn, accountIDColumn, "PeeringIDs"}
-	if settings.IsDrawIO() {
+	if isDrawIO {
 		keys = append(keys, imageColumn)
 	}
 	vpcs := make(map[string]helpers.VPCHolder)
@@ -90,10 +91,10 @@ func peerings(cmd *cobra.Command, _ []string) error {
 		if len(entry) > 0 {
 			content[accountIDColumn] = vpcs[id].AccountID
 			content["PeeringIDs"] = peeringIDs
-			if settings.IsDrawIO() {
+			if isDrawIO {
 				content[imageColumn] = awsShape("Network Content Delivery", vpcColumn)
 			}
-		} else if settings.IsDrawIO() {
+		} else if isDrawIO {
 			content[imageColumn] = awsShape("Network Content Delivery", "Peering Connection")
 		}
 		rows = append(rows, content)
@@ -109,7 +110,7 @@ func peerings(cmd *cobra.Command, _ []string) error {
 			Graph(resultTitle, graphEdges(rows, "ID", "PeeringIDs")).
 			Build()
 	}
-	if settings.IsDrawIO() {
+	if isDrawIO {
 		docs.DrawIO = output.New().
 			DrawIO(resultTitle, drawIORecords(rows), createVpcPeeringsDrawIOHeader()).
 			Build()

@@ -35,10 +35,13 @@ func oracleRows() []map[string]any {
 var oracleKeys = []string{"Name", "Targets", "Public", "Count"}
 
 // oracleRecords returns the drawio flavor's records for the same entities.
+// The []string Parent cell pins drawIORecords' comma-join: passed raw, v2's
+// renderer would emit fmt.Sprint's "[alpha beta]" and break edge resolution.
 func oracleRecords() []output.Record {
 	return []output.Record{
 		{"Name": "alpha", "Image": "img-a", "Parent": ""},
 		{"Name": "beta", "Image": "img-b", "Parent": "alpha"},
+		{"Name": "gamma", "Image": "img-c", "Parent": []string{"alpha", "beta"}},
 	}
 }
 
@@ -298,7 +301,7 @@ func TestFormatOracleDrawIO(t *testing.T) {
 		viper.Set("output.file", "")
 	})
 	docs := config.DocumentSet{
-		DrawIO: output.New().DrawIO("Oracle Fixture", oracleRecords(), oracleDrawIOHeader()).Build(),
+		DrawIO: output.New().DrawIO("Oracle Fixture", drawIORecords(oracleRecords()), oracleDrawIOHeader()).Build(),
 	}
 	if err := settings.RenderDocuments(t.Context(), docs); err != nil {
 		t.Fatalf("RenderDocuments(drawio) returned error: %v", err)
@@ -312,10 +315,17 @@ func TestFormatOracleDrawIO(t *testing.T) {
 	if want := []string{"Image", "Name", "Parent"}; !slices.Equal(parsed.Columns, want) {
 		t.Errorf("drawio columns = %v, want %v", parsed.Columns, want)
 	}
-	if len(parsed.Records) != 2 {
-		t.Fatalf("drawio records = %d, want 2", len(parsed.Records))
+	if len(parsed.Records) != 3 {
+		t.Fatalf("drawio records = %d, want 3", len(parsed.Records))
 	}
-	for i, want := range oracleRecords() {
+	// Expected cells spelled out: the []string Parent cell must round-trip as
+	// v1's comma-joined multi-value ref, never fmt.Sprint's "[alpha beta]".
+	wantRecords := []output.Record{
+		{"Name": "alpha", "Image": "img-a", "Parent": ""},
+		{"Name": "beta", "Image": "img-b", "Parent": "alpha"},
+		{"Name": "gamma", "Image": "img-c", "Parent": "alpha,beta"},
+	}
+	for i, want := range wantRecords {
 		for key, wantValue := range want {
 			if got := drawIORecordString(parsed.Records[i], key); got != wantValue {
 				t.Errorf("drawio record %d %s = %q, want %q", i, key, got, wantValue)

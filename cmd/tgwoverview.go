@@ -37,7 +37,7 @@ func tgwoverview(cmd *cobra.Command, _ []string) error {
 	resultTitle := "Transit Gateway Routes in account " + getName(helpers.GetAccountID(awsConfig.StsClient()))
 	gateways := helpers.GetAllTransitGateways(awsConfig.Ec2Client())
 	keys := []string{"Transit Gateway Account", "Transit Gateway", routeTableColumn, cidrColumn, "Target", "Target Type", "State"}
-	useEmoji := settings.GetBool("output.use-emoji")
+	useEmoji := settings.UseEmoji()
 
 	rows := []map[string]any{}
 	for _, gateway := range gateways {
@@ -211,12 +211,4 @@ func createTgwOverviewDrawIORecords(gateways []helpers.TransitGateway) ([]output
 		})
 	}
 	return records, merged, nil
-}
-
-// drawIORecordString reads a cell from a parsed drawio record as a string.
-// output.ParseDrawIOFile records carry every column with "" for empty cells,
-// so cells are plain strings; missing keys also yield "".
-func drawIORecordString(record output.Record, key string) string {
-	value, _ := record[key].(string)
-	return value
 }

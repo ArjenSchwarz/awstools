@@ -51,8 +51,9 @@ func tgwroutes(cmd *cobra.Command, _ []string) error {
 	}
 	resultTitle := "Overview of all routes"
 	gateways := helpers.GetAllTransitGateways(awsConfig.Ec2Client())
+	isDrawIO := settings.IsDrawIO()
 	keys := []string{"ID", nameColumn, destinationsColumn, targetGatewayColumn}
-	if settings.IsDrawIO() {
+	if isDrawIO {
 		keys = append(keys, imageColumn)
 	}
 
@@ -66,7 +67,7 @@ func tgwroutes(cmd *cobra.Command, _ []string) error {
 		content["ID"] = rt
 		content[nameColumn] = getName(rt)
 		content[destinationsColumn] = unique(tgwrts[rt])
-		if settings.IsDrawIO() {
+		if isDrawIO {
 			content[imageColumn] = awsShape("Network Content Delivery", routeTableColumn)
 		}
 		rows = append(rows, content)
@@ -76,7 +77,7 @@ func tgwroutes(cmd *cobra.Command, _ []string) error {
 		content := make(map[string]any)
 		content["ID"] = resourceid
 		content[nameColumn] = getName(resourceid)
-		if settings.IsDrawIO() {
+		if isDrawIO {
 			// Use raw ID for DrawIO to enable proper connection matching
 			content[targetGatewayColumn] = resourceInfo.RouteTableID
 		} else {
@@ -88,7 +89,7 @@ func tgwroutes(cmd *cobra.Command, _ []string) error {
 			}
 		}
 
-		if settings.IsDrawIO() {
+		if isDrawIO {
 			// Use actual ResourceType from AWS API when available
 			resourceType := resourceInfo.ResourceType
 			if resourceType == "" {
@@ -129,7 +130,7 @@ func tgwroutes(cmd *cobra.Command, _ []string) error {
 			Graph(resultTitle, graphEdges(rows, destinationsColumn, "ID")).
 			Build()
 	}
-	if settings.IsDrawIO() {
+	if isDrawIO {
 		docs.DrawIO = output.New().
 			DrawIO(resultTitle, drawIORecords(rows), createTgwRoutesDrawIOHeader()).
 			Build()
@@ -164,6 +165,7 @@ func simplelistOnly(cmd *cobra.Command, awsConfig config.AWSConfig) error {
 	}
 	routetableID := strings.TrimSpace(tgwresourceid)
 	resultTitle := fmt.Sprintf("Simple route list for %s", routetableID)
+	isDrawIO := settings.IsDrawIO()
 	keys := []string{cidrColumn, "Target", "Route Type", "State"}
 
 	activeroutes := helpers.GetActiveRoutesForTransitGatewayRouteTable(routetableID, awsConfig.Ec2Client())
@@ -204,7 +206,7 @@ func simplelistOnly(cmd *cobra.Command, awsConfig config.AWSConfig) error {
 			Graph(resultTitle, graphEdges(rows, cidrColumn, "Target")).
 			Build()
 	}
-	if settings.IsDrawIO() {
+	if isDrawIO {
 		docs.DrawIO = output.New().
 			DrawIO(resultTitle, drawIORecords(rows), createTgwSimpleListDrawIOHeader()).
 			Build()
@@ -324,24 +326,4 @@ func createTgwRoutesDrawIOHeader() output.DrawIOHeader {
 // central guard never rejects a capable command (R9.2).
 func createTgwSimpleListDrawIOHeader() output.DrawIOHeader {
 	return drawIOBaseHeader("%CIDR% %Target%", "", "")
-}
-
-// drawIORecords converts shared table rows into draw.io records. []string
-// cells are joined with "," so the emitted CSV cells match v1's drawio writer
-// output — the comma-separated multi-value refs that header connections and
-// the combine read-back (tgw overview, vpc peerings) rely on.
-func drawIORecords(rows []map[string]any) []output.Record {
-	records := make([]output.Record, 0, len(rows))
-	for _, row := range rows {
-		record := make(output.Record, len(row))
-		for key, value := range row {
-			if list, ok := value.([]string); ok {
-				record[key] = strings.Join(list, ",")
-				continue
-			}
-			record[key] = value
-		}
-		records = append(records, record)
-	}
-	return records
 }

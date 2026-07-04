@@ -1,6 +1,9 @@
 package cmd
 
 import (
+	"maps"
+	"slices"
+
 	"github.com/ArjenSchwarz/awstools/config"
 	"github.com/ArjenSchwarz/awstools/helpers"
 	output "github.com/ArjenSchwarz/go-output/v2"
@@ -39,7 +42,8 @@ func ssoOverviewByAccount(cmd *cobra.Command, _ []string) error {
 		keys = append(keys, "ManagedPolicies", "InlinePolicy")
 	}
 	rows := []map[string]any{}
-	for _, account := range ssoInstance.Accounts {
+	for _, accountID := range slices.Sorted(maps.Keys(ssoInstance.Accounts)) {
+		account := ssoInstance.Accounts[accountID]
 		if filteredSSOAccount(account) {
 			for _, assignment := range account.AccountAssignments {
 				content := make(map[string]any)
@@ -62,17 +66,13 @@ func ssoOverviewByAccount(cmd *cobra.Command, _ []string) error {
 	if settings.NeedsGraphFormat() || settings.IsDrawIO() {
 		records := createSSOAccountDrawIOContents(ssoInstance)
 		if settings.NeedsGraphFormat() {
-			graphRows := make([]map[string]any, len(records))
-			for index, record := range records {
-				graphRows[index] = record
-			}
 			docs.Graph = output.New().
-				Graph(resultTitle, graphEdges(graphRows, drawIOIDColumn, childrenColumn)).
+				Graph(resultTitle, graphEdges(records, drawIOIDColumn, childrenColumn)).
 				Build()
 		}
 		if settings.IsDrawIO() {
 			docs.DrawIO = output.New().
-				DrawIO(resultTitle, records, createSSOAccountsDrawIOHeader()).
+				DrawIO(resultTitle, drawIORecords(records), createSSOOverviewDrawIOHeader()).
 				Build()
 		}
 	}
@@ -88,10 +88,11 @@ func filteredSSOAccount(account helpers.SSOAccount) bool {
 	return false
 }
 
-func createSSOAccountsDrawIOHeader() output.DrawIOHeader {
-	drawioheader := output.DefaultDrawIOHeader()
-	drawioheader.Height = "78"
-	drawioheader.Width = "78"
+// createSSOOverviewDrawIOHeader is shared by the two sso overview commands,
+// whose drawio output has the same shape: a horizontal tree connected from
+// the Children column to the DrawioID column.
+func createSSOOverviewDrawIOHeader() output.DrawIOHeader {
+	drawioheader := drawIOBaseHeader("%Name%", "%Image%", imageColumn)
 	drawioheader.Layout = output.DrawIOLayoutHorizontalTree
 	connection := drawIOConnection()
 	connection.Invert = false
@@ -111,7 +112,8 @@ func createSSOAccountDrawIOContents(instance helpers.SSOInstance) []output.Recor
 	content[childrenColumn] = instance.GetAccountList()
 	records = append(records, content)
 	uniquefilter := []string{}
-	for _, account := range instance.Accounts {
+	for _, accountID := range slices.Sorted(maps.Keys(instance.Accounts)) {
+		account := instance.Accounts[accountID]
 		if !filteredSSOAccount(account) {
 			continue
 		}

@@ -32,8 +32,9 @@ func showmesh(cmd *cobra.Command, _ []string) error {
 	awsConfig := config.DefaultAwsConfig(*settings)
 	svc := awsConfig.AppmeshClient()
 	nodes := helpers.GetAllAppMeshNodeConnections(meshname, svc)
+	isDrawIO := settings.IsDrawIO()
 	keys := []string{nameColumn, "Endpoints"}
-	if settings.IsDrawIO() {
+	if isDrawIO {
 		keys = append(keys, imageColumn)
 	}
 
@@ -41,7 +42,7 @@ func showmesh(cmd *cobra.Command, _ []string) error {
 	for _, node := range nodes {
 		content := make(map[string]any)
 		content[nameColumn] = node.VirtualNodeName
-		if settings.IsDrawIO() {
+		if isDrawIO {
 			content[imageColumn] = awsShape("Containers", "Container")
 		}
 		endpoints := append([]string{}, node.BackendNodes...)
@@ -55,17 +56,13 @@ func showmesh(cmd *cobra.Command, _ []string) error {
 			Build(),
 	}
 	if settings.NeedsGraphFormat() {
-		graphRows := make([]map[string]any, len(rows))
-		for i, row := range rows {
-			graphRows[i] = row
-		}
 		docs.Graph = output.New().
-			Graph(resultTitle, graphEdges(graphRows, nameColumn, "Endpoints")).
+			Graph(resultTitle, graphEdges(rows, nameColumn, "Endpoints")).
 			Build()
 	}
-	if settings.IsDrawIO() {
+	if isDrawIO {
 		docs.DrawIO = output.New().
-			DrawIO(resultTitle, rows, createAppmeshShowmeshDrawIOHeader()).
+			DrawIO(resultTitle, drawIORecords(rows), createAppmeshShowmeshDrawIOHeader()).
 			Build()
 	}
 	return settings.RenderDocuments(cmd.Context(), docs)

@@ -35,8 +35,9 @@ func detailUsers(cmd *cobra.Command, _ []string) error {
 	for _, group := range grouplist {
 		objectlist = append(objectlist, group)
 	}
+	isDrawIO := settings.IsDrawIO()
 	keys := []string{nameColumn, typeColumn, "Groups", "Users", "PolicyNames", "InheritedPolicyNames", "Console", "API"}
-	if settings.IsDrawIO() {
+	if isDrawIO {
 		keys = append(keys, imageColumn)
 		keys = append(keys, "DrawioID")
 		if settings.IsVerbose() {
@@ -80,7 +81,7 @@ func detailUsers(cmd *cobra.Command, _ []string) error {
 		}
 		content["InheritedPolicyNames"] = inheritedPolicyNames
 
-		if settings.IsDrawIO() {
+		if isDrawIO {
 			if object.GetObjectType() == "User" {
 				content[imageColumn] = awsShape("General Resources", "User")
 			} else {
@@ -95,7 +96,7 @@ func detailUsers(cmd *cobra.Command, _ []string) error {
 		content := make(map[string]any)
 		content[nameColumn] = policy.Name
 		content[typeColumn] = "Policy"
-		if settings.IsDrawIO() {
+		if isDrawIO {
 			content[imageColumn] = awsShape("Security Identity Compliance", "Permissions")
 			content["AttachedToUsers"] = policy.Users
 			content["AttachedToGroups"] = policy.Groups
@@ -114,17 +115,13 @@ func detailUsers(cmd *cobra.Command, _ []string) error {
 			Build(),
 	}
 	if settings.NeedsGraphFormat() {
-		graphRows := make([]map[string]any, len(rows))
-		for i, row := range rows {
-			graphRows[i] = row
-		}
 		docs.Graph = output.New().
-			Graph(resultTitle, graphEdges(graphRows, nameColumn, "Groups")).
+			Graph(resultTitle, graphEdges(rows, nameColumn, "Groups")).
 			Build()
 	}
-	if settings.IsDrawIO() {
+	if isDrawIO {
 		docs.DrawIO = output.New().
-			DrawIO(resultTitle, rows, createIamuserlistDrawIOHeader()).
+			DrawIO(resultTitle, drawIORecords(rows), createIamuserlistDrawIOHeader()).
 			Build()
 	}
 	return settings.RenderDocuments(cmd.Context(), docs)
