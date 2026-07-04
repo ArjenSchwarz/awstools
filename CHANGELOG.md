@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Per-format equivalence oracle tests pinning go-output v2's rendered output for all nine formats, including empty-result validity (go-output-v2 migration, Verification and cleanup phase)
 - Shared cmd helpers for the go-output v2 migration (Shared cmd helpers phase): `graphEdges` replicating v1 edge-splitting semantics (with a documented nil-cell cleanup, Decision 10) and drawio adapters (`awsShape`, `drawIOConnection`, `drawIOBaseHeader`) matching v1 defaults, all with pinning tests
 - Central go-output v2 render helper in the config package (go-output-v2 migration, Config core phase): `DocumentSet`, `RenderDocuments`/`RenderDocument` with per-destination format dispatch, file append/overwrite wiring, emoji transformer, and v1-compatible unsupported-format guards, with a full test suite
 - go-output v2.7.0 dependency alongside v1 (go-output-v2 migration, Setup phase); pulls minor AWS SDK updates (aws-sdk-go-v2 v1.39.3, service/s3 v1.88.5, smithy-go v1.23.1)
@@ -34,6 +35,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Enhanced Transit Gateway route table visualization to use actual resource types from AWS API
 - Updated DrawIO output to use raw resource IDs for proper connection matching in Transit Gateway diagrams
 - Updated AWS SDK dependencies to latest versions (v1.39.2)
+
+### Removed
+
+- go-output v1.4.0 dependency: the migration to v2.7.0 is complete; `config.NewOutputSettings` and the dead `config.GetSeparator` are deleted, `ShouldCombineAndAppend` now reads viper directly, and the stale commented `replace` directive is gone from go.mod
 
 ### Fixed
 
