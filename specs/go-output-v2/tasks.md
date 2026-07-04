@@ -213,7 +213,7 @@ references:
 
 ## Verification and cleanup
 
-- [ ] 24. Write per-format equivalence oracle tests <!-- id:1hi7wjq -->
+- [x] 24. Write per-format equivalence oracle tests <!-- id:1hi7wjq -->
   - fixed in-memory rows, no AWS calls; JSON representative must render through go-output, not names (R8.1)
   - json/yaml: unmarshal deep-equal + key order via json.Decoder token stream
   - csv: header order + scalar cells; multi-value/bool cells asserted against v2 defaults (D7)
