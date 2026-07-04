@@ -224,7 +224,7 @@ references:
   - Stream: 1
   - Requirements: [2.6](requirements.md#2.6), [8.2](requirements.md#8.2)
 
-- [ ] 25. Write drawio combine-and-append test <!-- id:1hi7wjs -->
+- [x] 25. Write drawio combine-and-append test <!-- id:1hi7wjs -->
   - write drawio CSV via v2, run the ported merge logic plus new records, assert combined ID set, dedup, and column order
   - Blocked-by: 1hi7wjj (Migrate tgwoverview (drawio + combine + emoji-in-data)), combine, 1hi7wjk (Migrate vpcpeerings (graph + drawio + combine))
   - Stream: 1
