@@ -21,7 +21,8 @@ var shapeWarningWriter io.Writer = os.Stderr
 func awsShape(group, title string) string {
 	shape, err := icons.GetAWSShape(group, title)
 	if err != nil {
-		fmt.Fprintf(shapeWarningWriter, "Warning: unknown AWS shape %s/%s: %v\n", group, title, err)
+		// Best-effort warning; nothing to do if stderr itself fails.
+		_, _ = fmt.Fprintf(shapeWarningWriter, "Warning: unknown AWS shape %s/%s: %v\n", group, title, err)
 		return ""
 	}
 	return shape
