@@ -26,7 +26,7 @@ package cmd
 import (
 	"fmt"
 
-	format "github.com/ArjenSchwarz/go-output"
+	output "github.com/ArjenSchwarz/go-output/v2"
 	"github.com/spf13/cobra"
 )
 
@@ -35,49 +35,64 @@ var tablesCmd = &cobra.Command{
 	Use:   "tables",
 	Short: "Show what the different table styles look like",
 	Long:  `This command will show an overview of all the different style of tables`,
-	Run:   demoTables,
+	RunE:  demoTables,
+}
+
+// demoTableStyles hardcodes the table style names v1 exposed through its
+// format.TableStyles map. v2 keeps its style lookup unexported, so the demo
+// iterates this list instead; TestDemoTableStylesAcceptedByV2 guards the list
+// against drifting from what v2 accepts.
+var demoTableStyles = []string{
+	"Default",
+	"Bold",
+	"ColoredBright",
+	"ColoredDark",
+	"ColoredBlackOnBlueWhite",
+	"ColoredBlackOnCyanWhite",
+	"ColoredBlackOnGreenWhite",
+	"ColoredBlackOnMagentaWhite",
+	"ColoredBlackOnYellowWhite",
+	"ColoredBlackOnRedWhite",
+	"ColoredBlueWhiteOnBlack",
+	"ColoredCyanWhiteOnBlack",
+	"ColoredGreenWhiteOnBlack",
+	"ColoredMagentaWhiteOnBlack",
+	"ColoredRedWhiteOnBlack",
+	"ColoredYellowWhiteOnBlack",
 }
 
 func init() {
 	demoCmd.AddCommand(tablesCmd)
 }
 
-func demoTables(_ *cobra.Command, _ []string) {
+// demoTableDocument builds the single-table demo document rendered once per
+// table style. Rows are pre-sorted by the Export column, matching the
+// SortKey behaviour of the v1 implementation.
+func demoTableDocument() *output.Document {
 	keys := []string{exportColumn, descriptionColumn, stackColumn, valueColumn, importedColumn}
-	title := "CloudFormation Export values demo"
-	output := format.OutputArray{Keys: keys, Settings: settings.NewOutputSettings()}
-	output.Settings.Title = title
-	output.Settings.SortKey = exportColumn
-
-	value1 := format.OutputHolder{
-		Contents: map[string]any{
+	rows := []map[string]any{
+		{
 			exportColumn:      "awesome-stack-dev-s3-arn",
 			valueColumn:       "arn:aws:s3:::fog-awesome-stack-dev",
 			descriptionColumn: s3BucketARNDescription,
 			stackColumn:       "awesome-stack-dev",
 			importedColumn:    true,
 		},
-	}
-	value2 := format.OutputHolder{
-		Contents: map[string]any{
-			exportColumn:      "awesome-stack-test-s3-arn",
-			valueColumn:       "arn:aws:s3:::fog-awesome-stack-test",
-			descriptionColumn: s3BucketARNDescription,
-			stackColumn:       "awesome-stack-test",
-			importedColumn:    true,
-		},
-	}
-	value3 := format.OutputHolder{
-		Contents: map[string]any{
+		{
 			exportColumn:      "awesome-stack-prod-s3-arn",
 			valueColumn:       "arn:aws:s3:::fog-awesome-stack-prod",
 			descriptionColumn: s3BucketARNDescription,
 			stackColumn:       "awesome-stack-prod",
 			importedColumn:    true,
 		},
-	}
-	value4 := format.OutputHolder{
-		Contents: map[string]any{
+		{
+			exportColumn:      "awesome-stack-test-s3-arn",
+			valueColumn:       "arn:aws:s3:::fog-awesome-stack-test",
+			descriptionColumn: s3BucketARNDescription,
+			stackColumn:       "awesome-stack-test",
+			importedColumn:    true,
+		},
+		{
 			exportColumn:      "demo-s3-bucket",
 			valueColumn:       "fog-demo-bucket",
 			descriptionColumn: "The S3 bucket used for demos but has an exceptionally long description so it can show a multi-line example",
@@ -85,10 +100,16 @@ func demoTables(_ *cobra.Command, _ []string) {
 			importedColumn:    true,
 		},
 	}
-	output.AddHolder(value1)
-	output.AddHolder(value2)
-	output.AddHolder(value3)
-	output.AddHolder(value4)
+	return output.New().
+		Table("CloudFormation Export values demo", rows, output.WithKeys(keys...)).
+		Build()
+}
+
+// demoTables renders the demo document once per supported table style. It
+// builds an inline Output per iteration because the style deliberately varies;
+// --file support is intentionally not offered for this demo command.
+func demoTables(cmd *cobra.Command, _ []string) error {
+	doc := demoTableDocument()
 	fmt.Print(`Tables can be used for the various outputs. You can set your preferred style in your settings file.
 An example if you use .awstools.yaml as your settings file:
 
@@ -97,11 +118,17 @@ table:
   max-column-width: 50
 
 `)
-	for name, style := range format.TableStyles {
-		output.Settings.TableStyle = style
+	for _, name := range demoTableStyles {
 		fmt.Println("")
 		fmt.Printf("Showing style: %v\r\n", name)
 		fmt.Println("")
-		output.Write()
+		out := output.NewOutput(
+			output.WithFormat(output.TableWithStyle(name)),
+			output.WithWriter(output.NewStdoutWriter()),
+		)
+		if err := out.Render(cmd.Context(), doc); err != nil {
+			return err
+		}
 	}
+	return nil
 }

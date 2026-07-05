@@ -85,6 +85,34 @@ func TestFilterGatewaySkipsBlackholeRoutes(t *testing.T) {
 	}
 }
 
+// TestDrawIORecords pins the conversion of shared table rows into draw.io
+// records: []string cells are joined with "," (matching v1's drawio CSV
+// cells, which the combine read-back splits on ","), everything else passes
+// through untouched.
+func TestDrawIORecords(t *testing.T) {
+	rows := []map[string]any{
+		{
+			"ID":               "tgw-rtb-1",
+			nameColumn:         "route table",
+			destinationsColumn: []string{"vpc-1", "vpc-2"},
+		},
+		{
+			"ID":               "vpc-1",
+			destinationsColumn: []string{},
+			"Count":            3,
+		},
+	}
+
+	records := drawIORecords(rows)
+
+	assert.Len(t, records, 2)
+	assert.Equal(t, "tgw-rtb-1", records[0]["ID"])
+	assert.Equal(t, "route table", records[0][nameColumn])
+	assert.Equal(t, "vpc-1,vpc-2", records[0][destinationsColumn], "[]string cells must be comma-joined")
+	assert.Equal(t, "", records[1][destinationsColumn], "empty []string cells must become empty strings")
+	assert.Equal(t, 3, records[1]["Count"], "non-string cells pass through untouched")
+}
+
 // TestValidateSimpleListResourceID is the regression test for T-1255.
 //
 // Bug: simplelistOnly used the global tgwresourceid value directly as a

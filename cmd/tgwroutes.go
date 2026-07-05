@@ -2,14 +2,13 @@ package cmd
 
 import (
 	"fmt"
-	"log"
+	"maps"
 	"slices"
 	"strings"
 
 	"github.com/ArjenSchwarz/awstools/config"
 	"github.com/ArjenSchwarz/awstools/helpers"
-	format "github.com/ArjenSchwarz/go-output"
-	"github.com/ArjenSchwarz/go-output/drawio"
+	output "github.com/ArjenSchwarz/go-output/v2"
 
 	"github.com/spf13/cobra"
 )
@@ -27,7 +26,7 @@ var tgwroutetablesCmd = &cobra.Command{
 	to and through them what other resources can reach it or it can reach.
 
 	Supports a Draw.io output`,
-	Run: tgwroutes,
+	RunE: tgwroutes,
 }
 
 var tgwresourceid string
@@ -45,46 +44,40 @@ func init() {
 	tgwroutetablesCmd.Flags().BoolVarP(&simplelist, "list", "l", false, "Only show a simple list of routes for a single route table; requires --resource-id with a tgw-rtb-* ID")
 }
 
-func tgwroutes(_ *cobra.Command, _ []string) {
+func tgwroutes(cmd *cobra.Command, _ []string) error {
 	awsConfig := config.DefaultAwsConfig(*settings)
+	if simplelist {
+		return simplelistOnly(cmd, awsConfig)
+	}
 	resultTitle := "Overview of all routes"
 	gateways := helpers.GetAllTransitGateways(awsConfig.Ec2Client())
+	isDrawIO := settings.IsDrawIO()
 	keys := []string{"ID", nameColumn, destinationsColumn, targetGatewayColumn}
-	if settings.IsDrawIO() {
+	if isDrawIO {
 		keys = append(keys, imageColumn)
-	}
-	if simplelist {
-		simplelistOnly(awsConfig)
-		return
-	}
-	output := format.OutputArray{Keys: keys, Settings: settings.NewOutputSettings()}
-	output.Settings.Title = resultTitle
-	output.Settings.SortKey = targetGatewayColumn
-	if settings.IsDrawIO() {
-		output.Settings.DrawIOHeader = createTgwRoutesDrawIOHeader()
-	}
-	if output.Settings.NeedsFromToColumns() {
-		output.Settings.AddFromToColumns(destinationsColumn, "ID")
 	}
 
 	attachedresources, tgwrts := filterGateway(gateways)
 
-	for rt, connectedvpcs := range tgwrts {
+	rows := []map[string]any{}
+	// Sort the map keys before ranging so row order is deterministic between
+	// runs (R2.8).
+	for _, rt := range slices.Sorted(maps.Keys(tgwrts)) {
 		content := make(map[string]any)
 		content["ID"] = rt
 		content[nameColumn] = getName(rt)
-		content[destinationsColumn] = unique(connectedvpcs)
-		if settings.IsDrawIO() {
-			content[imageColumn] = drawio.AWSShape("Network Content Delivery", routeTableColumn)
+		content[destinationsColumn] = unique(tgwrts[rt])
+		if isDrawIO {
+			content[imageColumn] = awsShape("Network Content Delivery", routeTableColumn)
 		}
-		holder := format.OutputHolder{Contents: content}
-		output.AddHolder(holder)
+		rows = append(rows, content)
 	}
-	for resourceid, resourceInfo := range attachedresources {
+	for _, resourceid := range slices.Sorted(maps.Keys(attachedresources)) {
+		resourceInfo := attachedresources[resourceid]
 		content := make(map[string]any)
 		content["ID"] = resourceid
 		content[nameColumn] = getName(resourceid)
-		if settings.IsDrawIO() {
+		if isDrawIO {
 			// Use raw ID for DrawIO to enable proper connection matching
 			content[targetGatewayColumn] = resourceInfo.RouteTableID
 		} else {
@@ -96,7 +89,7 @@ func tgwroutes(_ *cobra.Command, _ []string) {
 			}
 		}
 
-		if settings.IsDrawIO() {
+		if isDrawIO {
 			// Use actual ResourceType from AWS API when available
 			resourceType := resourceInfo.ResourceType
 			if resourceType == "" {
@@ -105,29 +98,44 @@ func tgwroutes(_ *cobra.Command, _ []string) {
 			}
 			switch resourceType {
 			case vpcResourceType:
-				content[imageColumn] = drawio.AWSShape("Network Content Delivery", vpcColumn)
+				content[imageColumn] = awsShape("Network Content Delivery", vpcColumn)
 			case "vpn":
-				content[imageColumn] = drawio.AWSShape("Network Content Delivery", "Site-to-Site VPN")
+				content[imageColumn] = awsShape("Network Content Delivery", "Site-to-Site VPN")
 			case "dxgw":
-				content[imageColumn] = drawio.AWSShape("Network Content Delivery", "Direct Connect Gateway")
+				content[imageColumn] = awsShape("Network Content Delivery", "Direct Connect Gateway")
 			case tgwResourceType:
-				content[imageColumn] = drawio.AWSShape("Network Content Delivery", "Transit Gateway")
+				content[imageColumn] = awsShape("Network Content Delivery", "Transit Gateway")
 			case "peering":
-				content[imageColumn] = drawio.AWSShape("Network Content Delivery", "Transit Gateway")
+				content[imageColumn] = awsShape("Network Content Delivery", "Transit Gateway")
 			case "tgw-peering":
-				content[imageColumn] = drawio.AWSShape("Network Content Delivery", "Transit Gateway")
+				content[imageColumn] = awsShape("Network Content Delivery", "Transit Gateway")
 			case "direct-connect-gateway":
-				content[imageColumn] = drawio.AWSShape("Network Content Delivery", "Direct Connect")
+				content[imageColumn] = awsShape("Network Content Delivery", "Direct Connect")
 			case "connect":
-				content[imageColumn] = drawio.AWSShape("Network Content Delivery", "Transit Gateway")
+				content[imageColumn] = awsShape("Network Content Delivery", "Transit Gateway")
 			default:
-				content[imageColumn] = drawio.AWSShape("General Resources", "General")
+				content[imageColumn] = awsShape("General Resources", "General")
 			}
 		}
-		holder := format.OutputHolder{Contents: content}
-		output.AddHolder(holder)
+		rows = append(rows, content)
 	}
-	output.Write()
+
+	docs := config.DocumentSet{
+		Table: output.New().
+			Table(resultTitle, rows, output.WithKeys(keys...), config.SortOption(targetGatewayColumn)).
+			Build(),
+	}
+	if settings.NeedsGraphFormat() {
+		docs.Graph = output.New().
+			Graph(resultTitle, graphEdges(rows, destinationsColumn, "ID")).
+			Build()
+	}
+	if isDrawIO {
+		docs.DrawIO = output.New().
+			DrawIO(resultTitle, drawIORecords(rows), createTgwRoutesDrawIOHeader()).
+			Build()
+	}
+	return settings.RenderDocuments(cmd.Context(), docs)
 }
 
 // validateSimpleListResourceID checks that the resource ID supplied for the
@@ -151,19 +159,19 @@ func validateSimpleListResourceID(resourceID string) error {
 	return nil
 }
 
-func simplelistOnly(awsConfig config.AWSConfig) {
+func simplelistOnly(cmd *cobra.Command, awsConfig config.AWSConfig) error {
 	if err := validateSimpleListResourceID(tgwresourceid); err != nil {
-		log.Fatal(err)
+		return err
 	}
 	routetableID := strings.TrimSpace(tgwresourceid)
+	resultTitle := fmt.Sprintf("Simple route list for %s", routetableID)
+	isDrawIO := settings.IsDrawIO()
 	keys := []string{cidrColumn, "Target", "Route Type", "State"}
-	output := format.OutputArray{Keys: keys, Settings: settings.NewOutputSettings()}
-	output.Settings.Title = fmt.Sprintf("Simple route list for %s", routetableID)
-	output.Settings.SortKey = cidrColumn
 
 	activeroutes := helpers.GetActiveRoutesForTransitGatewayRouteTable(routetableID, awsConfig.Ec2Client())
 	blackholeroutes := helpers.GetBlackholeRoutesForTransitGatewayRouteTable(routetableID, awsConfig.Ec2Client())
 
+	rows := []map[string]any{}
 	for _, route := range activeroutes {
 		content := make(map[string]any)
 		content[cidrColumn] = route.CIDR
@@ -171,9 +179,7 @@ func simplelistOnly(awsConfig config.AWSConfig) {
 		// content["Target Type"] = getName(route.Attachment.ResourceType)
 		content["Route Type"] = route.RouteType
 		content["State"] = route.State
-
-		holder := format.OutputHolder{Contents: content}
-		output.AddHolder(holder)
+		rows = append(rows, content)
 	}
 	for _, route := range blackholeroutes {
 		content := make(map[string]any)
@@ -182,11 +188,30 @@ func simplelistOnly(awsConfig config.AWSConfig) {
 		// content["Target Type"] = "-"
 		content["Route Type"] = route.RouteType
 		content["State"] = route.State
-
-		holder := format.OutputHolder{Contents: content}
-		output.AddHolder(holder)
+		rows = append(rows, content)
 	}
-	output.Write()
+
+	docs := config.DocumentSet{
+		Table: output.New().
+			Table(resultTitle, rows, output.WithKeys(keys...), config.SortOption(cidrColumn)).
+			Build(),
+	}
+	// The guard invariant (R9.2, design) requires every render path of a
+	// graph/drawio-capable command to populate those flavors when the
+	// predicate holds, so the central guard never fires with a misleading
+	// "doesn't support" message on this path. The simple list renders each
+	// route as a CIDR->Target edge (graph) or a plain per-route node (drawio).
+	if settings.NeedsGraphFormat() {
+		docs.Graph = output.New().
+			Graph(resultTitle, graphEdges(rows, cidrColumn, "Target")).
+			Build()
+	}
+	if isDrawIO {
+		docs.DrawIO = output.New().
+			DrawIO(resultTitle, drawIORecords(rows), createTgwSimpleListDrawIOHeader()).
+			Build()
+	}
+	return settings.RenderDocuments(cmd.Context(), docs)
 }
 
 func filterGateway(gateways []helpers.TransitGateway) (map[string]attachedResourceInfo, map[string][]string) {
@@ -277,20 +302,28 @@ func filterGateway(gateways []helpers.TransitGateway) (map[string]attachedResour
 	return attachedresources, tgwrts
 }
 
-func createTgwRoutesDrawIOHeader() drawio.Header {
-	drawioheader := drawio.NewHeader("%Name%", "%Image%", imageColumn)
-	drawioheader.SetHeightAndWidth("78", "78")
-	connection := drawio.NewConnection()
+func createTgwRoutesDrawIOHeader() output.DrawIOHeader {
+	drawioheader := drawIOBaseHeader("%Name%", "%Image%", imageColumn)
+	connection := drawIOConnection()
 	connection.From = destinationsColumn
 	connection.To = "ID"
 	connection.Invert = false
 	connection.Label = "Outbound"
-	drawioheader.AddConnection(connection)
-	connection2 := drawio.NewConnection()
+	drawioheader.Connections = append(drawioheader.Connections, connection)
+	connection2 := drawIOConnection()
 	connection2.From = targetGatewayColumn
 	connection2.To = "ID"
 	connection2.Invert = false
 	connection2.Label = "Inbound"
-	drawioheader.AddConnection(connection2)
+	drawioheader.Connections = append(drawioheader.Connections, connection2)
 	return drawioheader
+}
+
+// createTgwSimpleListDrawIOHeader returns a minimal header for the simple
+// route list drawio flavor: one node per route labeled with its CIDR and
+// target, no connections (the route rows share no identity column to connect
+// on). v1 had no drawio support on this path; the flavor exists so the
+// central guard never rejects a capable command (R9.2).
+func createTgwSimpleListDrawIOHeader() output.DrawIOHeader {
+	return drawIOBaseHeader("%CIDR% %Target%", "", "")
 }

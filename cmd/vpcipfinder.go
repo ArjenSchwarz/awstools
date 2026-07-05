@@ -6,7 +6,7 @@ import (
 
 	"github.com/ArjenSchwarz/awstools/config"
 	"github.com/ArjenSchwarz/awstools/helpers"
-	format "github.com/ArjenSchwarz/go-output"
+	output "github.com/ArjenSchwarz/go-output/v2"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/spf13/cobra"
 )
@@ -61,7 +61,7 @@ func validateIPFinderFlags(ipAddress string, allRegions bool) error {
 	return nil
 }
 
-func findIPAddress(_ *cobra.Command, args []string) error {
+func findIPAddress(cmd *cobra.Command, args []string) error {
 	ipAddress := args[0]
 
 	// Validate arguments and flags before any AWS calls. Invalid user input is
@@ -80,11 +80,10 @@ func findIPAddress(_ *cobra.Command, args []string) error {
 	results := helpers.FindIPAddressDetails(awsConfig.Ec2Client(), ipAddress)
 
 	// Format and output results
-	formatIPFinderOutput(results)
-	return nil
+	return formatIPFinderOutput(cmd, results)
 }
 
-func formatIPFinderOutput(results []helpers.IPFinderResult) {
+func formatIPFinderOutput(cmd *cobra.Command, results []helpers.IPFinderResult) error {
 	// The helper always returns at least one result. When nothing matched it is
 	// a single result with Found=false.
 	if len(results) == 0 || !results[0].Found {
@@ -98,7 +97,7 @@ func formatIPFinderOutput(results []helpers.IPFinderResult) {
 		fmt.Fprintf(os.Stderr, "  - Check if the IP is in a different AWS region using --region flag\n")
 		fmt.Fprintf(os.Stderr, "  - Ensure you have the necessary permissions to describe network interfaces\n")
 		fmt.Fprintf(os.Stderr, "  - Consider that the IP might be associated with a different AWS account\n")
-		return
+		return nil
 	}
 
 	if len(results) > 1 {
@@ -106,20 +105,20 @@ func formatIPFinderOutput(results []helpers.IPFinderResult) {
 			results[0].IPAddress, len(results))
 	}
 
+	// Each match gets its own titled table; all tables accumulate on a single
+	// builder and render in one pass.
+	builder := output.New()
 	for _, result := range results {
-		formatSingleIPFinderResult(result)
+		title, rows := singleIPFinderResultTable(result)
+		builder = builder.Table(title, rows, output.WithKeys(fieldColumn, valueColumn))
 	}
+	return settings.RenderDocument(cmd.Context(), builder.Build())
 }
 
-func formatSingleIPFinderResult(result helpers.IPFinderResult) {
-
-	keys := []string{fieldColumn, valueColumn}
-	output := format.OutputArray{
-		Keys:     keys,
-		Settings: settings.NewOutputSettings(),
-	}
-
-	output.Settings.Title = fmt.Sprintf("IP Address Details: %s", result.IPAddress)
+// singleIPFinderResultTable builds the title and field/value rows for a single
+// ENI match.
+func singleIPFinderResultTable(result helpers.IPFinderResult) (string, []map[string]any) {
+	title := fmt.Sprintf("IP Address Details: %s", result.IPAddress)
 
 	// Build output data with proper handling of missing names
 	var resourceName string
@@ -191,9 +190,5 @@ func formatSingleIPFinderResult(result helpers.IPFinderResult) {
 		}
 	}
 
-	for _, data := range outputData {
-		output.AddContents(data)
-	}
-
-	output.Write()
+	return title, outputData
 }

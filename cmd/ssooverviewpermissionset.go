@@ -3,8 +3,7 @@ package cmd
 import (
 	"github.com/ArjenSchwarz/awstools/config"
 	"github.com/ArjenSchwarz/awstools/helpers"
-	format "github.com/ArjenSchwarz/go-output"
-	"github.com/ArjenSchwarz/go-output/drawio"
+	output "github.com/ArjenSchwarz/go-output/v2"
 	"github.com/spf13/cobra"
 )
 
@@ -19,7 +18,7 @@ You can filter the output to a single permission set by supplying the --resource
 
 Verbose mode will add the policies for the permissionsets in the textual output formats drawio output will generate a graph that goes SSO Instance -> Permission Sets -> Accounts -> User/Group. You may notice the same accounts shown multiple times, this is to improve readability not a bug. dot output is currently limited as it shows internal names only
 	`,
-	Run: ssoOverviewByPermissionSet,
+	RunE: ssoOverviewByPermissionSet,
 }
 
 func init() {
@@ -27,49 +26,55 @@ func init() {
 	ssoOverviewByPermissionSetCmd.Flags().StringVarP(&ssoresourceid, "resource-id", "r", "", "The permission set name or arn you want to limit to")
 }
 
-func ssoOverviewByPermissionSet(_ *cobra.Command, _ []string) {
+func ssoOverviewByPermissionSet(cmd *cobra.Command, _ []string) error {
 	awsConfig := config.DefaultAwsConfig(*settings)
 	resultTitle := "SSO Overview per permission set"
 	ssoInstance, err := helpers.GetSSOAccountInstance(awsConfig.SsoClient())
 	if err != nil {
-		panic(err)
+		return err
 	}
 	keys := []string{permissionSetColumn, accountIDColumn, "Principal"}
 	if settings.IsVerbose() {
 		keys = append(keys, "ManagedPolicies", "InlinePolicy")
 	}
-	output := format.OutputArray{Keys: keys, Settings: settings.NewOutputSettings()}
-	output.Settings.Title = resultTitle
-	output.Settings.SortKey = permissionSetColumn
-	switch {
-	case settings.IsDrawIO():
-		output.Settings.DrawIOHeader = createSSOPermissionsetsDrawIOHeader()
-		createSSOPermissionsetsDrawIOContents(ssoInstance, &output)
-	case output.Settings.NeedsFromToColumns():
-		output.Settings.AddFromToColumns(drawIOIDColumn, childrenColumn)
-		createSSOPermissionsetsDrawIOContents(ssoInstance, &output)
-	default:
-		for _, permissionset := range ssoInstance.PermissionSets {
-			if !filteredSSOPermissionSet(permissionset) {
-				continue
-			}
-			for _, account := range permissionset.Accounts {
-				for _, assignment := range account.AccountAssignments {
-					content := make(map[string]any)
-					content[permissionSetColumn] = assignment.PermissionSet.Name
-					content[accountIDColumn] = getName(account.AccountID)
-					content["Principal"] = getName(assignment.PrincipalID)
-					if settings.IsVerbose() {
-						content["ManagedPolicies"] = assignment.PermissionSet.GetManagedPolicyNames()
-						content["InlinePolicy"] = assignment.PermissionSet.InlinePolicy
-					}
-					holder := format.OutputHolder{Contents: content}
-					output.AddHolder(holder)
+	rows := []map[string]any{}
+	for _, permissionset := range ssoInstance.PermissionSets {
+		if !filteredSSOPermissionSet(permissionset) {
+			continue
+		}
+		for _, account := range permissionset.Accounts {
+			for _, assignment := range account.AccountAssignments {
+				content := make(map[string]any)
+				content[permissionSetColumn] = assignment.PermissionSet.Name
+				content[accountIDColumn] = getName(account.AccountID)
+				content["Principal"] = getName(assignment.PrincipalID)
+				if settings.IsVerbose() {
+					content["ManagedPolicies"] = assignment.PermissionSet.GetManagedPolicyNames()
+					content["InlinePolicy"] = assignment.PermissionSet.InlinePolicy
 				}
+				rows = append(rows, content)
 			}
 		}
 	}
-	output.Write()
+	docs := config.DocumentSet{
+		Table: output.New().
+			Table(resultTitle, rows, output.WithKeys(keys...), config.SortOption(permissionSetColumn)).
+			Build(),
+	}
+	if settings.NeedsGraphFormat() || settings.IsDrawIO() {
+		records := createSSOPermissionsetsDrawIOContents(ssoInstance)
+		if settings.NeedsGraphFormat() {
+			docs.Graph = output.New().
+				Graph(resultTitle, graphEdges(records, drawIOIDColumn, childrenColumn)).
+				Build()
+		}
+		if settings.IsDrawIO() {
+			docs.DrawIO = output.New().
+				DrawIO(resultTitle, drawIORecords(records), createSSOOverviewDrawIOHeader()).
+				Build()
+		}
+	}
+	return settings.RenderDocuments(cmd.Context(), docs)
 }
 
 func filteredSSOPermissionSet(permissionset helpers.SSOPermissionSet) bool {
@@ -81,29 +86,15 @@ func filteredSSOPermissionSet(permissionset helpers.SSOPermissionSet) bool {
 	return false
 }
 
-func createSSOPermissionsetsDrawIOHeader() drawio.Header {
-	drawioheader := drawio.DefaultHeader()
-	drawioheader.SetHeightAndWidth("78", "78")
-	drawioheader.SetLayout(drawio.LayoutHorizontalTree)
-	connection := drawio.NewConnection()
-	connection.Invert = false
-	connection.From = childrenColumn
-	connection.To = drawIOIDColumn
-	drawioheader.AddConnection(connection)
-	return drawioheader
-}
-
-func createSSOPermissionsetsDrawIOContents(instance helpers.SSOInstance, output *format.OutputArray) {
-	output.Keys = []string{nameColumn, drawIOIDColumn, typeColumn, childrenColumn, imageColumn}
-
+func createSSOPermissionsetsDrawIOContents(instance helpers.SSOInstance) []output.Record {
+	records := []output.Record{}
 	content := make(map[string]any)
 	content[nameColumn] = getName(instance.Arn)
 	content[drawIOIDColumn] = getName(instance.Arn)
 	content[typeColumn] = "SSO"
-	content[imageColumn] = drawio.AWSShape("Security Identity Compliance", "Single Sign-On")
+	content[imageColumn] = awsShape("Security Identity Compliance", "Single Sign-On")
 	content[childrenColumn] = instance.GetPermissionSetList()
-	holder := format.OutputHolder{Contents: content}
-	output.AddHolder(holder)
+	records = append(records, content)
 	uniquefilter := []string{}
 	for _, permissionset := range instance.PermissionSets {
 		if !filteredSSOPermissionSet(permissionset) {
@@ -114,22 +105,20 @@ func createSSOPermissionsetsDrawIOContents(instance helpers.SSOInstance, output 
 		content[nameColumn] = getName(permissionset.Name)
 		content[drawIOIDColumn] = getName(permissionset.Name)
 		content[typeColumn] = permissionSetColumn
-		content[imageColumn] = drawio.AWSShape("Security Identity Compliance", "Permissions")
+		content[imageColumn] = awsShape("Security Identity Compliance", "Permissions")
 		for _, account := range permissionset.Accounts {
 			permchildren = append(permchildren, account.AccountID+permissionset.Name)
 		}
 		content[childrenColumn] = permchildren
-		holder := format.OutputHolder{Contents: content}
-		output.AddHolder(holder)
+		records = append(records, content)
 		for _, account := range permissionset.Accounts {
 			content := make(map[string]any)
 			content[nameColumn] = getName(account.AccountID)
 			content[drawIOIDColumn] = account.AccountID + permissionset.Name
 			content[typeColumn] = accountColumn
-			content[imageColumn] = drawio.AWSShape("Security Identity Compliance", "Organizations Account")
+			content[imageColumn] = awsShape("Security Identity Compliance", "Organizations Account")
 			content[childrenColumn] = account.GetPrincipalIDsForPermissionSet(permissionset)
-			holder := format.OutputHolder{Contents: content}
-			output.AddHolder(holder)
+			records = append(records, content)
 			for _, assignment := range account.AccountAssignments {
 				if assignment.PermissionSet.Name == permissionset.Name {
 					if !contains(uniquefilter, assignment.PrincipalID) {
@@ -140,15 +129,15 @@ func createSSOPermissionsetsDrawIOContents(instance helpers.SSOInstance, output 
 						content[typeColumn] = assignment.PrincipalType
 						switch assignment.PrincipalType {
 						case "USER":
-							content[imageColumn] = drawio.AWSShape("General Resources", "User")
+							content[imageColumn] = awsShape("General Resources", "User")
 						case "GROUP":
-							content[imageColumn] = drawio.AWSShape("General Resources", "Users")
+							content[imageColumn] = awsShape("General Resources", "Users")
 						}
-						holder := format.OutputHolder{Contents: content}
-						output.AddHolder(holder)
+						records = append(records, content)
 					}
 				}
 			}
 		}
 	}
+	return records
 }

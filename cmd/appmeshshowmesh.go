@@ -3,8 +3,7 @@ package cmd
 import (
 	"github.com/ArjenSchwarz/awstools/config"
 	"github.com/ArjenSchwarz/awstools/helpers"
-	format "github.com/ArjenSchwarz/go-output"
-	"github.com/ArjenSchwarz/go-output/drawio"
+	output "github.com/ArjenSchwarz/go-output/v2"
 	"github.com/spf13/cobra"
 )
 
@@ -21,54 +20,61 @@ Example:
 
 Using the dot output format you can turn this into an image, and using drawio you will get a CSV that you can import into draw.io with its CSV import functionality
 `,
-	Run: showmesh,
+	RunE: showmesh,
 }
 
 func init() {
 	appmeshCmd.AddCommand(showmeshCmd)
 }
 
-func showmesh(_ *cobra.Command, _ []string) {
+func showmesh(cmd *cobra.Command, _ []string) error {
 	resultTitle := "Virtual node connections for mesh " + *meshname
 	awsConfig := config.DefaultAwsConfig(*settings)
 	svc := awsConfig.AppmeshClient()
 	nodes := helpers.GetAllAppMeshNodeConnections(meshname, svc)
+	isDrawIO := settings.IsDrawIO()
 	keys := []string{nameColumn, "Endpoints"}
-	if settings.IsDrawIO() {
+	if isDrawIO {
 		keys = append(keys, imageColumn)
 	}
-	output := format.OutputArray{Keys: keys, Settings: settings.NewOutputSettings()}
-	output.Settings.Title = resultTitle
-	// Set output specific config
-	if settings.IsDrawIO() {
-		output.Settings.DrawIOHeader = createAppmeshShowmeshDrawIOHeader()
-	}
-	if output.Settings.NeedsFromToColumns() {
-		output.Settings.AddFromToColumns(nameColumn, "Endpoints")
-	}
 
+	rows := []output.Record{}
 	for _, node := range nodes {
 		content := make(map[string]any)
 		content[nameColumn] = node.VirtualNodeName
-		if settings.IsDrawIO() {
-			content[imageColumn] = drawio.AWSShape("Containers", "Container")
+		if isDrawIO {
+			content[imageColumn] = awsShape("Containers", "Container")
 		}
 		endpoints := append([]string{}, node.BackendNodes...)
 		content["Endpoints"] = endpoints
-		holder := format.OutputHolder{Contents: content}
-		output.AddHolder(holder)
+		rows = append(rows, content)
 	}
-	output.Write()
+
+	docs := config.DocumentSet{
+		Table: output.New().
+			Table(resultTitle, rows, output.WithKeys(keys...)).
+			Build(),
+	}
+	if settings.NeedsGraphFormat() {
+		docs.Graph = output.New().
+			Graph(resultTitle, graphEdges(rows, nameColumn, "Endpoints")).
+			Build()
+	}
+	if isDrawIO {
+		docs.DrawIO = output.New().
+			DrawIO(resultTitle, drawIORecords(rows), createAppmeshShowmeshDrawIOHeader()).
+			Build()
+	}
+	return settings.RenderDocuments(cmd.Context(), docs)
 }
 
-func createAppmeshShowmeshDrawIOHeader() drawio.Header {
-	drawioheader := drawio.NewHeader("%Name%", "%Image%", imageColumn)
-	drawioheader.SetHeightAndWidth("78", "78")
-	connection := drawio.NewConnection()
+func createAppmeshShowmeshDrawIOHeader() output.DrawIOHeader {
+	header := drawIOBaseHeader("%Name%", "%Image%", imageColumn)
+	connection := drawIOConnection()
 	connection.From = "Endpoints"
 	connection.To = nameColumn
 	connection.Invert = false
 	connection.Label = "Calls"
-	drawioheader.AddConnection(connection)
-	return drawioheader
+	header.Connections = append(header.Connections, connection)
+	return header
 }

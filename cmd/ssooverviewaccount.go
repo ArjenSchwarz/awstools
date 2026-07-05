@@ -1,10 +1,12 @@
 package cmd
 
 import (
+	"maps"
+	"slices"
+
 	"github.com/ArjenSchwarz/awstools/config"
 	"github.com/ArjenSchwarz/awstools/helpers"
-	format "github.com/ArjenSchwarz/go-output"
-	"github.com/ArjenSchwarz/go-output/drawio"
+	output "github.com/ArjenSchwarz/go-output/v2"
 	"github.com/spf13/cobra"
 )
 
@@ -19,7 +21,7 @@ You can filter the output to a single account by supplying the --resource-id (-r
 
 Verbose mode will add the policies for the permissionsets in the textual output formats drawio output will generate a graph that goes SSO Instance -> Accounts -> Permission Sets -> User/Group You may notice the same permission sets shown multiple times, this is to improve readability not a bug. dot output is currently limited as it shows internal names only
 	`,
-	Run: ssoOverviewByAccount,
+	RunE: ssoOverviewByAccount,
 }
 
 func init() {
@@ -28,46 +30,53 @@ func init() {
 
 }
 
-func ssoOverviewByAccount(_ *cobra.Command, _ []string) {
+func ssoOverviewByAccount(cmd *cobra.Command, _ []string) error {
 	awsConfig := config.DefaultAwsConfig(*settings)
 	resultTitle := "SSO Overview per account"
 	ssoInstance, err := helpers.GetSSOAccountInstance(awsConfig.SsoClient())
 	if err != nil {
-		panic(err)
+		return err
 	}
 	keys := []string{accountIDColumn, permissionSetColumn, "Principal"}
 	if settings.IsVerbose() {
 		keys = append(keys, "ManagedPolicies", "InlinePolicy")
 	}
-	output := format.OutputArray{Keys: keys, Settings: settings.NewOutputSettings()}
-	output.Settings.Title = resultTitle
-	output.Settings.SortKey = accountIDColumn
-	switch {
-	case settings.IsDrawIO():
-		output.Settings.DrawIOHeader = createSSOAccountsDrawIOHeader()
-		createSSOAccountDrawIOContents(ssoInstance, &output)
-	case output.Settings.NeedsFromToColumns():
-		output.Settings.AddFromToColumns(drawIOIDColumn, childrenColumn)
-		createSSOAccountDrawIOContents(ssoInstance, &output)
-	default:
-		for _, account := range ssoInstance.Accounts {
-			if filteredSSOAccount(account) {
-				for _, assignment := range account.AccountAssignments {
-					content := make(map[string]any)
-					content[accountIDColumn] = getName(account.AccountID)
-					content[permissionSetColumn] = assignment.PermissionSet.Name
-					content["Principal"] = getName(assignment.PrincipalID)
-					if settings.IsVerbose() {
-						content["ManagedPolicies"] = assignment.PermissionSet.GetManagedPolicyNames()
-						content["InlinePolicy"] = assignment.PermissionSet.InlinePolicy
-					}
-					holder := format.OutputHolder{Contents: content}
-					output.AddHolder(holder)
+	rows := []map[string]any{}
+	for _, accountID := range slices.Sorted(maps.Keys(ssoInstance.Accounts)) {
+		account := ssoInstance.Accounts[accountID]
+		if filteredSSOAccount(account) {
+			for _, assignment := range account.AccountAssignments {
+				content := make(map[string]any)
+				content[accountIDColumn] = getName(account.AccountID)
+				content[permissionSetColumn] = assignment.PermissionSet.Name
+				content["Principal"] = getName(assignment.PrincipalID)
+				if settings.IsVerbose() {
+					content["ManagedPolicies"] = assignment.PermissionSet.GetManagedPolicyNames()
+					content["InlinePolicy"] = assignment.PermissionSet.InlinePolicy
 				}
+				rows = append(rows, content)
 			}
 		}
 	}
-	output.Write()
+	docs := config.DocumentSet{
+		Table: output.New().
+			Table(resultTitle, rows, output.WithKeys(keys...), config.SortOption(accountIDColumn)).
+			Build(),
+	}
+	if settings.NeedsGraphFormat() || settings.IsDrawIO() {
+		records := createSSOAccountDrawIOContents(ssoInstance)
+		if settings.NeedsGraphFormat() {
+			docs.Graph = output.New().
+				Graph(resultTitle, graphEdges(records, drawIOIDColumn, childrenColumn)).
+				Build()
+		}
+		if settings.IsDrawIO() {
+			docs.DrawIO = output.New().
+				DrawIO(resultTitle, drawIORecords(records), createSSOOverviewDrawIOHeader()).
+				Build()
+		}
+	}
+	return settings.RenderDocuments(cmd.Context(), docs)
 }
 
 func filteredSSOAccount(account helpers.SSOAccount) bool {
@@ -79,31 +88,32 @@ func filteredSSOAccount(account helpers.SSOAccount) bool {
 	return false
 }
 
-func createSSOAccountsDrawIOHeader() drawio.Header {
-	drawioheader := drawio.DefaultHeader()
-	drawioheader.SetHeightAndWidth("78", "78")
-	drawioheader.SetLayout(drawio.LayoutHorizontalTree)
-	connection := drawio.NewConnection()
+// createSSOOverviewDrawIOHeader is shared by the two sso overview commands,
+// whose drawio output has the same shape: a horizontal tree connected from
+// the Children column to the DrawioID column.
+func createSSOOverviewDrawIOHeader() output.DrawIOHeader {
+	drawioheader := drawIOBaseHeader("%Name%", "%Image%", imageColumn)
+	drawioheader.Layout = output.DrawIOLayoutHorizontalTree
+	connection := drawIOConnection()
 	connection.Invert = false
 	connection.From = childrenColumn
 	connection.To = drawIOIDColumn
-	drawioheader.AddConnection(connection)
+	drawioheader.Connections = append(drawioheader.Connections, connection)
 	return drawioheader
 }
 
-func createSSOAccountDrawIOContents(instance helpers.SSOInstance, output *format.OutputArray) {
-	output.Keys = []string{nameColumn, drawIOIDColumn, typeColumn, childrenColumn, imageColumn}
-
+func createSSOAccountDrawIOContents(instance helpers.SSOInstance) []output.Record {
+	records := []output.Record{}
 	content := make(map[string]any)
 	content[nameColumn] = getName(instance.Arn)
 	content[drawIOIDColumn] = getName(instance.Arn)
 	content[typeColumn] = "SSO"
-	content[imageColumn] = drawio.AWSShape("Security Identity Compliance", "Single Sign-On")
+	content[imageColumn] = awsShape("Security Identity Compliance", "Single Sign-On")
 	content[childrenColumn] = instance.GetAccountList()
-	holder := format.OutputHolder{Contents: content}
-	output.AddHolder(holder)
+	records = append(records, content)
 	uniquefilter := []string{}
-	for _, account := range instance.Accounts {
+	for _, accountID := range slices.Sorted(maps.Keys(instance.Accounts)) {
+		account := instance.Accounts[accountID]
 		if !filteredSSOAccount(account) {
 			continue
 		}
@@ -112,13 +122,12 @@ func createSSOAccountDrawIOContents(instance helpers.SSOInstance, output *format
 		content[nameColumn] = getName(account.AccountID)
 		content[drawIOIDColumn] = account.AccountID
 		content[typeColumn] = accountColumn
-		content[imageColumn] = drawio.AWSShape("Security Identity Compliance", "Organizations Account")
+		content[imageColumn] = awsShape("Security Identity Compliance", "Organizations Account")
 		for _, assignment := range account.AccountAssignments {
 			accountchildren = append(accountchildren, assignment.PermissionSet.Name+account.AccountID)
 		}
 		content[childrenColumn] = unique(accountchildren)
-		holder := format.OutputHolder{Contents: content}
-		output.AddHolder(holder)
+		records = append(records, content)
 		for _, assignment := range account.AccountAssignments {
 			if !contains(uniquefilter, assignment.PermissionSet.Name+account.AccountID) {
 				uniquefilter = append(uniquefilter, assignment.PermissionSet.Name+account.AccountID)
@@ -126,10 +135,9 @@ func createSSOAccountDrawIOContents(instance helpers.SSOInstance, output *format
 				content[nameColumn] = getName(assignment.PermissionSet.Name)
 				content[drawIOIDColumn] = getName(assignment.PermissionSet.Name + account.AccountID)
 				content[typeColumn] = permissionSetColumn
-				content[imageColumn] = drawio.AWSShape("Security Identity Compliance", "Permissions")
+				content[imageColumn] = awsShape("Security Identity Compliance", "Permissions")
 				content[childrenColumn] = assignment.PermissionSet.GetAssignmentIDsByAccount(account.AccountID)
-				holder := format.OutputHolder{Contents: content}
-				output.AddHolder(holder)
+				records = append(records, content)
 			}
 			if !contains(uniquefilter, assignment.PrincipalID) {
 				uniquefilter = append(uniquefilter, assignment.PrincipalID)
@@ -139,13 +147,13 @@ func createSSOAccountDrawIOContents(instance helpers.SSOInstance, output *format
 				content[typeColumn] = assignment.PrincipalType
 				switch assignment.PrincipalType {
 				case "USER":
-					content[imageColumn] = drawio.AWSShape("General Resources", "User")
+					content[imageColumn] = awsShape("General Resources", "User")
 				case "GROUP":
-					content[imageColumn] = drawio.AWSShape("General Resources", "Users")
+					content[imageColumn] = awsShape("General Resources", "Users")
 				}
-				holder := format.OutputHolder{Contents: content}
-				output.AddHolder(holder)
+				records = append(records, content)
 			}
 		}
 	}
+	return records
 }

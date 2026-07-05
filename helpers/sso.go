@@ -3,6 +3,8 @@ package helpers
 import (
 	"context"
 	"fmt"
+	"maps"
+	"slices"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -296,8 +298,8 @@ func (instance *SSOInstance) addAssignmentsToAccount(account SSOAccount) {
 // GetAccountList returns a list of the account numbers in the SSO Instance
 func (instance *SSOInstance) GetAccountList() []string {
 	accounts := []string{}
-	for _, account := range instance.Accounts {
-		accounts = append(accounts, account.AccountID)
+	for _, accountID := range slices.Sorted(maps.Keys(instance.Accounts)) {
+		accounts = append(accounts, instance.Accounts[accountID].AccountID)
 	}
 	return accounts
 }
