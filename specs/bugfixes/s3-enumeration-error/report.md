@@ -31,6 +31,7 @@
 
 - `helpers/s3.go` returns a wrapped `ListBuckets` error from any page, with no partial bucket list, and propagates it through `GetBucketDetails`.
 - `cmd/s3list.go` uses Cobra `RunE` to return enumeration failures to the command layer.
+- The command silences Cobra's own error and usage printing so `Execute` reports the failure once. A command regression verifies that the error is returned without extra output.
 - Existing helper tests now check the new error return, and new tests cover failures on the first and later pages and propagation through `GetBucketDetails`.
 
 **Approach rationale:** Error returns follow the project's AWS failure handling guidance while preserving the existing per-bucket detail behavior and successful output.

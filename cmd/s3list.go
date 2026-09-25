@@ -18,6 +18,9 @@ var s3listCmd = &cobra.Command{
 	Short: "An overview of S3 buckets",
 	Long:  `Lists all S3 buckets.`,
 	RunE:  s3List,
+	// Execute reports returned errors; avoid duplicate errors and usage from Cobra.
+	SilenceErrors: true,
+	SilenceUsage:  true,
 }
 
 var publicBucketsOnly bool
