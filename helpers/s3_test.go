@@ -966,6 +966,22 @@ func TestComputeBucketIsPublic(t *testing.T) {
 	}
 }
 
+// TestGetAllBuckets_ListErrorDoesNotPanic reproduces T-1643: an expected
+// ListBuckets API failure must be returned to the caller, not panic.
+func TestGetAllBuckets_ListErrorDoesNotPanic(t *testing.T) {
+	mock := &mockS3Client{
+		listBuckets: func(context.Context, *s3.ListBucketsInput, ...func(*s3.Options)) (*s3.ListBucketsOutput, error) {
+			return nil, errors.New("access denied")
+		},
+	}
+	defer func() {
+		if value := recover(); value != nil {
+			t.Errorf("GetAllBuckets panicked on ListBuckets error: %v", value)
+		}
+	}()
+	GetAllBuckets(mock)
+}
+
 // TestGetAllBuckets_Pagination is the regression test for T-835.
 // S3 ListBuckets supports ContinuationToken pagination, and accounts with
 // more buckets than fit on a single page must have every page walked.
