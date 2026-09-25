@@ -166,15 +166,31 @@ func buildRoutesHolder(routes []*types.RouteData) map[string][]AppMeshVirtualSer
 
 		switch {
 		case route.Spec.HttpRoute != nil:
+			if route.Spec.HttpRoute.Action == nil {
+				continue
+			}
 			targets = route.Spec.HttpRoute.Action.WeightedTargets
-			path = aws.ToString(route.Spec.HttpRoute.Match.Prefix)
+			if route.Spec.HttpRoute.Match != nil {
+				path = aws.ToString(route.Spec.HttpRoute.Match.Prefix)
+			}
 		case route.Spec.Http2Route != nil:
+			if route.Spec.Http2Route.Action == nil {
+				continue
+			}
 			targets = route.Spec.Http2Route.Action.WeightedTargets
-			path = aws.ToString(route.Spec.Http2Route.Match.Prefix)
+			if route.Spec.Http2Route.Match != nil {
+				path = aws.ToString(route.Spec.Http2Route.Match.Prefix)
+			}
 		case route.Spec.GrpcRoute != nil:
+			if route.Spec.GrpcRoute.Action == nil {
+				continue
+			}
 			targets = route.Spec.GrpcRoute.Action.WeightedTargets
 			path = grpcMatchPath(route.Spec.GrpcRoute.Match)
 		case route.Spec.TcpRoute != nil:
+			if route.Spec.TcpRoute.Action == nil {
+				continue
+			}
 			targets = route.Spec.TcpRoute.Action.WeightedTargets
 		default:
 			continue
@@ -224,12 +240,18 @@ func GetAllAppMeshPaths(meshName *string, svc AppMeshAPI) []AppMeshVirtualServic
 		}
 		switch v := service.Spec.Provider.(type) {
 		case *types.VirtualServiceProviderMemberVirtualRouter:
+			if v == nil || aws.ToString(v.Value.VirtualRouterName) == "" {
+				continue
+			}
 			serviceroutes := AppMeshVirtualService{
 				VirtualServiceName:   aws.ToString(service.VirtualServiceName),
 				VirtualServiceRoutes: routesholder[aws.ToString(v.Value.VirtualRouterName)],
 			}
 			result = append(result, serviceroutes)
 		case *types.VirtualServiceProviderMemberVirtualNode:
+			if v == nil || aws.ToString(v.Value.VirtualNodeName) == "" {
+				continue
+			}
 			serviceroutes := AppMeshVirtualService{
 				VirtualServiceName: aws.ToString(service.VirtualServiceName),
 				VirtualServiceRoutes: []AppMeshVirtualServiceRoute{
@@ -334,6 +356,9 @@ func getAppMeshVirtualNodeBackendServices2(meshname *string, nodename *string, s
 	for _, backend := range nodetails.VirtualNode.Spec.Backends {
 		switch v := backend.(type) {
 		case *types.BackendMemberVirtualService:
+			if v == nil || aws.ToString(v.Value.VirtualServiceName) == "" {
+				continue
+			}
 			backendlists = append(backendlists, aws.ToString(v.Value.VirtualServiceName))
 		default:
 			fmt.Println("union is nil or unknown type")

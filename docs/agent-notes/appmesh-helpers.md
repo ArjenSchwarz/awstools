@@ -32,6 +32,12 @@ the same paginator pattern with `NewListMeshesPaginator`.
   is skipped (`continue`), matching the pre-pagination behaviour.
 - There is no `context` plumbing in these helpers — they use
   `context.TODO()` consistent with the rest of `helpers/`.
+- Partial route specs with no `Action` are skipped. A route with targets
+  but no HTTP/HTTP2/gRPC `Match` keeps its destination with an empty path.
+- App Mesh union member `Value` fields are structs in the AWS SDK. A
+  typed-nil member pointer can still match a Go type switch, so check the
+  member before reading `Value`. Skip provider/backend entries with no
+  router, node, or service name instead of emitting empty destinations.
 
 ## Tests
 
