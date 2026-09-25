@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Regression tests for IAM access-key API failures (T-1549)
 - Makefile targets for code quality: `fmt`, `vet`, `modernize`, `check`, `security-scan`
 - Makefile targets for testing: `test-verbose`, `test-coverage`
 - Makefile targets for dependency management: `deps-tidy`, `deps-update`
