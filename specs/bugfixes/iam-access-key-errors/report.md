@@ -1,7 +1,7 @@
 # Bugfix Report: IAM Access Key API Errors
 
 **Date:** 2026-09-25  
-**Status:** Investigating
+**Status:** Fixed
 
 ## Description of the Issue
 
@@ -29,14 +29,22 @@
 
 ## Resolution for the Issue
 
-Pending implementation.
+**Changes made:**
+- `helpers/iamresources.go` returns wrapped errors from both access-key helpers.
+- `cmd/iamuserlist.go` uses Cobra `RunE` to return those errors with the affected IAM username.
+
+**Approach rationale:** The existing output remains unchanged when IAM succeeds. On an API failure, Cobra reports the error and the command exits without a stack trace.
+
+**Alternatives considered:**
+- Render an unknown value for a failed user and continue — this could disguise a permission failure as complete output.
+
 
 ## Regression Test
 
 **Test file:** `helpers/iam_access_key_errors_test.go`  
 **Test name:** `TestIAMUser_AccessKeyAPIErrorsDoNotPanic_T1549`
 
-**What it verifies:** Failures from each access-key API call do not panic.
+**What it verifies:** Failures from each access-key API call return the original error with the affected username and do not panic.
 
 **Run command:** `go test ./helpers -run TestIAMUser_AccessKeyAPIErrorsDoNotPanic_T1549`
 
@@ -45,15 +53,17 @@ Pending implementation.
 | File | Change |
 |------|--------|
 | `helpers/iam_access_key_errors_test.go` | Regression coverage for three API failure paths |
-| `helpers/iamresources.go` | Planned error return from access-key helpers |
-| `cmd/iamuserlist.go` | Planned command error propagation |
+| `helpers/iamresources.go` | Return contextual errors from access-key helpers |
+| `cmd/iamuserlist.go` | Propagate access-key errors through Cobra |
 
 ## Verification
 
 **Automated:**
-- [ ] Regression test passes
-- [ ] Full test suite passes
-- [ ] Linters/validators pass
+- [x] Regression test passes
+- [x] Full test suite passes (`make test`)
+- [x] Linters/validators pass (`make fmt`, `make vet`, `make lint`)
+
+**Manual verification:** The regression test failed with the original panic before the fix and passed after it.
 
 ## Prevention
 

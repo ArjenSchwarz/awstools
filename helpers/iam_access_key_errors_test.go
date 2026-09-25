@@ -3,6 +3,7 @@ package helpers
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -30,30 +31,42 @@ func (m accessKeyErrorIAMClient) GetAccessKeyLastUsed(_ context.Context, _ *iam.
 // API failures are expected command errors, not reasons to crash the process.
 func TestIAMUser_AccessKeyAPIErrorsDoNotPanic_T1549(t *testing.T) {
 	user := IAMUser{Name: "test-user"}
+	accessDenied := errors.New("access denied")
+	throttled := errors.New("throttled")
 	tests := []struct {
-		name string
-		call func(accessKeyErrorIAMClient)
-		mock accessKeyErrorIAMClient
+		name    string
+		call    func(accessKeyErrorIAMClient) error
+		mock    accessKeyErrorIAMClient
+		wantErr error
 	}{
 		{
-			name: "HasAccessKeys ListAccessKeys error",
-			call: func(mock accessKeyErrorIAMClient) { user.HasAccessKeys(mock) },
-			mock: accessKeyErrorIAMClient{listErr: errors.New("access denied")},
+			name:    "HasAccessKeys ListAccessKeys error",
+			call:    func(mock accessKeyErrorIAMClient) error { _, err := user.HasAccessKeys(mock); return err },
+			mock:    accessKeyErrorIAMClient{listErr: accessDenied},
+			wantErr: accessDenied,
 		},
 		{
-			name: "GetLastAccessKeyDate ListAccessKeys error",
-			call: func(mock accessKeyErrorIAMClient) { user.GetLastAccessKeyDate(mock) },
-			mock: accessKeyErrorIAMClient{listErr: errors.New("throttled")},
+			name:    "GetLastAccessKeyDate ListAccessKeys error",
+			call:    func(mock accessKeyErrorIAMClient) error { _, err := user.GetLastAccessKeyDate(mock); return err },
+			mock:    accessKeyErrorIAMClient{listErr: throttled},
+			wantErr: throttled,
 		},
 		{
-			name: "GetLastAccessKeyDate GetAccessKeyLastUsed error",
-			call: func(mock accessKeyErrorIAMClient) { user.GetLastAccessKeyDate(mock) },
-			mock: accessKeyErrorIAMClient{lastUsedErr: errors.New("access denied")},
+			name:    "GetLastAccessKeyDate GetAccessKeyLastUsed error",
+			call:    func(mock accessKeyErrorIAMClient) error { _, err := user.GetLastAccessKeyDate(mock); return err },
+			mock:    accessKeyErrorIAMClient{lastUsedErr: accessDenied},
+			wantErr: accessDenied,
 		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			tc.call(tc.mock)
+			err := tc.call(tc.mock)
+			if !errors.Is(err, tc.wantErr) {
+				t.Fatalf("got error %v, want wrapped %v", err, tc.wantErr)
+			}
+			if !strings.Contains(err.Error(), user.Name) {
+				t.Errorf("error %q does not name the affected user", err)
+			}
 		})
 	}
 }
