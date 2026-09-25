@@ -779,7 +779,10 @@ func TestGetBucketDetails_UnknownOnDetailErrors(t *testing.T) {
 			mock := healthyS3Mock(bucketName)
 			tt.breakMock(mock)
 
-			buckets := GetBucketDetails(mock)
+			buckets, err := GetBucketDetails(mock)
+			if err != nil {
+				t.Fatalf("GetBucketDetails() error = %v", err)
+			}
 			if len(buckets) != 1 {
 				t.Fatalf("expected 1 bucket, got %d", len(buckets))
 			}
@@ -796,7 +799,10 @@ func TestGetBucketDetails_HealthyPathSetsPointers(t *testing.T) {
 	silenceStderr(t)
 	mock := healthyS3Mock("ok-bucket")
 
-	buckets := GetBucketDetails(mock)
+	buckets, err := GetBucketDetails(mock)
+	if err != nil {
+		t.Fatalf("GetBucketDetails() error = %v", err)
+	}
 	if len(buckets) != 1 {
 		t.Fatalf("expected 1 bucket, got %d", len(buckets))
 	}
@@ -966,20 +972,70 @@ func TestComputeBucketIsPublic(t *testing.T) {
 	}
 }
 
-// TestGetAllBuckets_ListErrorDoesNotPanic reproduces T-1643: an expected
-// ListBuckets API failure must be returned to the caller, not panic.
+// TestGetAllBuckets_ListErrorDoesNotPanic is the regression for T-1643.
+// An ordinary AWS failure must reach the caller as an error, not a panic.
 func TestGetAllBuckets_ListErrorDoesNotPanic(t *testing.T) {
+	apiErr := errors.New("access denied")
 	mock := &mockS3Client{
 		listBuckets: func(context.Context, *s3.ListBucketsInput, ...func(*s3.Options)) (*s3.ListBucketsOutput, error) {
-			return nil, errors.New("access denied")
+			return nil, apiErr
 		},
 	}
-	defer func() {
-		if value := recover(); value != nil {
-			t.Errorf("GetAllBuckets panicked on ListBuckets error: %v", value)
-		}
-	}()
-	GetAllBuckets(mock)
+	buckets, owner, err := GetAllBuckets(mock)
+	if !errors.Is(err, apiErr) {
+		t.Fatalf("GetAllBuckets() error = %v, want wrapped %v", err, apiErr)
+	}
+	if len(buckets) != 0 || owner != "" {
+		t.Fatalf("GetAllBuckets() = (%v, %q), want no partial result", buckets, owner)
+	}
+}
+
+// A later-page failure must also discard buckets from earlier pages.
+func TestGetAllBuckets_LaterPageError(t *testing.T) {
+	apiErr := errors.New("throttled")
+	calls := 0
+	mock := &mockS3Client{
+		listBuckets: func(_ context.Context, params *s3.ListBucketsInput, _ ...func(*s3.Options)) (*s3.ListBucketsOutput, error) {
+			calls++
+			if calls == 1 {
+				return &s3.ListBucketsOutput{
+					Buckets:           []types.Bucket{{Name: aws.String("first-page")}},
+					Owner:             &types.Owner{DisplayName: aws.String("owner")},
+					ContinuationToken: aws.String("next"),
+				}, nil
+			}
+			if aws.ToString(params.ContinuationToken) != "next" {
+				t.Fatalf("continuation token = %q, want next", aws.ToString(params.ContinuationToken))
+			}
+			return nil, apiErr
+		},
+	}
+	buckets, owner, err := GetAllBuckets(mock)
+	if !errors.Is(err, apiErr) {
+		t.Fatalf("GetAllBuckets() error = %v, want wrapped %v", err, apiErr)
+	}
+	if len(buckets) != 0 || owner != "" {
+		t.Fatalf("GetAllBuckets() = (%v, %q), want no partial result", buckets, owner)
+	}
+	if calls != 2 {
+		t.Fatalf("ListBuckets calls = %d, want 2", calls)
+	}
+}
+
+// GetBucketDetails must stop before any detail API calls when enumeration fails.
+func TestGetBucketDetails_ListError(t *testing.T) {
+	apiErr := errors.New("access denied")
+	mock := healthyS3Mock("unused")
+	mock.listBuckets = func(context.Context, *s3.ListBucketsInput, ...func(*s3.Options)) (*s3.ListBucketsOutput, error) {
+		return nil, apiErr
+	}
+	buckets, err := GetBucketDetails(mock)
+	if !errors.Is(err, apiErr) {
+		t.Fatalf("GetBucketDetails() error = %v, want wrapped %v", err, apiErr)
+	}
+	if len(buckets) != 0 {
+		t.Fatalf("GetBucketDetails() returned %d buckets on enumeration failure", len(buckets))
+	}
 }
 
 // TestGetAllBuckets_Pagination is the regression test for T-835.
@@ -1028,7 +1084,10 @@ func TestGetAllBuckets_Pagination(t *testing.T) {
 		},
 	}
 
-	buckets, owner := GetAllBuckets(mock)
+	buckets, owner, err := GetAllBuckets(mock)
+	if err != nil {
+		t.Fatalf("GetAllBuckets() error = %v", err)
+	}
 
 	if owner != "owner" {
 		t.Errorf("owner = %q, want %q", owner, "owner")
@@ -1062,7 +1121,10 @@ func TestGetAllBuckets_SinglePage(t *testing.T) {
 		},
 	}
 
-	buckets, owner := GetAllBuckets(mock)
+	buckets, owner, err := GetAllBuckets(mock)
+	if err != nil {
+		t.Fatalf("GetAllBuckets() error = %v", err)
+	}
 	if owner != "owner" {
 		t.Errorf("owner = %q, want %q", owner, "owner")
 	}
