@@ -20,10 +20,12 @@ var userlistCmd = &cobra.Command{
 It also shows the policies they have through either the group or directly. The groups themselves are shown separately, as are policies when using the verbose flag.
 
 The drawio output format links the users to groups and (in verbose mode) both of those to the policies.`,
-	Run: detailUsers,
+	RunE:          detailUsers,
+	SilenceErrors: true,
+	SilenceUsage:  true,
 }
 
-func detailUsers(_ *cobra.Command, _ []string) {
+func detailUsers(_ *cobra.Command, _ []string) error {
 	awsConfig := config.DefaultAwsConfig(*settings)
 	resultTitle := "IAM User overview for account " + getName(helpers.GetAccountID(awsConfig.StsClient()))
 	svc := awsConfig.IamClient()
@@ -62,8 +64,16 @@ func detailUsers(_ *cobra.Command, _ []string) {
 			if user.HasUsedPassword() {
 				content["Console"] = user.GetLastPasswordDate().String()
 			}
-			if user.HasAccessKeys(svc) {
-				content["API"] = user.GetLastAccessKeyDate(svc).String()
+			hasAccessKeys, err := user.HasAccessKeys(svc)
+			if err != nil {
+				return err
+			}
+			if hasAccessKeys {
+				lastAccessKeyDate, err := user.GetLastAccessKeyDate(svc)
+				if err != nil {
+					return err
+				}
+				content["API"] = lastAccessKeyDate.String()
 			}
 		}
 		content["Groups"] = object.GetGroups()
@@ -118,6 +128,7 @@ func detailUsers(_ *cobra.Command, _ []string) {
 		output.AddHolder(holder)
 	}
 	output.Write()
+	return nil
 }
 
 // createIamuserlistDrawIOHeader creates and configures the draw.io header settings

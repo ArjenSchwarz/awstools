@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Regression tests for IAM access-key API failures (T-1549)
 - Makefile targets for code quality: `fmt`, `vet`, `modernize`, `check`, `security-scan`
 - Makefile targets for testing: `test-verbose`, `test-coverage`
 - Makefile targets for dependency management: `deps-tidy`, `deps-update`
@@ -30,6 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - App Mesh route and provider helpers now tolerate missing nested fields without panicking (T-1634)
 - S3 bucket listing now reports enumeration failures once without panicking or printing usage (T-1643)
+- IAM user listing now returns contextual command errors when access-key API calls fail instead of panicking (T-1549)
 - Profile generator now reads from `--output-file` for conflict detection, template validation, and profile generation instead of always reading the default AWS config file (T-538)
 - Role discovery account alias lookup now uses SSO-provided account names instead of IAM ListAccountAliases, which incorrectly returned the template profile's alias for all accounts (T-481)
 - ENI cache pointer reuse in `batchFetchVPCEndpoints` and `batchFetchNATGateways` — use index-based iteration to store pointers to slice elements instead of loop variables (T-456)

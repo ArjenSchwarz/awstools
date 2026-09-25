@@ -229,27 +229,27 @@ func (user IAMUser) GetInheritedPolicies() map[string]string {
 }
 
 // HasAccessKeys checks if a user has access keys
-func (user IAMUser) HasAccessKeys(svc IAMClient) bool {
+func (user IAMUser) HasAccessKeys(svc IAMClient) (bool, error) {
 	input := &iam.ListAccessKeysInput{
 		UserName: aws.String(user.Name),
 	}
 
 	result, err := svc.ListAccessKeys(context.TODO(), input)
 	if err != nil {
-		panic(err)
+		return false, fmt.Errorf("list access keys for IAM user %q: %w", user.Name, err)
 	}
-	return len(result.AccessKeyMetadata) > 0
+	return len(result.AccessKeyMetadata) > 0, nil
 }
 
 // GetLastAccessKeyDate returns the last date an access key was used
-func (user IAMUser) GetLastAccessKeyDate(svc IAMClient) time.Time {
+func (user IAMUser) GetLastAccessKeyDate(svc IAMClient) (time.Time, error) {
 	input := &iam.ListAccessKeysInput{
 		UserName: aws.String(user.Name),
 	}
 
 	result, err := svc.ListAccessKeys(context.TODO(), input)
 	if err != nil {
-		panic(err)
+		return time.Time{}, fmt.Errorf("list access keys for IAM user %q: %w", user.Name, err)
 	}
 	var lastaccess time.Time
 	for _, key := range result.AccessKeyMetadata {
@@ -257,7 +257,7 @@ func (user IAMUser) GetLastAccessKeyDate(svc IAMClient) time.Time {
 			AccessKeyId: key.AccessKeyId,
 		})
 		if err != nil {
-			panic(err)
+			return time.Time{}, fmt.Errorf("get last use of access key for IAM user %q: %w", user.Name, err)
 		}
 		if keyusage.AccessKeyLastUsed != nil && keyusage.AccessKeyLastUsed.LastUsedDate != nil {
 			if lastaccess.IsZero() || lastaccess.Before(*keyusage.AccessKeyLastUsed.LastUsedDate) {
@@ -266,7 +266,7 @@ func (user IAMUser) GetLastAccessKeyDate(svc IAMClient) time.Time {
 		}
 	}
 
-	return lastaccess
+	return lastaccess, nil
 }
 
 // HasUsedPassword checks if the user has used their password
