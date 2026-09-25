@@ -20,7 +20,9 @@ var userlistCmd = &cobra.Command{
 It also shows the policies they have through either the group or directly. The groups themselves are shown separately, as are policies when using the verbose flag.
 
 The drawio output format links the users to groups and (in verbose mode) both of those to the policies.`,
-	RunE: detailUsers,
+	RunE:          detailUsers,
+	SilenceErrors: true,
+	SilenceUsage:  true,
 }
 
 func detailUsers(_ *cobra.Command, _ []string) error {
