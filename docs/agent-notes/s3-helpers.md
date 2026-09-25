@@ -5,7 +5,7 @@ Scope: `helpers/s3.go` plus its consumers in `cmd/s3list.go` and
 
 ## Architecture
 
-- `GetBucketDetails(svc S3API) []S3Bucket` is the single entry point
+- `GetBucketDetails(svc S3API) ([]S3Bucket, error)` is the single entry point
   used by the CLI. It calls `GetAllBuckets` and then issues a
   sequence of per-bucket detail calls.
 - `GetAllBuckets` walks every page of `ListBuckets` using the
@@ -70,9 +70,11 @@ legitimate all-false state.
 
 `GetBucketDetails` logs a warning to `os.Stderr` for every failed
 detail call via `warnS3DetailError`. It does not abort processing —
-the failing field is simply left `nil`. `GetAllBuckets` still panics
-on `ListBuckets` failure (pre-existing behaviour); there is no
-useful fallback when the initial list cannot be obtained.
+the failing field is simply left `nil`. `GetAllBuckets` returns an
+error on any `ListBuckets` page failure and discards partial results.
+`GetBucketDetails` passes that error to `s3 list`, whose Cobra `RunE`
+returns it as a command error. There is no useful fallback when bucket
+enumeration cannot be completed.
 
 When adding a new per-bucket API call, prefer to represent the
 unknown/absent state distinctly (pointer or explicit known flag)

@@ -75,7 +75,10 @@ func TestGetBucketDetails_AbsenceErrorsAreDefiniteState(t *testing.T) {
 			return nil, s3APIErr(s3ErrServerSideEncryptionConfigurationNotFound)
 		}
 
-		buckets := GetBucketDetails(mock)
+		buckets, err := GetBucketDetails(mock)
+		if err != nil {
+			t.Fatalf("GetBucketDetails() error = %v", err)
+		}
 		if len(buckets) != 1 {
 			t.Fatalf("expected 1 bucket, got %d", len(buckets))
 		}
@@ -95,7 +98,10 @@ func TestGetBucketDetails_AbsenceErrorsAreDefiniteState(t *testing.T) {
 			return nil, s3APIErr(s3ErrNoSuchTagSet)
 		}
 
-		buckets := GetBucketDetails(mock)
+		buckets, err := GetBucketDetails(mock)
+		if err != nil {
+			t.Fatalf("GetBucketDetails() error = %v", err)
+		}
 		if len(buckets) != 1 {
 			t.Fatalf("expected 1 bucket, got %d", len(buckets))
 		}
@@ -111,7 +117,10 @@ func TestGetBucketDetails_AbsenceErrorsAreDefiniteState(t *testing.T) {
 			return nil, s3APIErr(s3ErrNoSuchBucketPolicy)
 		}
 
-		buckets := GetBucketDetails(mock)
+		buckets, err := GetBucketDetails(mock)
+		if err != nil {
+			t.Fatalf("GetBucketDetails() error = %v", err)
+		}
 		if len(buckets) != 1 {
 			t.Fatalf("expected 1 bucket, got %d", len(buckets))
 		}
@@ -127,7 +136,10 @@ func TestGetBucketDetails_AbsenceErrorsAreDefiniteState(t *testing.T) {
 			return nil, s3APIErr(s3ErrReplicationConfigurationNotFound)
 		}
 
-		buckets := GetBucketDetails(mock)
+		buckets, err := GetBucketDetails(mock)
+		if err != nil {
+			t.Fatalf("GetBucketDetails() error = %v", err)
+		}
 		if len(buckets) != 1 {
 			t.Fatalf("expected 1 bucket, got %d", len(buckets))
 		}
@@ -147,7 +159,10 @@ func TestGetBucketDetails_RealEncryptionErrorStaysUnknown(t *testing.T) {
 		return nil, s3APIErr("AccessDenied")
 	}
 
-	buckets := GetBucketDetails(mock)
+	buckets, err := GetBucketDetails(mock)
+	if err != nil {
+		t.Fatalf("GetBucketDetails() error = %v", err)
+	}
 	if len(buckets) != 1 {
 		t.Fatalf("expected 1 bucket, got %d", len(buckets))
 	}

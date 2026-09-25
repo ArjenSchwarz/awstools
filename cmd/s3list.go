@@ -17,7 +17,10 @@ var s3listCmd = &cobra.Command{
 	Use:   "list",
 	Short: "An overview of S3 buckets",
 	Long:  `Lists all S3 buckets.`,
-	Run:   s3List,
+	RunE:  s3List,
+	// Execute reports returned errors; avoid duplicate errors and usage from Cobra.
+	SilenceErrors: true,
+	SilenceUsage:  true,
 }
 
 var publicBucketsOnly bool
@@ -36,10 +39,13 @@ func init() {
 	s3listCmd.Flags().StringVarP(&includeTags, "include-tags", "t", "", "Optional tag values to show in output")
 }
 
-func s3List(_ *cobra.Command, _ []string) {
+func s3List(_ *cobra.Command, _ []string) error {
 	awsConfig := config.DefaultAwsConfig(*settings)
 	resultTitle := "S3 Buckets"
-	buckets := helpers.GetBucketDetails(awsConfig.S3Client())
+	buckets, err := helpers.GetBucketDetails(awsConfig.S3Client())
+	if err != nil {
+		return err
+	}
 	keys := []string{nameColumn, accountIDColumn, "AccountName", "Region", "Is Private", "Policy is locked down", "ACLs are locked down", "Public Access Block", "Logs to", "Encryption", "Replication", "Versioning", "Versioning MFA delete"}
 	if includeTags != "" {
 		taglist := strings.SplitSeq(includeTags, ",")
@@ -106,6 +112,7 @@ func s3List(_ *cobra.Command, _ []string) {
 		output.AddHolder(holder)
 	}
 	output.Write()
+	return nil
 }
 
 // skipForPublicOnly reports whether a bucket should be skipped under the

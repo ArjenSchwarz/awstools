@@ -129,8 +129,8 @@ func warnS3DetailError(bucket, call string, err error) {
 // the owner name. S3 ListBuckets supports ContinuationToken pagination,
 // so the full list is assembled by walking every page. Owner is taken
 // from the first page (the API returns it on every page, but its value
-// is invariant across pages).
-func GetAllBuckets(svc S3API) ([]types.Bucket, string) {
+// is invariant across pages). Enumeration errors return no partial result.
+func GetAllBuckets(svc S3API) ([]types.Bucket, string, error) {
 	var (
 		buckets []types.Bucket
 		owner   string
@@ -143,7 +143,7 @@ func GetAllBuckets(svc S3API) ([]types.Bucket, string) {
 			ContinuationToken: token,
 		})
 		if err != nil {
-			panic(err)
+			return nil, "", fmt.Errorf("list S3 buckets: %w", err)
 		}
 		if i == 0 {
 			owner = resolveOwnerName(resp.Owner)
@@ -155,15 +155,19 @@ func GetAllBuckets(svc S3API) ([]types.Bucket, string) {
 		token = resp.ContinuationToken
 	}
 
-	return buckets, owner
+	return buckets, owner, nil
 }
 
 // GetBucketDetails retrieves detailed information for all S3 buckets
 // including encryption, versioning, and policies. Detail calls that
 // fail leave the relevant tri-state field on S3Bucket as nil
-// ("unknown") rather than defaulting to false.
-func GetBucketDetails(svc S3API) []S3Bucket {
-	buckets, owner := GetAllBuckets(svc)
+// ("unknown") rather than defaulting to false. Bucket enumeration errors
+// abort the operation and are returned to the caller.
+func GetBucketDetails(svc S3API) ([]S3Bucket, error) {
+	buckets, owner, err := GetAllBuckets(svc)
+	if err != nil {
+		return nil, err
+	}
 	result := make([]S3Bucket, 0)
 	for _, bucket := range buckets {
 		bucketName := aws.ToString(bucket.Name)
@@ -305,7 +309,7 @@ func GetBucketDetails(svc S3API) []S3Bucket {
 		result = append(result, bucketObject)
 
 	}
-	return result
+	return result, nil
 }
 
 // boolPtr returns a pointer to the given boolean value.

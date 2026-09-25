@@ -1,11 +1,33 @@
 package cmd
 
 import (
+	"bytes"
+	"errors"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
+	"github.com/spf13/cobra"
 )
+
+func TestS3ListReturnsErrorWithoutPrintingUsage(t *testing.T) {
+	wantErr := errors.New("list S3 buckets: access denied")
+	list := *s3listCmd
+	list.RunE = func(*cobra.Command, []string) error { return wantErr }
+	root := &cobra.Command{Use: "awstools"}
+	root.AddCommand(&list)
+	root.SetArgs([]string{"list"})
+	var output bytes.Buffer
+	root.SetOut(&output)
+	root.SetErr(&output)
+
+	if err := root.Execute(); !errors.Is(err, wantErr) {
+		t.Fatalf("got error %v, want %v", err, wantErr)
+	}
+	if output.Len() != 0 {
+		t.Fatalf("Cobra printed %q; Execute is responsible for reporting the error once", output.String())
+	}
+}
 
 // TestUnencryptedOnlyFilter verifies that the --unencrypted-only filter
 // excludes only buckets that are confirmed encrypted, while keeping both
