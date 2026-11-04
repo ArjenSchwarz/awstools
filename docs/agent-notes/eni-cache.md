@@ -9,7 +9,7 @@
 - `EndpointsByENI` — maps ENI ID to `*types.VpcEndpoint`
 - `NATGatewaysByENI` — maps ENI ID to `*types.NatGateway`
 - `InstanceNames` — maps Instance ID to name string
-- `TransitGatewayAttachments` — maps VPC ID to all TGW VPC attachments in that VPC. Resolve an ENI with `transitGatewayAttachmentID`: it matches the attachment ID in the ENI description (`Network Interface for Transit Gateway Attachment tgw-attach-…`), and returns unknown if the named ID isn't cached for the VPC (never substitutes another attachment); only when the description names no `tgw-attach-` ID does it fall back to the subnet, and only when exactly one attachment uses it (T-1571; several attachments can share a subnet, so subnet alone is ambiguous)
+- `TransitGatewayAttachments` — maps VPC ID to all TGW VPC attachments in that VPC. Resolve an ENI with `transitGatewayAttachmentID`: it matches the attachment ID in the ENI description (`Network Interface for Transit Gateway Attachment tgw-attach-…`), and returns unknown if the named ID isn't cached for the VPC (never substitutes another attachment); only when the description names no `tgw-attach-` ID does it fall back to the subnet, and only when exactly one attachment uses it. `batchFetchTransitGateways` publishes attachments only after every page succeeds; a partial list would make that fallback report a false unique owner (T-1571; several attachments can share a subnet, so subnet alone is ambiguous)
 - `VPCEndpoints` / `NATGateways` — maps VPC ID to resource pointer
 
 ### Consumers

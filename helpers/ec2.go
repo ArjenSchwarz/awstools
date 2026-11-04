@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"maps"
 	"math"
 	"net"
 	"regexp"
@@ -2034,6 +2035,10 @@ func (cache *ENILookupCache) batchFetchTransitGateways(svc ec2.DescribeTransitGa
 		},
 	}
 
+	// Collect every page before publishing: a partial list could make the
+	// subnet fallback in transitGatewayAttachmentID see a unique owner when a
+	// competing attachment was on a page that failed to load.
+	fetched := make(map[string][]types.TransitGatewayVpcAttachment)
 	paginator := ec2.NewDescribeTransitGatewayVpcAttachmentsPaginator(svc, params)
 	for paginator.HasMorePages() {
 		page, err := paginator.NextPage(context.TODO())
@@ -2043,10 +2048,11 @@ func (cache *ENILookupCache) batchFetchTransitGateways(svc ec2.DescribeTransitGa
 		}
 		for _, attachment := range page.TransitGatewayVpcAttachments {
 			if attachment.VpcId != nil && attachment.TransitGatewayAttachmentId != nil {
-				cache.TransitGatewayAttachments[*attachment.VpcId] = append(cache.TransitGatewayAttachments[*attachment.VpcId], attachment)
+				fetched[*attachment.VpcId] = append(fetched[*attachment.VpcId], attachment)
 			}
 		}
 	}
+	maps.Copy(cache.TransitGatewayAttachments, fetched)
 }
 
 // transitGatewayAttachmentID returns the TGW attachment ID that owns the given

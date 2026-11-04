@@ -1,9 +1,12 @@
 package helpers
 
 import (
+	"context"
+	"errors"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
 )
 
@@ -95,5 +98,54 @@ func TestENILookupCache_TransitGatewayAttachmentPerENI_T1571(t *testing.T) {
 				t.Errorf("getResourceNameAndID() resource ID = %q, want %q", gotID, tc.want)
 			}
 		})
+	}
+}
+
+// failingPageTGWClient serves pages from the wrapped mock but fails on page
+// failOnCall (1-based).
+type failingPageTGWClient struct {
+	mockDescribeTGWAttachmentsClient
+	failOnCall int
+}
+
+func (m *failingPageTGWClient) DescribeTransitGatewayVpcAttachments(ctx context.Context, input *ec2.DescribeTransitGatewayVpcAttachmentsInput, optFns ...func(*ec2.Options)) (*ec2.DescribeTransitGatewayVpcAttachmentsOutput, error) {
+	if m.callCount+1 == m.failOnCall {
+		m.callCount++
+		return nil, errors.New("throttled")
+	}
+	return m.mockDescribeTGWAttachmentsClient.DescribeTransitGatewayVpcAttachments(ctx, input, optFns...)
+}
+
+// TestENILookupCache_TransitGatewayLaterPageError_T1571 verifies that a failed
+// later page does not leave a partial attachment list in the cache. Otherwise
+// the subnet fallback would see one attachment on the shared subnet and report
+// it as the owner, although the competing attachment was on the failed page.
+func TestENILookupCache_TransitGatewayLaterPageError_T1571(t *testing.T) {
+	mock := &failingPageTGWClient{
+		mockDescribeTGWAttachmentsClient: mockDescribeTGWAttachmentsClient{
+			attachments: []types.TransitGatewayVpcAttachment{
+				tgwAttachment("tgw-attach-aaa", "subnet-shared"),
+				tgwAttachment("tgw-attach-bbb", "subnet-shared"),
+			},
+			pageSize: 1,
+		},
+		failOnCall: 2,
+	}
+	cache := &ENILookupCache{TransitGatewayAttachments: make(map[string][]types.TransitGatewayVpcAttachment)}
+	cache.batchFetchTransitGateways(mock, map[string]bool{"vpc-shared": true})
+
+	if mock.callCount != 2 {
+		t.Fatalf("DescribeTransitGatewayVpcAttachments called %d times, want 2", mock.callCount)
+	}
+
+	eni := tgwENI("eni-b", "subnet-shared", "")
+	if got := GetAttachmentFromCache(eni, cache); got != "" {
+		t.Errorf("GetAttachmentFromCache() = %q, want \"\" (owner inferred from incomplete cache)", got)
+	}
+	if got := getENIAttachmentDetailsOptimized(eni, cache); got != "Unknown Transit Gateway" {
+		t.Errorf("getENIAttachmentDetailsOptimized() = %q, want %q", got, "Unknown Transit Gateway")
+	}
+	if _, gotID := getResourceNameAndID(eni, cache); gotID != "" {
+		t.Errorf("getResourceNameAndID() resource ID = %q, want \"\"", gotID)
 	}
 }
