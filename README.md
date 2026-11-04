@@ -151,6 +151,8 @@ Split ENI results by subnet:
 $ awstools vpc enis --split --output table
 ```
 
+With `--split`, the table, csv, and html formats print one table per subnet. JSON and YAML output is a single document listing every ENI, with its VPC and Subnet included so you can still group the rows.
+
 Get comprehensive VPC IP usage analysis:
 ```bash
 $ awstools vpc overview --output table
