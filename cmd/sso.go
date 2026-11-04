@@ -125,6 +125,8 @@ Profile Name Standardization:
   - "{account_name}-{role_name}" (default, human-readable)
   - "{account_id}-{role_name}" (unique, shorter)
   - "aws-{account_name}-{role_name}" (prefixed for organization)
+• If a pattern gives several roles the same name, each later role gets a
+  numeric suffix (e.g. "shared-account_1") so no role is overwritten
 
 Conflict Resolution Strategy:
 • Use --skip-existing for additive operations (only add new profiles)

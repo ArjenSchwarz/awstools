@@ -189,6 +189,11 @@ func (resolver *ProfileNameConflictResolver) ResolveConflict(desiredName string)
 	return uniqueName
 }
 
+// Reserve marks name as taken without generating a new name
+func (resolver *ProfileNameConflictResolver) Reserve(name string) {
+	resolver.existingNames[name] = true
+}
+
 // GetConflictCount returns the number of conflicts for a given name
 func (resolver *ProfileNameConflictResolver) GetConflictCount(name string) int {
 	return resolver.conflicts[name]

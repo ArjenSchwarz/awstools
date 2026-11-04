@@ -598,8 +598,9 @@ func (pg *ProfileGenerator) GenerateProfilesWorkflow() (*ProfileGenerationResult
 		}
 	}
 
-	// Generate profiles for non-conflicted roles
-	nonConflictedProfiles, err := pg.GenerateProfilesForNonConflictedRoles(nonConflictedRoles)
+	// Generate profiles for non-conflicted roles, avoiding names already taken
+	// by profiles generated during conflict resolution (T-1646)
+	nonConflictedProfiles, err := pg.generateProfilesForNonConflictedRoles(nonConflictedRoles, conflictResolution.GeneratedProfiles)
 	if err != nil {
 		if pgErr, ok := err.(ProfileGeneratorError); ok {
 			result.AddError(pgErr)
@@ -827,6 +828,17 @@ func (pg *ProfileGenerator) ResolveConflicts(conflicts []ProfileConflict) (*Conf
 		return nil, err
 	}
 
+	// Replacing a profile that has the proposed name is deliberate, so the first
+	// replace action for a name keeps it. A later replace action for the same
+	// name gets a suffix that avoids both existing profiles and names generated
+	// in this run, otherwise one role would overwrite the other (T-1646).
+	configFile, err := LoadAWSConfigFile(pg.outputFile)
+	if err != nil {
+		return nil, NewFileSystemError("failed to load AWS config file", err)
+	}
+	nameResolver := NewProfileNameConflictResolver(configFile.GetProfileNames())
+	replaceNames := make(map[string]bool)
+
 	for _, conflict := range conflicts {
 		var action ConflictAction
 		var err error
@@ -855,6 +867,15 @@ func (pg *ProfileGenerator) ResolveConflicts(conflicts []ProfileConflict) (*Conf
 			if err != nil {
 				return nil, err
 			}
+		}
+
+		if action.Action == ActionReplace {
+			if replaceNames[action.NewName] {
+				action.NewName = nameResolver.ResolveConflict(action.NewName)
+			} else {
+				nameResolver.Reserve(action.NewName)
+			}
+			replaceNames[action.NewName] = true
 		}
 
 		// Record the action taken
@@ -917,6 +938,14 @@ func (pg *ProfileGenerator) FilterRolesByConflicts(discoveredRoles []DiscoveredR
 
 // GenerateProfilesForNonConflictedRoles generates profiles for roles without conflicts
 func (pg *ProfileGenerator) GenerateProfilesForNonConflictedRoles(nonConflictedRoles []DiscoveredRole) ([]GeneratedProfile, error) {
+	return pg.generateProfilesForNonConflictedRoles(nonConflictedRoles, nil)
+}
+
+// generateProfilesForNonConflictedRoles generates profiles for roles without
+// conflicts. Names of reservedProfiles (e.g. profiles already produced by
+// conflict resolution in the same run) are treated as taken, so a non-conflicted
+// role cannot be given the same name and overwrite one of them on append.
+func (pg *ProfileGenerator) generateProfilesForNonConflictedRoles(nonConflictedRoles []DiscoveredRole, reservedProfiles []GeneratedProfile) ([]GeneratedProfile, error) {
 	if len(nonConflictedRoles) == 0 {
 		return []GeneratedProfile{}, nil
 	}
@@ -937,7 +966,11 @@ func (pg *ProfileGenerator) GenerateProfilesForNonConflictedRoles(nonConflictedR
 	// Seed the resolver with existing names so duplicates generated within this
 	// batch (e.g. a naming pattern that maps several roles to the same name) get
 	// unique names instead of silently overwriting each other.
-	resolver := NewProfileNameConflictResolver(configFile.GetProfileNames())
+	takenNames := configFile.GetProfileNames()
+	for _, profile := range reservedProfiles {
+		takenNames = append(takenNames, profile.Name)
+	}
+	resolver := NewProfileNameConflictResolver(takenNames)
 
 	return pg.buildProfilesForRoles(templateProfile, nonConflictedRoles, resolver)
 }
