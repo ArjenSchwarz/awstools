@@ -15,6 +15,8 @@
 package cmd
 
 import (
+	"strings"
+
 	format "github.com/ArjenSchwarz/go-output"
 	"github.com/ArjenSchwarz/go-output/drawio"
 
@@ -28,9 +30,12 @@ var rolelistCmd = &cobra.Command{
 	Use:   "rolelist",
 	Short: "Get an overview of the roles and their policies",
 	Long: `Retrieves a list of all IAM roles in the account and their policies.
-The policies themselves are also shown separately.
+The policies themselves are also shown separately. Attached policies include
+their ARN, as policy names are not unique.
 
-The drawio output format links the users to policies.`,
+The drawio, dot, and mermaid output formats link the roles to policies. In
+these formats attached policies are linked by ARN, and dot and mermaid also
+use the ARN as the attached policy's node label.`,
 	Run: iamrolelist,
 }
 
@@ -38,25 +43,45 @@ func iamrolelist(_ *cobra.Command, _ []string) {
 	awsConfig := config.DefaultAwsConfig(*settings)
 	resultTitle := "IAM Role overview for account " + getName(helpers.GetAccountID(awsConfig.StsClient()))
 	roles, policies := helpers.GetRolesAndPolicies(settings.IsVerbose(), awsConfig.IamClient())
-	keys := []string{nameColumn, typeColumn, "AssumedFrom", "Policies", "Roles"}
+	writeIamrolelist(roles, policies, resultTitle)
+}
+
+// writeIamrolelist renders the roles and policies. Policies are keyed by their
+// unique ID (ARN for attached policies, "<name> (inline for <role>)" for inline
+// policies), as returned by GetRolesAndPolicies. Attached policy names are not
+// unique, so graph formats link roles to policies by that ID (T-1656).
+func writeIamrolelist(roles []helpers.IAMRole, policies map[string]helpers.IAMPolicyDocument, title string) {
+	keys := []string{nameColumn, typeColumn, "ARN", "AssumedFrom", "Policies", "Roles"}
 	if settings.IsDrawIO() {
 		keys = append(keys, imageColumn)
 		keys = append(keys, "DrawioID")
 	}
 	output := format.OutputArray{Keys: keys, Settings: settings.NewOutputSettings()}
-	output.Settings.Title = resultTitle
+	output.Settings.Title = title
 	if settings.IsDrawIO() {
 		output.Settings.DrawIOHeader = createIamrolelistDrawIOHeader()
 	}
-	if output.Settings.NeedsFromToColumns() {
+	// DOT and Mermaid use the Name column as node identity.
+	nameIsNodeID := output.Settings.NeedsFromToColumns()
+	if nameIsNodeID {
 		output.Settings.AddFromToColumns(nameColumn, "Policies")
 	}
+	linkByID := nameIsNodeID || settings.IsDrawIO()
 	for _, role := range roles {
 		content := make(map[string]any)
 		content[nameColumn] = role.Name
 		content["AssumedFrom"] = role.CanBeAssumedFrom()
 		content[typeColumn] = role.Type
-		content["Policies"] = role.GetPolicyNames()
+		switch {
+		case nameIsNodeID:
+			// go-output splits the link column on "," but joins []string
+			// with ", " for Mermaid, so pass a pre-joined string.
+			content["Policies"] = strings.Join(role.GetPolicyIDs(), ",")
+		case linkByID:
+			content["Policies"] = role.GetPolicyIDs()
+		default:
+			content["Policies"] = role.GetPolicyNames()
+		}
 		if settings.IsDrawIO() {
 			content["DrawioID"] = role.ID
 			content[imageColumn] = drawio.AWSShape("Security Identity Compliance", "Role")
@@ -64,15 +89,23 @@ func iamrolelist(_ *cobra.Command, _ []string) {
 		holder := format.OutputHolder{Contents: content}
 		output.AddHolder(holder)
 	}
-	for policykey, policy := range policies {
+	for policyID, policy := range policies {
 		content := make(map[string]any)
-		// Attached policies are keyed by ARN; show their name instead.
-		content[nameColumn] = policykey
+		content[nameColumn] = policyID
+		if nameIsNodeID {
+			// Without a value go-output renders the missing link column as
+			// "%!s(<nil>)" and adds an edge to a non-existent node, which
+			// panics in Mermaid.
+			content["Policies"] = ""
+		}
 		if policy.Type == helpers.IAMPolicyTypeAttached {
-			content[nameColumn] = policy.Name
+			content["ARN"] = policyID
+			if !nameIsNodeID {
+				content[nameColumn] = policy.Name
+			}
 		}
 		if settings.IsDrawIO() {
-			content["DrawioID"] = policykey
+			content["DrawioID"] = policyID
 			content[imageColumn] = drawio.AWSShape("Security Identity Compliance", "Permissions")
 		}
 		content[typeColumn] = policy.Type
@@ -90,8 +123,9 @@ func createIamrolelistDrawIOHeader() drawio.Header {
 	drawioheader.SetIdentity("DrawioID")
 	drawioheader.SetLayout(drawio.LayoutHorizontalFlow)
 	connection := drawio.NewConnection()
+	// Link to DrawioID, not Name: attached policy names are not unique (T-1656).
 	connection.From = "Policies"
-	connection.To = nameColumn
+	connection.To = "DrawioID"
 	connection.Invert = false
 	connection.Label = "Has Policy"
 	drawioheader.AddConnection(connection)

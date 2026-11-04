@@ -51,3 +51,12 @@ value is `string` or `[]any`. `CanBeAssumedFrom` delegates to two helpers in
 When adding new trust actions (e.g. `sts:AssumeRoleWithWebIdentity`) extend
 `assumeRoleActions`. Deny statements are always excluded from the returned
 allowances.
+
+## rolelist graph output (T-1656)
+
+`cmd/iamrolelist.go:writeIamrolelist` links roles to policies by policy ID (ARN for attached, `<name> (inline for <role>)` for inline) in graph formats. go-output v1.4.0 quirks it works around:
+
+- DOT/Mermaid use the From column (`Name`) as node identity and label, so attached policy nodes are labelled with the ARN. Draw.io connects `Policies` to `DrawioID`, so labels stay friendly.
+- A row missing the To column renders as `%!s(<nil>)` and creates an edge to a missing node (panics in Mermaid), so policy rows set `Policies` to `""`.
+- Mermaid joins `[]string` with `", "` but splits on `","`, so the role link column is passed pre-joined with `","`.
+- Not worked around: Mermaid `AddBasicNode` reuses node IDs (`len(map)+1`) when a source node has several edges, so roles with multiple policies can share an ID. Tests use one policy per role for Mermaid.

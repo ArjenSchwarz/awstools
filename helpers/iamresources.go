@@ -146,6 +146,21 @@ func (role IAMRole) GetPolicyNames() []string {
 	return policynames
 }
 
+// GetPolicyIDs returns unique identifiers for the role's policies: the inline
+// display name ("<name> (inline for <role>)") for inline policies and the ARN
+// for attached policies. These match the keys returned by GetRolesAndPolicies
+// and are used where names would be ambiguous, such as graph links (T-1656).
+func (role IAMRole) GetPolicyIDs() []string {
+	ids := []string{}
+	for policyname := range role.InlinePolicies {
+		ids = append(ids, fmt.Sprintf("%s (inline for %s)", policyname, role.Name))
+	}
+	for policyarn := range role.AttachedPolicies {
+		ids = append(ids, policyarn)
+	}
+	return ids
+}
+
 // IAMPolicyDocument is an abstracted version of an IAM Policy Document
 type IAMPolicyDocument struct {
 	Name      string

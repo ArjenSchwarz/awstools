@@ -123,5 +123,9 @@ func TestGetRolesAndPolicies_SameNamedAttachedPolicies(t *testing.T) {
 		if got := role.GetPolicyNames(); !slices.Equal(got, []string{"ReadOnlyAccess"}) {
 			t.Errorf("role %s GetPolicyNames() = %v, want [ReadOnlyAccess]", role.Name, got)
 		}
+		wantIDs := map[string][]string{"role-a": {t1656AWSManagedArn}, "role-b": {t1656CustomerManagedArn}}[role.Name]
+		if got := role.GetPolicyIDs(); !slices.Equal(got, wantIDs) {
+			t.Errorf("role %s GetPolicyIDs() = %v, want %v", role.Name, got, wantIDs)
+		}
 	}
 }
