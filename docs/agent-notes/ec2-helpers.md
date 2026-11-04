@@ -158,6 +158,14 @@ addresses. After T-774:
   no IPv4 CIDR exists, so IPv6-only subnets still appear in the overview with
   their CIDR but no per-address breakdown.
 
+- T-1597: `GetVPCUsageOverview` builds one `ENILookupCache` (lazily, on the
+  first IPv4 subnet) and passes it to `analyzeSubnetIPUsage` /
+  `mapNetworkInterfacesToIPs`, which no longer take an EC2 client. Don't build
+  the cache inside per-subnet helpers — it fetches for the full ENI inventory.
+  `ec2_vpc_overview_cache_test.go` drives a real `*ec2.Client` through a fake
+  HTTP transport that counts EC2 actions; reuse that pattern for API-call
+  count regressions.
+
 Dual-stack subnets continue to have their IPv4 portion analysed; the IPv6
 block is shown separately by the caller logic only when no IPv4 CIDR exists.
 

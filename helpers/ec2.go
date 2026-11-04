@@ -1043,6 +1043,12 @@ func GetVPCUsageOverview(svc *ec2.Client) VPCOverview {
 	var vpcUsageInfos []VPCUsageInfo
 	var summary VPCUsageSummary
 
+	// The ENI lookup cache covers the full ENI inventory and costs several
+	// paginated AWS calls to build, so build it once per overview and share
+	// it across subnets (T-1597). It is created lazily so overviews with only
+	// IPv6-only subnets, which skip per-IP analysis, make no cache calls.
+	var eniCache *ENILookupCache
+
 	for _, vpc := range vpcs {
 		vpcID := aws.ToString(vpc.VpcId)
 		vpcInfo := VPCUsageInfo{
@@ -1081,8 +1087,12 @@ func GetVPCUsageOverview(svc *ec2.Client) VPCOverview {
 					totalIPs = computedTotal
 				}
 
+				if eniCache == nil && aws.ToString(subnet.CidrBlock) != "" {
+					eniCache = NewENILookupCache(svc, networkInterfaces)
+				}
+
 				// Analyze detailed IP usage
-				ipDetails, usedIPs, availableIPs, awsReservedIPs, serviceIPs, err := analyzeSubnetIPUsage(subnet, networkInterfaces, svc)
+				ipDetails, usedIPs, availableIPs, awsReservedIPs, serviceIPs, err := analyzeSubnetIPUsage(subnet, networkInterfaces, eniCache)
 				if err != nil {
 					panic(err)
 				}
@@ -1497,13 +1507,10 @@ func identifyAWSReservedIPs(ips []net.IP) map[string]string {
 	return reserved
 }
 
-// mapNetworkInterfacesToIPs maps network interfaces to their IP addresses
-// Optimized version that creates a lookup cache once to avoid N+1 API calls
-// when processing many ENIs (e.g., DescribeVpcEndpoints, DescribeInstances, etc.)
-func mapNetworkInterfacesToIPs(networkInterfaces []types.NetworkInterface, subnetID string, svc *ec2.Client) map[string]IPAddressInfo {
-	// Create cache once for all ENI lookups to avoid N+1 API calls
-	cache := NewENILookupCache(svc, networkInterfaces)
-
+// mapNetworkInterfacesToIPs maps the network interfaces in subnetID to their
+// IP addresses. The caller supplies a prebuilt cache so the batched AWS
+// lookups are shared across subnets instead of repeated per subnet (T-1597).
+func mapNetworkInterfacesToIPs(networkInterfaces []types.NetworkInterface, subnetID string, cache *ENILookupCache) map[string]IPAddressInfo {
 	ipMap := make(map[string]IPAddressInfo)
 
 	for _, eni := range networkInterfaces {
@@ -1695,7 +1702,7 @@ func getENIAttachmentDetailsOptimized(eni types.NetworkInterface, cache *ENILook
 // Parameters:
 //   - subnet: The AWS subnet to analyze
 //   - networkInterfaces: All network interfaces to check for IP usage
-//   - svc: EC2 client for additional AWS API calls (used for ENI lookups)
+//   - cache: Prebuilt ENI lookup cache for networkInterfaces, shared across subnets
 //
 // Returns:
 //   - ipDetails: Detailed information about each IP address in use
@@ -1710,9 +1717,9 @@ func getENIAttachmentDetailsOptimized(eni types.NetworkInterface, cache *ENILook
 // /64 prefix contains 2^64 addresses. Dual-stack subnets are analysed using
 // their IPv4 CIDR only (T-774).
 //
-// Note: This function uses optimized batch API calls via ENILookupCache to avoid N+1 queries
-// when analyzing large numbers of network interfaces.
-func analyzeSubnetIPUsage(subnet types.Subnet, networkInterfaces []types.NetworkInterface, svc *ec2.Client) ([]IPAddressInfo, int, int, int, int, error) {
+// Note: This function makes no AWS calls itself; build the cache once with
+// NewENILookupCache and reuse it for every subnet.
+func analyzeSubnetIPUsage(subnet types.Subnet, networkInterfaces []types.NetworkInterface, cache *ENILookupCache) ([]IPAddressInfo, int, int, int, int, error) {
 	cidr := aws.ToString(subnet.CidrBlock)
 	if cidr == "" {
 		// IPv6-only / IPv6-native subnet: no IPv4 CIDR to enumerate. Per-IP
@@ -1732,7 +1739,7 @@ func analyzeSubnetIPUsage(subnet types.Subnet, networkInterfaces []types.Network
 	reservedIPs := identifyAWSReservedIPs(allIPs)
 
 	// Map ENIs to IPs
-	eniIPMap := mapNetworkInterfacesToIPs(networkInterfaces, aws.ToString(subnet.SubnetId), svc)
+	eniIPMap := mapNetworkInterfacesToIPs(networkInterfaces, aws.ToString(subnet.SubnetId), cache)
 
 	var ipDetails []IPAddressInfo
 	usedCount := 0
