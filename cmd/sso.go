@@ -68,6 +68,7 @@ SAFETY FEATURES:
 • Automatic backup creation before any modifications
 • File locking to prevent concurrent access issues
 • Atomic operations with rollback on failures
+• Stops before generating profiles if a role cannot be checked for conflicts
 • Comprehensive error recovery and guidance
 • Detailed operation logging and progress reporting
 
