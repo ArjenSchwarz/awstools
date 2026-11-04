@@ -156,6 +156,13 @@ Get comprehensive VPC IP usage analysis:
 $ awstools vpc overview --output table
 ```
 
+Besides the subnet overview, per-IP details and totals, `vpc overview` shows an IP allocation summary per VPC. For each subnet it lists how many IP addresses are allocated to each service category (EKS, EC2 Instance, Lambda Function, RDS Database, NAT Gateway, ...), followed by separate rows for the AWS-reserved and available addresses. Notes on the counts:
+
+* They count IPv4 addresses, not ENIs or instances, so an ENI with secondary private IPs adds each address.
+* An address counts as EKS when its ENI or attached EC2 instance has the `aws:eks:cluster-name` tag, which AWS adds to EC2 instances in an EKS cluster. Instances without that tag, or whose tags could not be read, count as EC2 Instance. Other Kubernetes tags such as `kubernetes.io/cluster/<name>` are not treated as EKS.
+* Other categories use the IP details' usage type, which is based on the ENI type and description.
+* IPv6 addresses and delegated prefixes (prefix delegation) are not included, and IPv6-only subnets have no summary rows.
+
 Find details for a specific IP address (searches both primary and secondary IPs):
 ```bash
 $ awstools vpc ip-finder 10.0.1.100 --output table

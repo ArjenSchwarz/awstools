@@ -11,6 +11,7 @@
 - `InstanceNames` — maps Instance ID to name string
 - `TransitGateways` — maps VPC ID to TGW attachment ID string
 - `VPCEndpoints` / `NATGateways` — maps VPC ID to resource pointer
+- `EKSClusterNames` — maps Instance ID to its `aws:eks:cluster-name` tag value, filled from the same `DescribeInstances` pages as `InstanceNames` (T-1538). Lazily allocated in `extractInstanceNames`, so it may be nil; read-only lookups on a nil map are fine. `eniEKSClusterName` checks the ENI `TagSet` first, then this map. Only `aws:eks:cluster-name` is used: it is the only EKS tag key in the AWS docs and the `aws:` prefix can't be set by users. `eks:cluster-name`, `kubernetes.io/cluster/*` and VPC CNI tags were rejected as non-authoritative.
 
 ### Consumers
 

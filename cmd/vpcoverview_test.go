@@ -56,12 +56,15 @@ var (
 	allVPCTitles = []string{
 		"Subnet Overview for vpc-111 in account " + testAccount,
 		"Subnet Overview for vpc-222 in account " + testAccount,
+		"IP Allocation Summary for vpc-111 in account " + testAccount,
+		"IP Allocation Summary for vpc-222 in account " + testAccount,
 		"IP Details for subnet subnet-aaa in VPC vpc-111",
 		"IP Details for subnet subnet-bbb in VPC vpc-222",
 		"VPC Usage Summary for account " + testAccount,
 	}
 	vpc222Titles = []string{
 		"Subnet Overview for vpc-222 in account " + testAccount,
+		"IP Allocation Summary for vpc-222 in account " + testAccount,
 		"IP Details for subnet subnet-bbb in VPC vpc-222",
 		"VPC Usage Summary for vpc-222 in account " + testAccount,
 	}
@@ -73,6 +76,7 @@ type overviewRun struct {
 	fileFormat   string
 	vpcFilter    string
 	appendFile   bool
+	vpcs         []helpers.VPCUsageInfo // defaults to sampleVPCOverview()
 }
 
 // writeVPCOverview renders the VPC overview for run through the production
@@ -87,7 +91,11 @@ func writeVPCOverview(t *testing.T, outFile string, run overviewRun) (string, er
 		viper.Set("output.append", false)
 	})
 
-	tables := buildVPCOverviewTables(sampleVPCOverview(), nil, testAccount, run.vpcFilter)
+	vpcs := run.vpcs
+	if vpcs == nil {
+		vpcs = sampleVPCOverview()
+	}
+	tables := buildVPCOverviewTables(vpcs, nil, testAccount, run.vpcFilter)
 	var writeErr error
 	stdout := captureVPCOverviewStdout(t, func() {
 		writeErr = writeVPCOverviewTables(tables, "VPC Overview for account "+testAccount)
@@ -308,6 +316,7 @@ func TestVPCOverviewHTMLAppend_T1536(t *testing.T) {
 	}
 	want := []string{
 		"Subnet Overview for vpc-111 in account " + testAccount,
+		"IP Allocation Summary for vpc-111 in account " + testAccount,
 		"IP Details for subnet subnet-aaa in VPC vpc-111",
 		"VPC Usage Summary for vpc-111 in account " + testAccount,
 	}
