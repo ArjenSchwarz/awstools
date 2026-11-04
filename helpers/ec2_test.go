@@ -1626,9 +1626,11 @@ func TestENILookupCache_NATGatewaysByENI_DistinctEntries(t *testing.T) {
 
 func TestGetAttachmentFromCache_T727(t *testing.T) {
 	cache := &ENILookupCache{
-		VPCEndpoints:     make(map[string]*types.VpcEndpoint),
-		InstanceNames:    make(map[string]string),
-		TransitGateways:  map[string]string{"vpc-aaa": "tgw-attach-123"},
+		VPCEndpoints:  make(map[string]*types.VpcEndpoint),
+		InstanceNames: make(map[string]string),
+		TransitGatewayAttachments: map[string][]types.TransitGatewayVpcAttachment{
+			"vpc-aaa": {{TransitGatewayAttachmentId: aws.String("tgw-attach-123"), VpcId: aws.String("vpc-aaa"), SubnetIds: []string{"subnet-aaa"}}},
+		},
 		NATGateways:      make(map[string]*types.NatGateway),
 		EndpointsByENI:   map[string]*types.VpcEndpoint{"eni-ep": {VpcEndpointId: aws.String("vpce-456"), ServiceName: aws.String("com.amazonaws.region.s3")}},
 		NATGatewaysByENI: map[string]*types.NatGateway{"eni-nat": {NatGatewayId: aws.String("nat-789")}},
@@ -1646,7 +1648,7 @@ func TestGetAttachmentFromCache_T727(t *testing.T) {
 		},
 		{
 			name: "transit gateway",
-			eni:  types.NetworkInterface{NetworkInterfaceId: aws.String("eni-tgw"), VpcId: aws.String("vpc-aaa"), InterfaceType: types.NetworkInterfaceTypeTransitGateway},
+			eni:  types.NetworkInterface{NetworkInterfaceId: aws.String("eni-tgw"), VpcId: aws.String("vpc-aaa"), SubnetId: aws.String("subnet-aaa"), InterfaceType: types.NetworkInterfaceTypeTransitGateway},
 			want: "tgw-attach-123",
 		},
 		{
@@ -2131,8 +2133,8 @@ func TestFormatRouteTableInfo_MixedRoutes(t *testing.T) {
 
 // TestGetResourceNameAndID_TransitGateway is regression coverage for T-1147:
 // Transit Gateway ENIs must populate the resolved Transit Gateway attachment ID
-// instead of leaving the resource ID empty. The attachment ID is keyed by VPC
-// ID in ENILookupCache.TransitGateways.
+// instead of leaving the resource ID empty. Attachments are cached per VPC in
+// ENILookupCache.TransitGatewayAttachments.
 func TestGetResourceNameAndID_TransitGateway(t *testing.T) {
 	const (
 		vpcID          = "vpc-0123456789abcdef0"
@@ -2152,11 +2154,14 @@ func TestGetResourceNameAndID_TransitGateway(t *testing.T) {
 				InterfaceType:      types.NetworkInterfaceTypeTransitGateway,
 				NetworkInterfaceId: aws.String(networkIfaceID),
 				VpcId:              aws.String(vpcID),
+				SubnetId:           aws.String("subnet-a"),
 			},
 			cache: &ENILookupCache{
 				EndpointsByENI:   map[string]*types.VpcEndpoint{},
 				NATGatewaysByENI: map[string]*types.NatGateway{},
-				TransitGateways:  map[string]string{vpcID: attachmentID},
+				TransitGatewayAttachments: map[string][]types.TransitGatewayVpcAttachment{
+					vpcID: {{TransitGatewayAttachmentId: aws.String(attachmentID), VpcId: aws.String(vpcID), SubnetIds: []string{"subnet-a"}}},
+				},
 			},
 			wantID: attachmentID,
 		},
@@ -2168,9 +2173,9 @@ func TestGetResourceNameAndID_TransitGateway(t *testing.T) {
 				VpcId:              nil,
 			},
 			cache: &ENILookupCache{
-				EndpointsByENI:   map[string]*types.VpcEndpoint{},
-				NATGatewaysByENI: map[string]*types.NatGateway{},
-				TransitGateways:  map[string]string{},
+				EndpointsByENI:            map[string]*types.VpcEndpoint{},
+				NATGatewaysByENI:          map[string]*types.NatGateway{},
+				TransitGatewayAttachments: map[string][]types.TransitGatewayVpcAttachment{},
 			},
 			wantID: "",
 		},
@@ -2182,9 +2187,9 @@ func TestGetResourceNameAndID_TransitGateway(t *testing.T) {
 				VpcId:              aws.String(vpcID),
 			},
 			cache: &ENILookupCache{
-				EndpointsByENI:   map[string]*types.VpcEndpoint{},
-				NATGatewaysByENI: map[string]*types.NatGateway{},
-				TransitGateways:  map[string]string{},
+				EndpointsByENI:            map[string]*types.VpcEndpoint{},
+				NATGatewaysByENI:          map[string]*types.NatGateway{},
+				TransitGatewayAttachments: map[string][]types.TransitGatewayVpcAttachment{},
 			},
 			wantID: "",
 		},
