@@ -29,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `vpc overview --file` now saves every table (subnet overviews, IP details and summary) instead of only the summary. JSON and YAML files are one document listing each table's title and rows, HTML files are one page, and `--append` adds the tables to an existing HTML report (T-1536)
 - App Mesh route and provider helpers now tolerate missing nested fields without panicking (T-1634)
 - S3 bucket listing now reports enumeration failures once without panicking or printing usage (T-1643)
 - IAM user listing now returns contextual command errors when access-key API calls fail instead of panicking (T-1549)
