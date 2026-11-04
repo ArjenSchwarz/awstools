@@ -1,14 +1,23 @@
 package cmd
 
 import (
+	"bytes"
+	"encoding/json"
+	"errors"
 	"fmt"
+	"html"
+	"html/template"
+	"io/fs"
 	"os"
+	"strings"
 
 	"github.com/ArjenSchwarz/awstools/config"
 	"github.com/ArjenSchwarz/awstools/helpers"
 	format "github.com/ArjenSchwarz/go-output"
+	"github.com/ArjenSchwarz/go-output/templates"
 	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v2"
 )
 
 // overviewCmd represents the vpc overview command
@@ -22,8 +31,12 @@ The command shows separate tables for each VPC, displaying:
 - Detailed IP address usage per subnet
 - Summary statistics
 
-Use --vpc to filter results to a specific VPC. When --file is used, all of
-these tables are saved to the file, not only the summary.`,
+Use --vpc to filter results to a specific VPC.
+
+When --file is used, all of these tables are saved to the file. JSON and YAML
+files contain a single list with each table's Title and Rows, and HTML files
+are a single page. With --append, the tables are added to an existing HTML
+report; other formats replace the file.`,
 	RunE: vpcOverview,
 	// Execute reports returned errors; avoid duplicate errors and usage from Cobra.
 	SilenceErrors: true,
@@ -55,7 +68,7 @@ func vpcOverview(_ *cobra.Command, _ []string) error {
 	routeTables := helpers.GetAllRouteTables(ec2Client)
 
 	tables := buildVPCOverviewTables(overview.VPCs, routeTables, accountName, vpcIDFilter)
-	if err := writeOutputTables(tables); err != nil {
+	if err := writeVPCOverviewTables(tables, "VPC Overview for account "+accountName); err != nil {
 		return fmt.Errorf("writing VPC overview: %w", err)
 	}
 	return nil
@@ -194,15 +207,26 @@ func buildVPCOverviewTables(vpcs []helpers.VPCUsageInfo, routeTables []types.Rou
 	return tables
 }
 
-// writeOutputTables writes several independent tables to stdout and, when
-// --file is set, saves all of them to that file (T-1536).
+// vpcOverviewSection is one table of the VPC overview in a JSON or YAML file.
+type vpcOverviewSection struct {
+	Title string           `json:"Title" yaml:"Title"`
+	Rows  []map[string]any `json:"Rows" yaml:"Rows"`
+}
+
+// htmlEndPlaceholder marks where go-output inserts content into an HTML page.
+const htmlEndPlaceholder = "<div id='end'></div>"
+
+// writeVPCOverviewTables writes the overview tables to stdout and, when --file
+// is set, saves the complete report to that file (T-1536).
 //
 // go-output v1.4.0 truncates the output file on every Write() call, so writing
-// each table with --file set would leave only the last table in the file. The
-// tables are therefore first written to stdout without a file, then rendered
-// again in the file format and saved with a single PrintByteSlice call. The
-// file holds the same content as the terminal output, in the file format.
-func writeOutputTables(tables []format.OutputArray) error {
+// each table with --file set would leave only the last table in the file.
+// Stdout therefore gets the tables without the file setting, and the file is
+// rendered separately as one document in the file format and written once.
+// With --append, an existing HTML report is kept and the new tables are added
+// to it, matching go-output's HTML append. Other formats replace the file, as
+// go-output does.
+func writeVPCOverviewTables(tables []format.OutputArray, reportTitle string) error {
 	if len(tables) == 0 {
 		return nil
 	}
@@ -218,37 +242,77 @@ func writeOutputTables(tables []format.OutputArray) error {
 	if fileFormat == "" {
 		fileFormat = fileSettings.OutputFormat
 	}
-	contents, err := captureStdout(func() {
-		for _, table := range tables {
-			table = withoutFile(table)
-			table.Settings.OutputFormat = fileFormat
-			table.Write()
+	var existing []byte
+	if fileSettings.ShouldAppend && fileFormat == "html" {
+		data, err := os.ReadFile(fileSettings.OutputFile)
+		if err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return fmt.Errorf("reading %s to append to it: %w", fileSettings.OutputFile, err)
 		}
-	})
+		existing = data
+	}
+	contents, err := renderVPCOverviewFile(tables, fileFormat, reportTitle, existing)
 	if err != nil {
 		return err
 	}
 	return format.PrintByteSlice(contents, fileSettings.OutputFile, fileSettings.S3Bucket)
 }
 
-// withoutFile returns a copy of the table whose settings render only to
-// stdout. Append is cleared as well because go-output reads the output file
-// when appending HTML, which would fail without a file.
-func withoutFile(table format.OutputArray) format.OutputArray {
-	tableSettings := *table.Settings
-	tableSettings.OutputFile = ""
-	tableSettings.OutputFileFormat = ""
-	tableSettings.ShouldAppend = false
-	table.Settings = &tableSettings
-	return table
+// renderVPCOverviewFile renders all tables as one document in fileFormat.
+// JSON and YAML hold a list of titled sections, HTML is a single page (or
+// existing, when appending), and text formats contain the tables in order.
+func renderVPCOverviewFile(tables []format.OutputArray, fileFormat, reportTitle string, existing []byte) ([]byte, error) {
+	switch fileFormat {
+	case "", "json", "yaml":
+		sections := make([]vpcOverviewSection, 0, len(tables))
+		for _, table := range tables {
+			sections = append(sections, vpcOverviewSection{Title: table.Settings.Title, Rows: table.GetContentsMapRaw()})
+		}
+		if fileFormat == "yaml" {
+			return yaml.Marshal(sections)
+		}
+		return json.Marshal(sections)
+	case "html":
+		return renderVPCOverviewHTML(tables, reportTitle, existing)
+	default:
+		return renderVPCOverviewText(tables, fileFormat)
+	}
 }
 
-// captureStdout returns everything render writes to os.Stdout. go-output
-// v1.4.0 only exposes rendered tables through stdout or a file it truncates on
-// every call, so this is how several tables can be combined into one file.
-// A temporary file is used instead of a pipe so large reports cannot block.
-func captureStdout(render func()) ([]byte, error) {
-	tmp, err := os.CreateTemp("", "awstools-output-*")
+// renderVPCOverviewHTML places every table in one HTML page. When existing
+// holds a previous report, the tables are inserted into that page instead.
+func renderVPCOverviewHTML(tables []format.OutputArray, reportTitle string, existing []byte) ([]byte, error) {
+	page := string(existing)
+	if len(existing) == 0 {
+		base, err := template.New("base").Parse(templates.BaseHTMLTemplate)
+		if err != nil {
+			return nil, fmt.Errorf("parsing HTML template: %w", err)
+		}
+		var buf bytes.Buffer
+		pageSettings := format.OutputSettings{Title: reportTitle}
+		if err := base.Execute(&buf, format.OutputArray{Settings: &pageSettings}); err != nil {
+			return nil, fmt.Errorf("rendering HTML template: %w", err)
+		}
+		page = strings.Replace(buf.String(), htmlEndPlaceholder, "<h1>"+html.EscapeString(reportTitle)+"</h1>\n"+htmlEndPlaceholder, 1)
+	}
+	if !strings.Contains(page, htmlEndPlaceholder) {
+		return nil, fmt.Errorf("cannot append to HTML file: it has no %s marker from an awstools report", htmlEndPlaceholder)
+	}
+
+	var body strings.Builder
+	for _, table := range tables {
+		body.Write(withoutFile(table).HtmlTableOnly())
+	}
+	body.WriteString(htmlEndPlaceholder)
+	return []byte(strings.Replace(page, htmlEndPlaceholder, body.String(), 1)), nil
+}
+
+// renderVPCOverviewText renders the tables in a text format (table, csv,
+// markdown) by writing each one in that format and collecting the result.
+// go-output v1.4.0 only exposes these renderings through stdout, so stdout is
+// redirected to a temporary file while the tables are written. A temporary file
+// is used instead of a pipe so large reports cannot block.
+func renderVPCOverviewText(tables []format.OutputArray, textFormat string) ([]byte, error) {
+	tmp, err := os.CreateTemp("", "awstools-vpc-overview-*")
 	if err != nil {
 		return nil, fmt.Errorf("creating temporary output file: %w", err)
 	}
@@ -260,7 +324,11 @@ func captureStdout(render func()) ([]byte, error) {
 	original := os.Stdout
 	os.Stdout = tmp
 	defer func() { os.Stdout = original }()
-	render()
+	for _, table := range tables {
+		table = withoutFile(table)
+		table.Settings.OutputFormat = textFormat
+		table.Write()
+	}
 	os.Stdout = original
 
 	contents, err := os.ReadFile(tmp.Name())
@@ -268,4 +336,16 @@ func captureStdout(render func()) ([]byte, error) {
 		return nil, fmt.Errorf("reading temporary output file: %w", err)
 	}
 	return contents, nil
+}
+
+// withoutFile returns a copy of the table whose settings render only to
+// stdout. go-output creates or reads the output file while rendering when a
+// file or append is set, so both are cleared.
+func withoutFile(table format.OutputArray) format.OutputArray {
+	tableSettings := *table.Settings
+	tableSettings.OutputFile = ""
+	tableSettings.OutputFileFormat = ""
+	tableSettings.ShouldAppend = false
+	table.Settings = &tableSettings
+	return table
 }
