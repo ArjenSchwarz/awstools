@@ -11,9 +11,12 @@ Get an overview of the roles and their policies
 ### Synopsis
 
 Retrieves a list of all IAM roles in the account and their policies.
-The policies themselves are also shown separately.
+The policies themselves are also shown separately. Attached policies include
+their ARN, as policy names are not unique.
 
-The drawio output format links the users to policies.
+The drawio, dot, and mermaid output formats link the roles to policies. In
+these formats attached policies are linked by ARN, and dot and mermaid also
+use the ARN as the attached policy's node label.
 
 ```
 awstools iam rolelist [flags]

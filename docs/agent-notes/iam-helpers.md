@@ -20,7 +20,7 @@ Affected functions: `getUserList`, `GetPoliciesMap`, `GetUserPoliciesMapForUser`
 ## Caching
 
 - `cachedUsers` (package-level var) — caches the full user list from `getUserList()`. Must be reset to `nil` in tests.
-- `cachedIAMPolicyDocuments` (package-level map) — caches IAM policy documents by name to avoid re-fetching.
+- `cachedIAMPolicyDocuments` (package-level map) — caches role policy documents. Inline entries use `<role>/<policy>`; attached entries use the policy ARN, because attached policy names are not unique (T-1656). `IAMRole.AttachedPolicies` and the attached entries in `GetRolesAndPolicies` output are also keyed by ARN — use `IAMPolicyDocument.Name` for display.
 
 ## Testing
 
@@ -51,3 +51,13 @@ value is `string` or `[]any`. `CanBeAssumedFrom` delegates to two helpers in
 When adding new trust actions (e.g. `sts:AssumeRoleWithWebIdentity`) extend
 `assumeRoleActions`. Deny statements are always excluded from the returned
 allowances.
+
+## rolelist graph output (T-1656)
+
+`cmd/iamrolelist.go:writeIamrolelist` links roles to policies by policy ID (ARN for attached, `<name> (inline for <role>)` for inline) in graph formats. go-output v1.4.0 quirks it works around:
+
+- DOT/Mermaid use the From column (`Name`) as node identity and label, so attached policy nodes are labelled with the ARN. Draw.io connects `Policies` to `DrawioID`, so labels stay friendly.
+- A row missing the To column renders as `%!s(<nil>)` and creates an edge to a missing node (panics in Mermaid), so policy rows set `Policies` to `""`.
+- Mermaid joins `[]string` with `", "` but splits on `","`, so the role link column is passed pre-joined with `","`.
+- Mermaid `AddBasicNode` reuses node IDs (`len(map)+1`) when a source has several edges, merging roles. `writeIamrolelist` renders any Mermaid destination (stdout or file) itself via `mermaid.Flowchart`, adding each node once; the other destination is built for its own format.
+- go-output has no file-only write. `writeIamrolelistFileOnly` runs `Write()` with stdout pointed at `os.DevNull`. go-output's html/drawio file branches write the file and then overwrite it with the stdout branch's bytes, so html is built in the command (`iamrolelistHTML`, same as go-output's `toHTML`, append supported) and drawio dispatches stdout as drawio.

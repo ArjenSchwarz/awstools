@@ -14,7 +14,10 @@ import (
 
 var cachedIAMPolicyDocuments = make(map[string]*IAMPolicyDocument)
 
-// GetRolesAndPolicies returns all the roles and and their attached policies
+// GetRolesAndPolicies returns all the roles and and their attached policies.
+// Inline policies are keyed by "<name> (inline for <role>)" and attached
+// policies by their ARN, since attached policy names are not unique (T-1656).
+// Use IAMPolicyDocument.Name for the attached policy display name.
 func GetRolesAndPolicies(verbose bool, svc IAMClient) ([]IAMRole, map[string]IAMPolicyDocument) {
 	roles := GetRoleDetails(verbose, svc)
 	policies := make(map[string]IAMPolicyDocument)
@@ -23,8 +26,8 @@ func GetRolesAndPolicies(verbose bool, svc IAMClient) ([]IAMRole, map[string]IAM
 			cleanedname := fmt.Sprintf("%s (inline for %s)", policyname, role.Name)
 			policies[cleanedname] = *policy
 		}
-		for policyname, policy := range role.AttachedPolicies {
-			policies[policyname] = *policy
+		for policyarn, policy := range role.AttachedPolicies {
+			policies[policyarn] = *policy
 		}
 	}
 	return roles, policies
@@ -132,7 +135,10 @@ func getInlinePoliciesForRole(rolename string, verbose bool, svc IAMClient) map[
 	return policies
 }
 
-// getAttachedPoliciesForRole(rolename string, svc *iam.IAM) map[string]
+// getAttachedPoliciesForRole returns the managed policies attached to the role,
+// keyed by policy ARN. The ARN is the unique identifier: an AWS-managed and a
+// customer-managed policy can share a name, so keying by name would merge them
+// (T-1656).
 func getAttachedPoliciesForRole(rolename string, verbose bool, svc IAMClient) map[string]*IAMPolicyDocument {
 	policies := make(map[string]*IAMPolicyDocument)
 
@@ -144,7 +150,8 @@ func getAttachedPoliciesForRole(rolename string, verbose bool, svc IAMClient) ma
 		}
 		for _, policy := range page.AttachedPolicies {
 			policyname := aws.ToString(policy.PolicyName)
-			if _, ok := cachedIAMPolicyDocuments[policyname]; !ok {
+			policyarn := aws.ToString(policy.PolicyArn)
+			if _, ok := cachedIAMPolicyDocuments[policyarn]; !ok {
 				policydocument := IAMPolicyDocument{
 					Type: IAMPolicyTypeAttached,
 					Name: policyname,
@@ -158,9 +165,9 @@ func getAttachedPoliciesForRole(rolename string, verbose bool, svc IAMClient) ma
 						panic(err)
 					}
 				}
-				cachedIAMPolicyDocuments[policyname] = &policydocument
+				cachedIAMPolicyDocuments[policyarn] = &policydocument
 			}
-			policies[policyname] = cachedIAMPolicyDocuments[policyname]
+			policies[policyarn] = cachedIAMPolicyDocuments[policyarn]
 		}
 	}
 	return policies

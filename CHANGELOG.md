@@ -29,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- IAM `rolelist` no longer merges same-named attached policies (e.g. AWS-managed and customer-managed `ReadOnlyAccess`): attached policies are keyed by ARN, policy rows gain an `ARN` column and list only their own roles, and drawio/dot/mermaid link roles to attached policies by ARN. `rolelist` mermaid output (stdout or file, alongside any other file or stdout format) no longer panics on edges to missing nodes or merges roles that have several policies (T-1656)
 - Profile generator now applies conflict detection (skip/replace/prompt) to naming patterns containing `{region}`, using the template profile's region, and stops with an error instead of treating roles it cannot analyse as conflict-free (T-1428)
 - Profile generator no longer gives two generated profiles the same name (two replaced conflicts, or a replaced conflict and a non-conflicted role), which made one role overwrite the other in the AWS config; the later role now gets a numeric suffix that avoids existing profiles (T-1646)
 - `vpc overview --file` now saves every table (subnet overviews, IP details and summary) instead of only the summary. JSON and YAML files are one document listing each table's title and rows, HTML files are one page, and `--append` adds the tables to an existing HTML report (T-1536)
