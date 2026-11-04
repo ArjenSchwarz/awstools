@@ -124,3 +124,94 @@ func TestValidateSimpleListResourceID(t *testing.T) {
 		})
 	}
 }
+
+// TestFilterGatewayVPCFilterKeepsDestinations is the regression test for T-1717.
+//
+// Bug: when `tgw routetables --resource-id vpc-...` matched a route table only
+// because the VPC is one of its source attachments, the route table was kept
+// with all of its destinations, but the destination resources were pruned from
+// attachedresources. Draw.io/dot output then had route-table edges pointing at
+// nodes that were never emitted.
+//
+// Expected: every destination of a retained route table is also present in
+// attachedresources, and destination matches keep their existing behaviour.
+func TestFilterGatewayVPCFilterKeepsDestinations(t *testing.T) {
+	route := func(resourceID string) helpers.TransitGatewayRoute {
+		return helpers.TransitGatewayRoute{
+			State: "active",
+			Attachment: helpers.TransitGatewayAttachment{
+				ID:           "tgw-attach-" + resourceID,
+				ResourceID:   resourceID,
+				ResourceType: vpcResourceType,
+			},
+		}
+	}
+	source := func(resourceID string) helpers.TransitGatewayAttachment {
+		return helpers.TransitGatewayAttachment{
+			ID:           "tgw-attach-" + resourceID,
+			ResourceID:   resourceID,
+			ResourceType: vpcResourceType,
+		}
+	}
+	// vpc-app is associated with tgw-rtb-app, which routes to vpc-shared and
+	// vpc-db. No route table routes to vpc-app, so it only matches as a source.
+	// tgw-rtb-other is unrelated to vpc-app and vpc-db.
+	gateways := []helpers.TransitGateway{
+		{
+			ID: "tgw-test",
+			RouteTables: map[string]helpers.TransitGatewayRouteTable{
+				"tgw-rtb-app": {
+					ID:                "tgw-rtb-app",
+					Routes:            []helpers.TransitGatewayRoute{route("vpc-shared"), route("vpc-db")},
+					SourceAttachments: []helpers.TransitGatewayAttachment{source("vpc-app")},
+				},
+				"tgw-rtb-other": {
+					ID:                "tgw-rtb-other",
+					Routes:            []helpers.TransitGatewayRoute{route("vpc-shared")},
+					SourceAttachments: []helpers.TransitGatewayAttachment{source("vpc-other"), source("vpc-shared")},
+				},
+			},
+		},
+	}
+
+	tests := map[string]struct {
+		resourceID      string
+		wantRouteTables map[string][]string
+		wantResources   []string
+	}{
+		"source-only match keeps destination resources": {
+			resourceID:      "vpc-app",
+			wantRouteTables: map[string][]string{"tgw-rtb-app": {"vpc-shared", "vpc-db"}},
+			wantResources:   []string{"vpc-app", "vpc-db", "vpc-shared"},
+		},
+		"destination match keeps only requested destination and its sources": {
+			resourceID:      "vpc-db",
+			wantRouteTables: map[string][]string{"tgw-rtb-app": {"vpc-db"}},
+			wantResources:   []string{"vpc-app", "vpc-db"},
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			originalResourceID := tgwresourceid
+			tgwresourceid = tc.resourceID
+			t.Cleanup(func() { tgwresourceid = originalResourceID })
+
+			attachedresources, tgwrts := filterGateway(gateways)
+
+			assert.Equal(t, tc.wantRouteTables, tgwrts)
+			gotResources := make([]string, 0, len(attachedresources))
+			for id := range attachedresources {
+				gotResources = append(gotResources, id)
+			}
+			slices.Sort(gotResources)
+			assert.Equal(t, tc.wantResources, gotResources)
+
+			for rt, destinations := range tgwrts {
+				for _, destination := range destinations {
+					assert.Containsf(t, attachedresources, destination, "route table %s points at %s, which is not emitted", rt, destination)
+				}
+			}
+		})
+	}
+}

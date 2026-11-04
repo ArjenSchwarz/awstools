@@ -268,8 +268,17 @@ func filterGateway(gateways []helpers.TransitGateway) (map[string]attachedResour
 				tgwrts[tgwid] = matchingVPCs
 			}
 		}
+		// Keep every destination of a retained route table so that no route
+		// table points at a resource that is not emitted. This matters when
+		// the requested VPC is only a source attachment of the route table.
+		retainedDestinations := make(map[string]bool)
+		for _, destinations := range tgwrts {
+			for _, destination := range destinations {
+				retainedDestinations[destination] = true
+			}
+		}
 		for resourceid, resourceInfo := range attachedresources {
-			if !slices.Contains(resourceIDs, resourceid) && !slices.Contains(attachedtgwrts, resourceInfo.RouteTableID) {
+			if !slices.Contains(resourceIDs, resourceid) && !slices.Contains(attachedtgwrts, resourceInfo.RouteTableID) && !retainedDestinations[resourceid] {
 				delete(attachedresources, resourceid)
 			}
 		}
