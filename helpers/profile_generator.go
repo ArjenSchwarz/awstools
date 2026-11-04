@@ -265,8 +265,23 @@ func (pg *ProfileGenerator) ValidateTemplateProfile() (*TemplateProfile, error) 
 	return templateProfile, nil
 }
 
+// useSSORegion points the SSO portal client at the template profile's SSO
+// region. The client is first built from the ambient AWS config, whose region
+// may be missing or differ from the region the SSO token was issued in.
+func (pg *ProfileGenerator) useSSORegion(region string) {
+	if region == "" {
+		return
+	}
+	pg.ssoClient = sso.NewFromConfig(pg.awsConfig, func(o *sso.Options) {
+		o.Region = region
+	})
+	pg.roleDiscovery.ssoClient = pg.ssoClient
+}
+
 // DiscoverRoles discovers all accessible roles using the template profile
 func (pg *ProfileGenerator) DiscoverRoles(templateProfile *TemplateProfile) ([]DiscoveredRole, error) {
+	pg.useSSORegion(templateProfile.SSORegion)
+
 	// Validate token access before discovery
 	if err := pg.roleDiscovery.ValidateTokenAccess(templateProfile); err != nil {
 		return nil, err
