@@ -2,7 +2,9 @@ package cmd
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -460,4 +462,136 @@ func TestEnisFileOutput_Split_NotEmpty_T1294(t *testing.T) {
 	if !strings.Contains(contents, "eni-aaa111") || !strings.Contains(contents, "eni-bbb222") {
 		t.Fatalf("split output file missing ENI rows from one or more subnet groups, got: %q", contents)
 	}
+}
+
+// captureStdout runs f while redirecting os.Stdout to a pipe and returns the
+// bytes written. It restores os.Stdout before returning.
+func captureStdout(t *testing.T, f func()) string {
+	t.Helper()
+	origStdout := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("failed to create pipe: %v", err)
+	}
+	os.Stdout = w
+	t.Cleanup(func() { os.Stdout = origStdout })
+
+	done := make(chan string, 1)
+	go func() {
+		data, _ := io.ReadAll(r)
+		done <- string(data)
+	}()
+
+	f()
+
+	_ = w.Close()
+	os.Stdout = origStdout
+	return <-done
+}
+
+// assertENIJSONRows checks that data is a single valid JSON array holding one
+// row per ENI, and that every row carries its subnet so the split grouping is
+// preserved in the combined document.
+func assertENIJSONRows(t *testing.T, label, data string) {
+	t.Helper()
+	if !json.Valid([]byte(data)) {
+		t.Fatalf("%s is not a single valid JSON document: %q", label, data)
+	}
+	var rows []map[string]any
+	if err := json.Unmarshal([]byte(data), &rows); err != nil {
+		t.Fatalf("%s is not a JSON array of rows: %v", label, err)
+	}
+	got := make(map[string]string, len(rows))
+	for _, row := range rows {
+		eni, _ := row[eniColumn].(string)
+		subnet, _ := row[subnetColumn].(string)
+		got[eni] = subnet
+	}
+	want := map[string]string{"eni-aaa111": "subnet-a", "eni-bbb222": "subnet-b"}
+	if len(got) != len(want) {
+		t.Fatalf("%s: got %d ENI rows %v, want %v", label, len(got), got, want)
+	}
+	for eni, subnet := range want {
+		if got[eni] != subnet {
+			t.Errorf("%s: ENI %s has subnet %q, want %q", label, eni, got[eni], subnet)
+		}
+	}
+}
+
+// TestEnisSplitStdoutJSON_T1591 is the regression test for T-1591:
+// `awstools vpc enis --split -o json` emitted one JSON array per subnet group
+// back to back on stdout (e.g. `[...][...]`), which is not valid JSON. The split
+// path must emit a single JSON document on stdout, and a separately selected
+// --file output must still receive every row.
+func TestEnisSplitStdoutJSON_T1591(t *testing.T) {
+	tests := map[string]struct {
+		fileFormat string
+	}{
+		"stdout only":            {},
+		"stdout json, file json": {fileFormat: "json"},
+		"stdout json, file csv":  {fileFormat: "csv"},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			outFile := ""
+			if tc.fileFormat != "" {
+				outFile = filepath.Join(t.TempDir(), "enis-split."+tc.fileFormat)
+			}
+			configureOutput(t, "json", outFile)
+			configureFileFormat(t, tc.fileFormat)
+
+			stdout := captureStdout(t, func() {
+				writeENIsBySubnet(sampleENIs(), map[string]string{}, "VPC ENIs", noAttachment)
+			})
+			assertENIJSONRows(t, "stdout", stdout)
+
+			if outFile == "" {
+				return
+			}
+			data, err := os.ReadFile(outFile)
+			if err != nil {
+				t.Fatalf("reading output file: %v", err)
+			}
+			if tc.fileFormat == "json" {
+				assertENIJSONRows(t, "file", string(data))
+				return
+			}
+			for _, want := range []string{"eni-aaa111", "eni-bbb222", "subnet-a", "subnet-b"} {
+				if !strings.Contains(string(data), want) {
+					t.Errorf("file output missing %q, got: %q", want, data)
+				}
+			}
+		})
+	}
+}
+
+// TestEnisSplitStdoutTable_T1591 confirms the table-oriented split
+// presentation is unchanged by the T-1591 fix: stdout still shows one titled
+// table per subnet, while a JSON --file output receives one valid document.
+func TestEnisSplitStdoutTable_T1591(t *testing.T) {
+	outFile := filepath.Join(t.TempDir(), "enis-split.json")
+	configureOutput(t, "table", outFile)
+	configureFileFormat(t, "json")
+
+	stdout := captureStdout(t, func() {
+		writeENIsBySubnet(sampleENIs(), map[string]string{}, "VPC ENIs", noAttachment)
+	})
+	for _, want := range []string{"VPC ENIs - vpc-111: subnet-a", "VPC ENIs - vpc-111: subnet-b"} {
+		if !strings.Contains(stdout, want) {
+			t.Errorf("stdout missing per-subnet table title %q, got: %q", want, stdout)
+		}
+	}
+
+	data, err := os.ReadFile(outFile)
+	if err != nil {
+		t.Fatalf("reading output file: %v", err)
+	}
+	assertENIJSONRows(t, "file", string(data))
+}
+
+// configureFileFormat sets output.file-format and resets it after the test.
+func configureFileFormat(t *testing.T, fileFormat string) {
+	t.Helper()
+	viper.Set("output.file-format", fileFormat)
+	t.Cleanup(func() { viper.Set("output.file-format", "") })
 }

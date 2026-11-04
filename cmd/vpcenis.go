@@ -20,7 +20,10 @@ var enisCmd = &cobra.Command{
 
 	Supported output formats are json, csv, table, and html. The graph formats
 	(dot and drawio) are not supported for this command because ENIs are leaf
-	resources without a meaningful from/to relationship to diagram.`,
+	resources without a meaningful from/to relationship to diagram.
+
+	With --split, table, csv, and html output show one table per subnet. JSON
+	output is a single array of every ENI, including its VPC and Subnet.`,
 	RunE: enis,
 }
 
@@ -80,18 +83,26 @@ func writeENIs(interfaces []types.NetworkInterface, names map[string]string, res
 	output.Write()
 }
 
-// writeENIsBySubnet renders one separate table per subnet group. Each group is
-// pushed to the shared buffer for stdout fidelity (separate, per-subnet titled
-// tables). The final Write() is called on a populated OutputArray that holds
-// every row across all groups so the --file branch has real data to serialize
-// even after Write() resets the buffer following the stdout pass (T-1294).
+// writeENIsBySubnet renders one separate table per subnet group. For
+// table-oriented formats each group is pushed to the shared buffer so stdout
+// shows separate, per-subnet titled tables. The final Write() is called on a
+// populated OutputArray that holds every row across all groups so the --file
+// branch has real data to serialize even after Write() resets the buffer
+// following the stdout pass (T-1294).
+//
+// Structured formats (json, yaml) skip the buffer: go-output serializes each
+// buffered group as its own document and concatenates them, which produced
+// adjacent JSON arrays on stdout (T-1591). Those formats instead write the
+// combined rows as one document. The combined rows keep the VPC and Subnet
+// columns so the grouping is still visible in the data.
 func writeENIsBySubnet(interfaces []types.NetworkInterface, names map[string]string, resultTitle string, attachmentFor func(types.NetworkInterface) string) {
 	groups := splitBySubnet(interfaces)
 
-	combined := format.OutputArray{Keys: splitENIKeys, Settings: settings.NewOutputSettings()}
+	combined := format.OutputArray{Keys: fullENIKeys, Settings: settings.NewOutputSettings()}
 	combined.Settings.SeparateTables = true
 	combined.Settings.Title = resultTitle
-	combined.Settings.SortKey = attachmentColumn
+	combined.Settings.SortKey = subnetColumn
+	useBuffer := !isStructuredOutputFormat(combined.Settings.OutputFormat)
 
 	for subnet, group := range groups {
 		groupTitle := fmt.Sprintf("%s - %s: %s", resultTitle, getNameAndIDFromMap(aws.ToString(group[0].VpcId), names), getNameAndIDFromMap(subnet, names))
@@ -101,9 +112,23 @@ func writeENIsBySubnet(interfaces []types.NetworkInterface, names map[string]str
 		for _, holder := range groupOutput.Contents {
 			combined.AddContents(holder.Contents)
 		}
-		groupOutput.AddToBuffer()
+		if useBuffer {
+			groupOutput.AddToBuffer()
+		}
 	}
 	combined.Write()
+}
+
+// isStructuredOutputFormat reports whether the format must be emitted as a
+// single document. go-output's AddToBuffer writes JSON for both json and yaml,
+// and concatenated documents are not valid in either format.
+func isStructuredOutputFormat(outputFormat string) bool {
+	switch strings.ToLower(outputFormat) {
+	case "json", "yaml", "":
+		return true
+	default:
+		return false
+	}
 }
 
 const (
