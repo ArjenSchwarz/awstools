@@ -2054,9 +2054,12 @@ func (cache *ENILookupCache) batchFetchTransitGateways(svc ec2.DescribeTransitGa
 //
 // AWS sets the description of a TGW ENI to "Network Interface for Transit
 // Gateway Attachment <attachment-id>", which identifies the owning attachment
-// even when several attachments in the VPC share the ENI's subnet. If the
-// description doesn't name a known attachment, fall back to subnet matching,
-// but only when exactly one attachment uses the ENI's subnet.
+// even when several attachments in the VPC share the ENI's subnet. An
+// attachment ID named in the description is authoritative: if it isn't one of
+// the cached attachments for the VPC, the owner is unknown and no other
+// attachment is substituted. Only when the description names no attachment
+// fall back to subnet matching, and only when exactly one attachment uses the
+// ENI's subnet.
 func (cache *ENILookupCache) transitGatewayAttachmentID(eni types.NetworkInterface) string {
 	attachments := cache.TransitGatewayAttachments[aws.ToString(eni.VpcId)]
 	if len(attachments) == 0 {
@@ -2064,11 +2067,15 @@ func (cache *ENILookupCache) transitGatewayAttachmentID(eni types.NetworkInterfa
 	}
 
 	for word := range strings.FieldsSeq(aws.ToString(eni.Description)) {
+		if !strings.HasPrefix(word, "tgw-attach-") {
+			continue
+		}
 		for _, attachment := range attachments {
 			if word == aws.ToString(attachment.TransitGatewayAttachmentId) {
 				return word
 			}
 		}
+		return "" // named attachment isn't cached for this VPC: don't substitute another
 	}
 
 	subnetID := aws.ToString(eni.SubnetId)

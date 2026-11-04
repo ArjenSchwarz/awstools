@@ -55,9 +55,14 @@ func TestENILookupCache_TransitGatewayAttachmentPerENI_T1571(t *testing.T) {
 			eni:         tgwENI("eni-a", "subnet-shared", ""),
 			want:        "",
 		},
-		"description naming unknown attachment falls back to subnet": {
+		"description naming uncached attachment is not replaced by subnet match": {
 			attachments: []types.TransitGatewayVpcAttachment{tgwAttachment("tgw-attach-aaa", "subnet-a"), tgwAttachment("tgw-attach-bbb", "subnet-b")},
 			eni:         tgwENI("eni-b", "subnet-b", "Network Interface for Transit Gateway Attachment tgw-attach-zzz"),
+			want:        "",
+		},
+		"description without attachment ID falls back to subnet": {
+			attachments: []types.TransitGatewayVpcAttachment{tgwAttachment("tgw-attach-aaa", "subnet-a"), tgwAttachment("tgw-attach-bbb", "subnet-b")},
+			eni:         tgwENI("eni-b", "subnet-b", "custom description"),
 			want:        "tgw-attach-bbb",
 		},
 		"no attachment for subnet": {
