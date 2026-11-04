@@ -1637,10 +1637,8 @@ func getENIAttachmentDetailsOptimized(eni types.NetworkInterface, cache *ENILook
 	if eni.InterfaceType != "" && eni.InterfaceType != interfaceType {
 		switch eni.InterfaceType {
 		case types.NetworkInterfaceTypeTransitGateway:
-			if eni.VpcId != nil {
-				if tgwID, exists := cache.TransitGateways[*eni.VpcId]; exists {
-					return tgwID
-				}
+			if tgwID := cache.transitGatewayAttachmentID(eni); tgwID != "" {
+				return tgwID
 			}
 			return "Unknown Transit Gateway"
 
@@ -1780,23 +1778,25 @@ func analyzeSubnetIPUsage(subnet types.Subnet, networkInterfaces []types.Network
 // For 100 ENIs, this reduces API calls from ~400 to ~4, significantly improving
 // performance and reducing the chance of hitting AWS API rate limits.
 type ENILookupCache struct {
-	VPCEndpoints     map[string]*types.VpcEndpoint // VPC ID -> endpoints in that VPC
-	InstanceNames    map[string]string             // Instance ID -> name
-	TransitGateways  map[string]string             // VPC ID -> TGW attachment ID
-	NATGateways      map[string]*types.NatGateway  // VPC ID -> NAT gateways in that VPC
-	EndpointsByENI   map[string]*types.VpcEndpoint // ENI ID -> VPC endpoint
-	NATGatewaysByENI map[string]*types.NatGateway  // ENI ID -> NAT gateway
+	VPCEndpoints  map[string]*types.VpcEndpoint // VPC ID -> endpoints in that VPC
+	InstanceNames map[string]string             // Instance ID -> name
+	// VPC ID -> all TGW VPC attachments in that VPC. A VPC can have several
+	// attachments, so resolve an ENI via transitGatewayAttachmentID (T-1571).
+	TransitGatewayAttachments map[string][]types.TransitGatewayVpcAttachment
+	NATGateways               map[string]*types.NatGateway  // VPC ID -> NAT gateways in that VPC
+	EndpointsByENI            map[string]*types.VpcEndpoint // ENI ID -> VPC endpoint
+	NATGatewaysByENI          map[string]*types.NatGateway  // ENI ID -> NAT gateway
 }
 
 // NewENILookupCache creates and populates a cache with all required AWS resource data
 func NewENILookupCache(svc *ec2.Client, networkInterfaces []types.NetworkInterface) *ENILookupCache {
 	cache := &ENILookupCache{
-		VPCEndpoints:     make(map[string]*types.VpcEndpoint),
-		InstanceNames:    make(map[string]string),
-		TransitGateways:  make(map[string]string),
-		NATGateways:      make(map[string]*types.NatGateway),
-		EndpointsByENI:   make(map[string]*types.VpcEndpoint),
-		NATGatewaysByENI: make(map[string]*types.NatGateway),
+		VPCEndpoints:              make(map[string]*types.VpcEndpoint),
+		InstanceNames:             make(map[string]string),
+		TransitGatewayAttachments: make(map[string][]types.TransitGatewayVpcAttachment),
+		NATGateways:               make(map[string]*types.NatGateway),
+		EndpointsByENI:            make(map[string]*types.VpcEndpoint),
+		NATGatewaysByENI:          make(map[string]*types.NatGateway),
 	}
 
 	// Collect unique VPC IDs and instance IDs from ENIs
@@ -2014,7 +2014,7 @@ func (cache *ENILookupCache) batchFetchNATGateways(svc *ec2.Client, vpcIDs map[s
 }
 
 // batchFetchTransitGateways fetches transit gateway attachments for the given VPCs
-func (cache *ENILookupCache) batchFetchTransitGateways(svc *ec2.Client, vpcIDs map[string]bool) {
+func (cache *ENILookupCache) batchFetchTransitGateways(svc ec2.DescribeTransitGatewayVpcAttachmentsAPIClient, vpcIDs map[string]bool) {
 	if len(vpcIDs) == 0 {
 		return
 	}
@@ -2043,10 +2043,46 @@ func (cache *ENILookupCache) batchFetchTransitGateways(svc *ec2.Client, vpcIDs m
 		}
 		for _, attachment := range page.TransitGatewayVpcAttachments {
 			if attachment.VpcId != nil && attachment.TransitGatewayAttachmentId != nil {
-				cache.TransitGateways[*attachment.VpcId] = *attachment.TransitGatewayAttachmentId
+				cache.TransitGatewayAttachments[*attachment.VpcId] = append(cache.TransitGatewayAttachments[*attachment.VpcId], attachment)
 			}
 		}
 	}
+}
+
+// transitGatewayAttachmentID returns the TGW attachment ID that owns the given
+// transit gateway ENI, or "" when it cannot be determined (T-1571).
+//
+// AWS sets the description of a TGW ENI to "Network Interface for Transit
+// Gateway Attachment <attachment-id>", which identifies the owning attachment
+// even when several attachments in the VPC share the ENI's subnet. If the
+// description doesn't name a known attachment, fall back to subnet matching,
+// but only when exactly one attachment uses the ENI's subnet.
+func (cache *ENILookupCache) transitGatewayAttachmentID(eni types.NetworkInterface) string {
+	attachments := cache.TransitGatewayAttachments[aws.ToString(eni.VpcId)]
+	if len(attachments) == 0 {
+		return ""
+	}
+
+	for word := range strings.FieldsSeq(aws.ToString(eni.Description)) {
+		for _, attachment := range attachments {
+			if word == aws.ToString(attachment.TransitGatewayAttachmentId) {
+				return word
+			}
+		}
+	}
+
+	subnetID := aws.ToString(eni.SubnetId)
+	match := ""
+	for _, attachment := range attachments {
+		if !slices.Contains(attachment.SubnetIds, subnetID) {
+			continue
+		}
+		if match != "" {
+			return "" // ambiguous: don't guess
+		}
+		match = aws.ToString(attachment.TransitGatewayAttachmentId)
+	}
+	return match
 }
 
 // GetAttachmentFromCache resolves the attachment label for an ENI using a
@@ -2061,10 +2097,8 @@ func GetAttachmentFromCache(eni types.NetworkInterface, cache *ENILookupCache) s
 	eniID := aws.ToString(eni.NetworkInterfaceId)
 	switch eni.InterfaceType {
 	case types.NetworkInterfaceTypeTransitGateway:
-		if eni.VpcId != nil {
-			if tgwID, exists := cache.TransitGateways[*eni.VpcId]; exists {
-				return tgwID
-			}
+		if tgwID := cache.transitGatewayAttachmentID(eni); tgwID != "" {
+			return tgwID
 		}
 	case types.NetworkInterfaceTypeNatGateway, "nat_gateway":
 		if natgw, exists := cache.NATGatewaysByENI[eniID]; exists {
@@ -2273,11 +2307,9 @@ func getResourceNameAndID(eni types.NetworkInterface, cache *ENILookupCache) (st
 		}
 	}
 
-	// Handle Transit Gateways (T-1147). TGW attachment IDs are keyed by VPC ID
-	// in the cache, mirroring how getENIAttachmentDetailsOptimized resolves the
-	// attachment detail for the resource name.
-	if eni.InterfaceType == types.NetworkInterfaceTypeTransitGateway && eni.VpcId != nil {
-		if tgwAttachmentID, exists := cache.TransitGateways[*eni.VpcId]; exists {
+	// Handle Transit Gateways (T-1147, T-1571).
+	if eni.InterfaceType == types.NetworkInterfaceTypeTransitGateway {
+		if tgwAttachmentID := cache.transitGatewayAttachmentID(eni); tgwAttachmentID != "" {
 			return attachmentDetails, tgwAttachmentID
 		}
 	}

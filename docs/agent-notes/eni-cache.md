@@ -9,7 +9,7 @@
 - `EndpointsByENI` — maps ENI ID to `*types.VpcEndpoint`
 - `NATGatewaysByENI` — maps ENI ID to `*types.NatGateway`
 - `InstanceNames` — maps Instance ID to name string
-- `TransitGateways` — maps VPC ID to TGW attachment ID string
+- `TransitGatewayAttachments` — maps VPC ID to all TGW VPC attachments in that VPC. Resolve an ENI with `transitGatewayAttachmentID`: it matches the attachment ID in the ENI description (`Network Interface for Transit Gateway Attachment tgw-attach-…`), then falls back to the subnet only when exactly one attachment uses it (T-1571; several attachments can share a subnet, so subnet alone is ambiguous)
 - `VPCEndpoints` / `NATGateways` — maps VPC ID to resource pointer
 
 ### Consumers
