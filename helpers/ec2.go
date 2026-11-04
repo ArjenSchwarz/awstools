@@ -236,19 +236,33 @@ func addAllVpnNames(svc ec2.DescribeVpnConnectionsAPIClient, result map[string]s
 	return result
 }
 
-// addAllDirectConnectGatewayNames returns the names of all Direct Connect Gateways in a map
-func addAllDirectConnectGatewayNames(svc *directconnect.Client, result map[string]string) map[string]string {
-	resp, err := svc.DescribeDirectConnectGateways(context.TODO(), &directconnect.DescribeDirectConnectGatewaysInput{})
-	if err != nil {
-		panic(err)
-	}
-	for _, gateway := range resp.DirectConnectGateways {
-		result[*gateway.DirectConnectGatewayId] = *gateway.DirectConnectGatewayId
-		if gateway.DirectConnectGatewayName != nil && *gateway.DirectConnectGatewayName != "" {
-			result[*gateway.DirectConnectGatewayId] = *gateway.DirectConnectGatewayName
+// describeDirectConnectGatewaysAPIClient is the narrow Direct Connect API used
+// by addAllDirectConnectGatewayNames. The SDK provides neither an APIClient
+// interface nor a paginator for this operation, so it is defined locally.
+type describeDirectConnectGatewaysAPIClient interface {
+	DescribeDirectConnectGateways(context.Context, *directconnect.DescribeDirectConnectGatewaysInput, ...func(*directconnect.Options)) (*directconnect.DescribeDirectConnectGatewaysOutput, error)
+}
+
+// addAllDirectConnectGatewayNames returns the names of all Direct Connect Gateways in a map.
+// DescribeDirectConnectGateways is paginated via NextToken, so every page is walked.
+func addAllDirectConnectGatewayNames(svc describeDirectConnectGatewaysAPIClient, result map[string]string) map[string]string {
+	input := &directconnect.DescribeDirectConnectGatewaysInput{}
+	for {
+		resp, err := svc.DescribeDirectConnectGateways(context.TODO(), input)
+		if err != nil {
+			panic(err)
 		}
+		for _, gateway := range resp.DirectConnectGateways {
+			result[*gateway.DirectConnectGatewayId] = *gateway.DirectConnectGatewayId
+			if gateway.DirectConnectGatewayName != nil && *gateway.DirectConnectGatewayName != "" {
+				result[*gateway.DirectConnectGatewayId] = *gateway.DirectConnectGatewayName
+			}
+		}
+		if aws.ToString(resp.NextToken) == "" {
+			return result
+		}
+		input.NextToken = resp.NextToken
 	}
-	return result
 }
 
 // getResourceDisplayNameFromTags provides tiered name lookup for AWS resources

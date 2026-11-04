@@ -29,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Direct Connect Gateway name lookup now reads every `DescribeDirectConnectGateways` page, so gateways beyond the first response get friendly names in `names`, `vpc enis`, and Transit Gateway outputs (T-1623)
 - `vpc overview` now builds the ENI lookup cache once per run instead of once per IPv4 subnet, so its VPC endpoint, instance, NAT gateway, and Transit Gateway attachment lookups no longer scale with subnet count (T-1597)
 - `tgw routetables --resource-id vpc-...` now keeps the destination resources of route tables the VPC matches only as a source attachment, so filtered graph and text output no longer reference missing nodes; Draw.io output also omits inbound edges to route tables removed by the filter (T-1717)
 - SSO `by-account` and `by-permission-set` graph outputs (drawio, dot, mermaid) filtered with `--resource-id` no longer draw root edges to accounts or permission sets that were filtered out, and permission-set root edges use name-file names to match their nodes (T-1714)

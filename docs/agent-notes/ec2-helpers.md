@@ -37,6 +37,7 @@ All callers must pass the subnet's VPC ID. The VPC ID is available from:
   alias over the same implementation. Prefer this helper over an inline
   `DescribeRouteTables` call in `cmd/` — the bug T-805 fixed was exactly
   such a single-page call in `cmd/vpcoverview.go`.
+- `directconnect.DescribeDirectConnectGateways` is paginated via `NextToken` but the SDK ships no paginator or APIClient interface for it. `addAllDirectConnectGatewayNames` uses the local `describeDirectConnectGatewaysAPIClient` interface and a manual NextToken loop (T-1623).
 - `types.NatGatewayAddress.NetworkInterfaceId` is `*string` and AWS may omit it (e.g. for addresses in transitional states). Always guard for nil or use `aws.ToString` before comparing.
 
 ## Transit Gateway Route Parsing
