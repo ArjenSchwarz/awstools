@@ -15,14 +15,18 @@
 package cmd
 
 import (
+	"bytes"
+	"html/template"
 	"log"
 	"maps"
+	"os"
 	"slices"
 	"strings"
 
 	format "github.com/ArjenSchwarz/go-output"
 	"github.com/ArjenSchwarz/go-output/drawio"
 	"github.com/ArjenSchwarz/go-output/mermaid"
+	"github.com/ArjenSchwarz/go-output/templates"
 
 	"github.com/ArjenSchwarz/awstools/config"
 	"github.com/ArjenSchwarz/awstools/helpers"
@@ -47,112 +51,162 @@ func iamrolelist(_ *cobra.Command, _ []string) {
 	awsConfig := config.DefaultAwsConfig(*settings)
 	resultTitle := "IAM Role overview for account " + getName(helpers.GetAccountID(awsConfig.StsClient()))
 	roles, policies := helpers.GetRolesAndPolicies(settings.IsVerbose(), awsConfig.IamClient())
-	writeIamrolelist(roles, policies, resultTitle)
+	outputSettings := settings.NewOutputSettings()
+	outputSettings.Title = resultTitle
+	writeIamrolelist(roles, policies, outputSettings)
 }
 
 // writeIamrolelist renders the roles and policies. Policies are keyed by their
 // unique ID (ARN for attached policies, "<name> (inline for <role>)" for inline
 // policies), as returned by GetRolesAndPolicies. Attached policy names are not
 // unique, so graph formats link roles to policies by that ID (T-1656).
-func writeIamrolelist(roles []helpers.IAMRole, policies map[string]helpers.IAMPolicyDocument, title string) {
-	keys := []string{nameColumn, typeColumn, "ARN", "AssumedFrom", "Policies", "Roles"}
-	if settings.IsDrawIO() {
-		keys = append(keys, imageColumn)
-		keys = append(keys, "DrawioID")
-	}
-	output := format.OutputArray{Keys: keys, Settings: settings.NewOutputSettings()}
-	output.Settings.Title = title
-	if settings.IsDrawIO() {
-		output.Settings.DrawIOHeader = createIamrolelistDrawIOHeader()
-	}
-	// DOT and Mermaid use the Name column as node identity.
-	nameIsNodeID := output.Settings.NeedsFromToColumns()
-	if nameIsNodeID {
-		output.Settings.AddFromToColumns(nameColumn, "Policies")
-	}
-	linkByID := nameIsNodeID || settings.IsDrawIO()
-	for _, role := range roles {
-		content := make(map[string]any)
-		content[nameColumn] = role.Name
-		content["AssumedFrom"] = role.CanBeAssumedFrom()
-		content[typeColumn] = role.Type
-		switch {
-		case nameIsNodeID:
-			// go-output splits the link column on "," but joins []string
-			// with ", " for Mermaid, so pass a pre-joined string.
-			content["Policies"] = strings.Join(role.GetPolicyIDs(), ",")
-		case linkByID:
-			content["Policies"] = role.GetPolicyIDs()
-		default:
-			content["Policies"] = role.GetPolicyNames()
-		}
-		if settings.IsDrawIO() {
-			content["DrawioID"] = role.ID
-			content[imageColumn] = drawio.AWSShape("Security Identity Compliance", "Role")
-		}
-		holder := format.OutputHolder{Contents: content}
-		output.AddHolder(holder)
-	}
-	for policyID, policy := range policies {
-		content := make(map[string]any)
-		content[nameColumn] = policyID
-		if nameIsNodeID {
-			// Without a value go-output renders the missing link column as
-			// "%!s(<nil>)" and adds an edge to a non-existent node, which
-			// panics in Mermaid.
-			content["Policies"] = ""
-		}
-		if policy.Type == helpers.IAMPolicyTypeAttached {
-			content["ARN"] = policyID
-			if !nameIsNodeID {
-				content[nameColumn] = policy.Name
-			}
-		}
-		if settings.IsDrawIO() {
-			content["DrawioID"] = policyID
-			content[imageColumn] = drawio.AWSShape("Security Identity Compliance", "Permissions")
-		}
-		content[typeColumn] = policy.Type
-		content["Roles"] = policy.GetRoleNames()
-		holder := format.OutputHolder{Contents: content}
-		output.AddHolder(holder)
-	}
-	writeIamrolelistOutput(output, roles, policies)
-}
-
-// writeIamrolelistOutput writes the output, rendering Mermaid destinations
-// with iamrolelistMermaid. go-output's own Mermaid renderer re-adds a source
-// node for every edge and reuses node IDs, which merges roles that have
-// several policies (T-1656). go-output cannot write only the file, so Mermaid
-// stdout with a different file format still uses go-output.
-func writeIamrolelistOutput(output format.OutputArray, roles []helpers.IAMRole, policies map[string]helpers.IAMPolicyDocument) {
-	s := output.Settings
+//
+// go-output's Mermaid renderer re-adds a source node for every edge and reuses
+// node IDs, which merges roles that have several policies. Any destination
+// (stdout or file) that asks for Mermaid is therefore rendered with
+// iamrolelistMermaid, and the other destination keeps its own format.
+func writeIamrolelist(roles []helpers.IAMRole, policies map[string]helpers.IAMPolicyDocument, s *format.OutputSettings) {
 	fileFormat := s.OutputFileFormat
 	if fileFormat == "" {
 		fileFormat = s.OutputFormat
 	}
 	stdoutMermaid := s.OutputFormat == "mermaid"
 	fileMermaid := s.OutputFile != "" && fileFormat == "mermaid"
-	if stdoutMermaid && s.OutputFile != "" && !fileMermaid {
-		output.Write()
-		return
-	}
 	if !stdoutMermaid && !fileMermaid {
-		output.Write()
+		buildIamrolelistOutput(roles, policies, s).Write()
 		return
 	}
 	chart := iamrolelistMermaid(roles, policies, s.MermaidSettings)
+
 	if stdoutMermaid {
 		printIamrolelistBytes(chart, "", s.S3Bucket)
 	} else {
-		file := s.OutputFile
-		s.OutputFile = ""
-		output.Write()
-		s.OutputFile = file
+		stdoutSettings := *s
+		stdoutSettings.OutputFile = ""
+		// Append applies to the file; html would otherwise read file "".
+		stdoutSettings.ShouldAppend = false
+		buildIamrolelistOutput(roles, policies, &stdoutSettings).Write()
 	}
-	if fileMermaid {
+
+	switch {
+	case s.OutputFile == "":
+	case fileMermaid:
 		printIamrolelistBytes(chart, s.OutputFile, s.S3Bucket)
+	default:
+		fileSettings := *s
+		fileSettings.OutputFormat = fileFormat
+		fileSettings.OutputFileFormat = fileFormat
+		writeIamrolelistFileOnly(buildIamrolelistOutput(roles, policies, &fileSettings))
 	}
+}
+
+// writeIamrolelistFileOnly writes only the file destination of output, in
+// output.Settings.OutputFormat. go-output's Write always writes stdout as
+// well, so stdout is discarded. Its html and drawio file branches write the
+// file directly and then overwrite it with whatever the stdout branch
+// produced, so html is built here (as go-output's toHTML does) and drawio
+// dispatches stdout as drawio, which writes the same file.
+func writeIamrolelistFileOnly(output format.OutputArray) {
+	if output.Settings.OutputFormat == "html" {
+		page, err := iamrolelistHTML(output)
+		if err != nil {
+			log.Fatal(err.Error())
+		}
+		printIamrolelistBytes(page, output.Settings.OutputFile, output.Settings.S3Bucket)
+		return
+	}
+	devNull, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0)
+	if err != nil {
+		log.Fatal(err.Error())
+	}
+	orig := os.Stdout
+	os.Stdout = devNull
+	defer func() {
+		os.Stdout = orig
+		_ = devNull.Close()
+	}()
+	output.Write()
+}
+
+// iamrolelistHTML builds an HTML page like go-output's toHTML: the table is
+// inserted at the end marker of the base template, or of the existing file
+// when appending.
+func iamrolelistHTML(output format.OutputArray) ([]byte, error) {
+	const endMarker = "<div id='end'></div>"
+	var base string
+	if output.Settings.ShouldAppend {
+		existing, err := os.ReadFile(output.Settings.OutputFile)
+		if err != nil {
+			return nil, err
+		}
+		base = string(existing)
+	} else {
+		tmpl, err := template.New("base").Parse(templates.BaseHTMLTemplate)
+		if err != nil {
+			return nil, err
+		}
+		var buf bytes.Buffer
+		if err := tmpl.Execute(&buf, output); err != nil {
+			return nil, err
+		}
+		base = buf.String()
+	}
+	table := string(output.HtmlTableOnly()) + endMarker
+	return []byte(strings.Replace(base, endMarker, table, 1)), nil
+}
+
+// buildIamrolelistOutput builds the rows for s.OutputFormat.
+func buildIamrolelistOutput(roles []helpers.IAMRole, policies map[string]helpers.IAMPolicyDocument, s *format.OutputSettings) format.OutputArray {
+	isDrawIO := s.OutputFormat == "drawio"
+	// DOT uses the Name column as node identity.
+	isDot := s.OutputFormat == "dot"
+	keys := []string{nameColumn, typeColumn, "ARN", "AssumedFrom", "Policies", "Roles"}
+	if isDrawIO {
+		keys = append(keys, imageColumn, "DrawioID")
+		s.DrawIOHeader = createIamrolelistDrawIOHeader()
+	}
+	output := format.OutputArray{Keys: keys, Settings: s}
+	if s.NeedsFromToColumns() {
+		s.AddFromToColumns(nameColumn, "Policies")
+	}
+	for _, role := range roles {
+		content := make(map[string]any)
+		content[nameColumn] = role.Name
+		content["AssumedFrom"] = role.CanBeAssumedFrom()
+		content[typeColumn] = role.Type
+		content["Policies"] = role.GetPolicyNames()
+		if isDot || isDrawIO {
+			content["Policies"] = role.GetPolicyIDs()
+		}
+		if isDrawIO {
+			content["DrawioID"] = role.ID
+			content[imageColumn] = drawio.AWSShape("Security Identity Compliance", "Role")
+		}
+		output.AddHolder(format.OutputHolder{Contents: content})
+	}
+	for policyID, policy := range policies {
+		content := make(map[string]any)
+		content[nameColumn] = policyID
+		if isDot {
+			// Without a value go-output renders the missing link column as
+			// "%!s(<nil>)" and adds an edge to a non-existent node.
+			content["Policies"] = ""
+		}
+		if policy.Type == helpers.IAMPolicyTypeAttached {
+			content["ARN"] = policyID
+			if !isDot {
+				content[nameColumn] = policy.Name
+			}
+		}
+		if isDrawIO {
+			content["DrawioID"] = policyID
+			content[imageColumn] = drawio.AWSShape("Security Identity Compliance", "Permissions")
+		}
+		content[typeColumn] = policy.Type
+		content["Roles"] = policy.GetRoleNames()
+		output.AddHolder(format.OutputHolder{Contents: content})
+	}
+	return output
 }
 
 func printIamrolelistBytes(contents []byte, file string, bucket format.S3Output) {

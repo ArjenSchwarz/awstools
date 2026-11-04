@@ -15,11 +15,22 @@ import (
 
 // renderIamrolelist renders the fixture in the given format via the
 // production writer and returns stdout.
-func renderIamrolelist(t *testing.T, format string) string {
+func renderIamrolelist(t *testing.T, outputFormat string) string {
 	t.Helper()
-	configureOutput(t, format, "")
+	return renderIamrolelistTo(t, outputFormat, "", "")
+}
+
+// renderIamrolelistTo renders the fixture with the given stdout format and,
+// when file is set, a file destination in fileFormat. It returns stdout.
+func renderIamrolelistTo(t *testing.T, outputFormat, file, fileFormat string) string {
+	t.Helper()
+	s := format.NewOutputSettings()
+	s.SetOutputFormat(outputFormat)
+	s.OutputFile = file
+	s.OutputFileFormat = fileFormat
+	s.Title = "IAM Role overview"
 	roles, policies := sameNamedRolelistFixture()
-	return captureIAMRoleListStdout(t, func() { writeIamrolelist(roles, policies, "IAM Role overview") })
+	return captureIAMRoleListStdout(t, func() { writeIamrolelist(roles, policies, s) })
 }
 
 // graphEdges parses DOT or Mermaid output into sorted "from -> to" label pairs.
@@ -48,8 +59,14 @@ func graphEdges(t *testing.T, out string, node, edge *regexp.Regexp) []string {
 // TestIamrolelist_SameNamedPolicies_JSON_T1656 verifies table-style rows keep
 // friendly names, expose the ARN, and list only the roles of that ARN.
 func TestIamrolelist_SameNamedPolicies_JSON_T1656(t *testing.T) {
+	assertRolelistJSON(t, renderIamrolelist(t, "json"))
+}
+
+// assertRolelistJSON checks the JSON rows for the fixture: each ARN row keeps
+// the friendly name and lists only its own roles, and inline rows are unchanged.
+func assertRolelistJSON(t *testing.T, out string) {
+	t.Helper()
 	var rows []map[string]any
-	out := renderIamrolelist(t, "json")
 	if err := json.Unmarshal([]byte(out), &rows); err != nil {
 		t.Fatalf("invalid JSON %q: %v", out, err)
 	}
@@ -102,13 +119,7 @@ func TestIamrolelist_SameNamedPolicies_DOT_T1656(t *testing.T) {
 	got := graphEdges(t, out,
 		regexp.MustCompile(`(n\d+)\[label="([^"]*)"\]`),
 		regexp.MustCompile(`(n\d+)->(n\d+)`))
-	want := []string{
-		"role-a -> " + awsReadOnlyArn,
-		"role-a -> " + securityAuditArn,
-		"role-a -> " + roleAInlineID,
-		"role-b -> " + customerReadOnlyArn,
-		"role-b -> " + securityAuditArn,
-	}
+	want := wantRolelistEdges
 	if !slices.Equal(got, want) {
 		t.Errorf("edges = %q, want %q\n%s", got, want, out)
 	}
@@ -120,16 +131,18 @@ func TestIamrolelist_SameNamedPolicies_DOT_T1656(t *testing.T) {
 func TestIamrolelist_SameNamedPolicies_Mermaid_T1656(t *testing.T) {
 	out := renderIamrolelist(t, "mermaid")
 	got := mermaidEdges(t, out)
-	want := []string{
-		"role-a -> " + awsReadOnlyArn,
-		"role-a -> " + securityAuditArn,
-		"role-a -> " + roleAInlineID,
-		"role-b -> " + customerReadOnlyArn,
-		"role-b -> " + securityAuditArn,
-	}
+	want := wantRolelistEdges
 	if !slices.Equal(got, want) {
 		t.Errorf("edges = %q, want %q\n%s", got, want, out)
 	}
+}
+
+var wantRolelistEdges = []string{
+	"role-a -> " + awsReadOnlyArn,
+	"role-a -> " + securityAuditArn,
+	"role-a -> " + roleAInlineID,
+	"role-b -> " + customerReadOnlyArn,
+	"role-b -> " + securityAuditArn,
 }
 
 func mermaidEdges(t *testing.T, out string) []string {
@@ -139,36 +152,57 @@ func mermaidEdges(t *testing.T, out string) []string {
 		regexp.MustCompile(`(n\d+) --> (n\d+)`))
 }
 
-// TestIamrolelist_MermaidFile_T1656 verifies a Mermaid file destination uses
-// the same per-role rendering while stdout keeps its own format.
-func TestIamrolelist_MermaidFile_T1656(t *testing.T) {
-	file := filepath.Join(t.TempDir(), "roles.mmd")
-	settings := format.NewOutputSettings()
-	settings.SetOutputFormat("json")
-	settings.OutputFile = file
-	settings.OutputFileFormat = "mermaid"
-	output := format.OutputArray{Keys: []string{nameColumn}, Settings: settings}
-	output.AddContents(map[string]any{nameColumn: "role-a"})
-	roles, policies := sameNamedRolelistFixture()
-	stdout := captureIAMRoleListStdout(t, func() { writeIamrolelistOutput(output, roles, policies) })
-
-	if !strings.HasPrefix(stdout, "[{") {
-		t.Errorf("stdout is not JSON: %q", stdout)
+// TestIamrolelist_MermaidMixedDestinations_T1656 verifies that whichever
+// destination asks for Mermaid gets the per-role rendering, while the other
+// destination keeps its own format.
+func TestIamrolelist_MermaidMixedDestinations_T1656(t *testing.T) {
+	tests := map[string]struct {
+		stdoutFormat, fileFormat string
+	}{
+		"mermaid stdout, json file":    {"mermaid", "json"},
+		"json stdout, mermaid file":    {"json", "mermaid"},
+		"mermaid stdout, mermaid file": {"mermaid", ""},
+		"mermaid stdout, html file":    {"mermaid", "html"},
+		"mermaid stdout, csv file":     {"mermaid", "csv"},
 	}
-	data, err := os.ReadFile(file)
-	if err != nil {
-		t.Fatalf("reading output file: %v", err)
-	}
-	got := mermaidEdges(t, string(data))
-	want := []string{
-		"role-a -> " + awsReadOnlyArn,
-		"role-a -> " + securityAuditArn,
-		"role-a -> " + roleAInlineID,
-		"role-b -> " + customerReadOnlyArn,
-		"role-b -> " + securityAuditArn,
-	}
-	if !slices.Equal(got, want) {
-		t.Errorf("edges = %q, want %q\n%s", got, want, data)
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			file := filepath.Join(t.TempDir(), "roles.out")
+			stdout := renderIamrolelistTo(t, tc.stdoutFormat, file, tc.fileFormat)
+			data, err := os.ReadFile(file)
+			if err != nil {
+				t.Fatalf("reading output file: %v", err)
+			}
+			fileFormat := tc.fileFormat
+			if fileFormat == "" {
+				fileFormat = tc.stdoutFormat
+			}
+			for dest, got := range map[string]struct{ format, out string }{
+				"stdout": {tc.stdoutFormat, stdout},
+				"file":   {fileFormat, string(data)},
+			} {
+				switch got.format {
+				case "mermaid":
+					if edges := mermaidEdges(t, got.out); !slices.Equal(edges, wantRolelistEdges) {
+						t.Errorf("%s edges = %q, want %q\n%s", dest, edges, wantRolelistEdges, got.out)
+					}
+				case "json":
+					assertRolelistJSON(t, got.out)
+				case "html", "csv":
+					if got.format == "html" && !strings.Contains(got.out, "<html") {
+						t.Errorf("%s is not HTML: %q", dest, got.out)
+					}
+					if got.format == "csv" && !strings.Contains(got.out, "\nName,Type,ARN,") {
+						t.Errorf("%s is not CSV: %q", dest, got.out)
+					}
+					for _, arn := range []string{awsReadOnlyArn, customerReadOnlyArn, securityAuditArn} {
+						if n := strings.Count(got.out, arn); n != 1 {
+							t.Errorf("%s contains %s %d times, want 1", dest, arn, n)
+						}
+					}
+				}
+			}
+		})
 	}
 }
 
@@ -209,19 +243,45 @@ func TestIamrolelist_SameNamedPolicies_DrawIO_T1656(t *testing.T) {
 		}
 	}
 	slices.Sort(edges)
-	want := []string{
-		"role-a -> " + awsReadOnlyArn,
-		"role-a -> " + securityAuditArn,
-		"role-a -> " + roleAInlineID,
-		"role-b -> " + customerReadOnlyArn,
-		"role-b -> " + securityAuditArn,
-	}
+	want := wantRolelistEdges
 	if !slices.Equal(edges, want) {
 		t.Errorf("edges = %q, want %q", edges, want)
 	}
 	for _, e := range edges {
 		if target := strings.SplitN(e, " -> ", 2)[1]; ids[target] == "" {
 			t.Errorf("edge %q targets no DrawioID", e)
+		}
+	}
+}
+
+// TestIamrolelist_MermaidStdoutHTMLAppend_T1656 verifies an appended HTML
+// file keeps its existing content and gains the table exactly once when
+// stdout is Mermaid.
+func TestIamrolelist_MermaidStdoutHTMLAppend_T1656(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "roles.html")
+	renderIamrolelistTo(t, "html", file, "html")
+
+	s := format.NewOutputSettings()
+	s.SetOutputFormat("mermaid")
+	s.OutputFile = file
+	s.OutputFileFormat = "html"
+	s.ShouldAppend = true
+	roles, policies := sameNamedRolelistFixture()
+	stdout := captureIAMRoleListStdout(t, func() { writeIamrolelist(roles, policies, s) })
+
+	if edges := mermaidEdges(t, stdout); !slices.Equal(edges, wantRolelistEdges) {
+		t.Errorf("stdout edges = %q, want %q", edges, wantRolelistEdges)
+	}
+	data, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatalf("reading output file: %v", err)
+	}
+	if n := strings.Count(string(data), "<html"); n != 1 {
+		t.Errorf("file has %d <html> elements, want 1", n)
+	}
+	for _, arn := range []string{awsReadOnlyArn, customerReadOnlyArn} {
+		if n := strings.Count(string(data), arn); n != 2 {
+			t.Errorf("file contains %s %d times, want 2 (original + appended)", arn, n)
 		}
 	}
 }
