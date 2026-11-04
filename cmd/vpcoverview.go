@@ -243,7 +243,7 @@ func writeVPCOverviewTables(tables []format.OutputArray, reportTitle string) err
 		fileFormat = fileSettings.OutputFormat
 	}
 	var existing []byte
-	if fileSettings.ShouldAppend && fileFormat == "html" {
+	if fileSettings.ShouldAppend && fileFormat == htmlOutputFormat {
 		data, err := os.ReadFile(fileSettings.OutputFile)
 		if err != nil && !errors.Is(err, fs.ErrNotExist) {
 			return fmt.Errorf("reading %s to append to it: %w", fileSettings.OutputFile, err)
@@ -266,7 +266,7 @@ func renderVPCOverviewFile(tables []format.OutputArray, fileFormat, reportTitle 
 		return json.Marshal(vpcOverviewSections(tables))
 	case "yaml":
 		return yaml.Marshal(vpcOverviewSections(tables))
-	case "html":
+	case htmlOutputFormat:
 		return renderVPCOverviewHTML(tables, reportTitle, existing)
 	default:
 		return renderVPCOverviewText(tables, fileFormat)

@@ -107,7 +107,7 @@ func writeIamrolelist(roles []helpers.IAMRole, policies map[string]helpers.IAMPo
 // produced, so html is built here (as go-output's toHTML does) and drawio
 // dispatches stdout as drawio, which writes the same file.
 func writeIamrolelistFileOnly(output format.OutputArray) {
-	if output.Settings.OutputFormat == "html" {
+	if output.Settings.OutputFormat == htmlOutputFormat {
 		page, err := iamrolelistHTML(output)
 		if err != nil {
 			log.Fatal(err.Error())

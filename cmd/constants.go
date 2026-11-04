@@ -31,6 +31,11 @@ const (
 	s3BucketARNDescription = "ARN of the S3 bucket"
 )
 
+// Output format constants
+const (
+	htmlOutputFormat = "html"
+)
+
 // Resource type constants
 const (
 	vpcResourceType = "vpc"
