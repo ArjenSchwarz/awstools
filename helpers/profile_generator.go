@@ -828,6 +828,17 @@ func (pg *ProfileGenerator) ResolveConflicts(conflicts []ProfileConflict) (*Conf
 		return nil, err
 	}
 
+	// Replacing a profile that has the proposed name is deliberate, so the first
+	// replace action for a name keeps it. A later replace action for the same
+	// name gets a suffix that avoids both existing profiles and names generated
+	// in this run, otherwise one role would overwrite the other (T-1646).
+	configFile, err := LoadAWSConfigFile(pg.outputFile)
+	if err != nil {
+		return nil, NewFileSystemError("failed to load AWS config file", err)
+	}
+	nameResolver := NewProfileNameConflictResolver(configFile.GetProfileNames())
+	replaceNames := make(map[string]bool)
+
 	for _, conflict := range conflicts {
 		var action ConflictAction
 		var err error
@@ -856,6 +867,15 @@ func (pg *ProfileGenerator) ResolveConflicts(conflicts []ProfileConflict) (*Conf
 			if err != nil {
 				return nil, err
 			}
+		}
+
+		if action.Action == ActionReplace {
+			if replaceNames[action.NewName] {
+				action.NewName = nameResolver.ResolveConflict(action.NewName)
+			} else {
+				nameResolver.Reserve(action.NewName)
+			}
+			replaceNames[action.NewName] = true
 		}
 
 		// Record the action taken
