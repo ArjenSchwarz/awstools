@@ -3,19 +3,23 @@ package cmd
 import (
 	"encoding/csv"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
 	"testing"
+
+	format "github.com/ArjenSchwarz/go-output"
 )
 
 // renderIamrolelist renders the fixture in the given format via the
 // production writer and returns stdout.
-func renderIamrolelist(t *testing.T, format string, withInline bool) string {
+func renderIamrolelist(t *testing.T, format string) string {
 	t.Helper()
 	configureOutput(t, format, "")
-	roles, policies := sameNamedRolelistFixture(withInline)
-	return captureStdout(t, func() { writeIamrolelist(roles, policies, "IAM Role overview") })
+	roles, policies := sameNamedRolelistFixture()
+	return captureIAMRoleListStdout(t, func() { writeIamrolelist(roles, policies, "IAM Role overview") })
 }
 
 // graphEdges parses DOT or Mermaid output into sorted "from -> to" label pairs.
@@ -45,7 +49,7 @@ func graphEdges(t *testing.T, out string, node, edge *regexp.Regexp) []string {
 // friendly names, expose the ARN, and list only the roles of that ARN.
 func TestIamrolelist_SameNamedPolicies_JSON_T1656(t *testing.T) {
 	var rows []map[string]any
-	out := renderIamrolelist(t, "json", true)
+	out := renderIamrolelist(t, "json")
 	if err := json.Unmarshal([]byte(out), &rows); err != nil {
 		t.Fatalf("invalid JSON %q: %v", out, err)
 	}
@@ -64,6 +68,7 @@ func TestIamrolelist_SameNamedPolicies_JSON_T1656(t *testing.T) {
 	}{
 		"AWS-managed":      {awsReadOnlyArn, "ReadOnlyAccess", "Attached Policy", []any{"role-a"}},
 		"customer-managed": {customerReadOnlyArn, "ReadOnlyAccess", "Attached Policy", []any{"role-b"}},
+		"shared policy":    {securityAuditArn, "SecurityAudit", "Attached Policy", []any{"role-a", "role-b"}},
 		"inline unchanged": {roleAInlineID, roleAInlineID, "Inline Policy", []any{"role-a"}},
 	}
 	for name, tc := range tests {
@@ -83,49 +88,94 @@ func TestIamrolelist_SameNamedPolicies_JSON_T1656(t *testing.T) {
 	if _, ok := byKey[roleAInlineID]["ARN"]; ok {
 		t.Errorf("inline policy row should have no ARN: %v", byKey[roleAInlineID])
 	}
-	if got := byKey["role-b"]["Policies"]; !slices.Equal(got.([]any), []any{"ReadOnlyAccess"}) {
-		t.Errorf("role-b Policies = %v, want [ReadOnlyAccess]", got)
+	got, _ := byKey["role-b"]["Policies"].([]any)
+	slices.SortFunc(got, func(a, b any) int { return strings.Compare(a.(string), b.(string)) })
+	if want := []any{"ReadOnlyAccess", "SecurityAudit"}; !slices.Equal(got, want) {
+		t.Errorf("role-b Policies = %v, want %v", got, want)
 	}
 }
 
 // TestIamrolelist_SameNamedPolicies_DOT_T1656 verifies each ARN is its own
 // node, linked only from its role.
 func TestIamrolelist_SameNamedPolicies_DOT_T1656(t *testing.T) {
-	out := renderIamrolelist(t, "dot", true)
+	out := renderIamrolelist(t, "dot")
 	got := graphEdges(t, out,
 		regexp.MustCompile(`(n\d+)\[label="([^"]*)"\]`),
 		regexp.MustCompile(`(n\d+)->(n\d+)`))
 	want := []string{
 		"role-a -> " + awsReadOnlyArn,
+		"role-a -> " + securityAuditArn,
 		"role-a -> " + roleAInlineID,
 		"role-b -> " + customerReadOnlyArn,
+		"role-b -> " + securityAuditArn,
 	}
 	if !slices.Equal(got, want) {
 		t.Errorf("edges = %q, want %q\n%s", got, want, out)
 	}
 }
 
-// TestIamrolelist_SameNamedPolicies_Mermaid_T1656 verifies each ARN is its
-// own node, linked only from its role. It uses one policy per role because
-// go-output v1.4.0 reuses Mermaid node IDs for sources with several edges.
+// TestIamrolelist_SameNamedPolicies_Mermaid_T1656 verifies each role and each
+// ARN is its own node and every role keeps its own edges, including roles
+// with several policies (go-output's own renderer reuses node IDs there).
 func TestIamrolelist_SameNamedPolicies_Mermaid_T1656(t *testing.T) {
-	out := renderIamrolelist(t, "mermaid", false)
-	got := graphEdges(t, out,
-		regexp.MustCompile(`(n\d+)\("([^"]*)"\)`),
-		regexp.MustCompile(`(n\d+) --> (n\d+)`))
+	out := renderIamrolelist(t, "mermaid")
+	got := mermaidEdges(t, out)
 	want := []string{
 		"role-a -> " + awsReadOnlyArn,
+		"role-a -> " + securityAuditArn,
+		"role-a -> " + roleAInlineID,
 		"role-b -> " + customerReadOnlyArn,
+		"role-b -> " + securityAuditArn,
 	}
 	if !slices.Equal(got, want) {
 		t.Errorf("edges = %q, want %q\n%s", got, want, out)
+	}
+}
+
+func mermaidEdges(t *testing.T, out string) []string {
+	t.Helper()
+	return graphEdges(t, out,
+		regexp.MustCompile(`(n\d+)\("([^"]*)"\)`),
+		regexp.MustCompile(`(n\d+) --> (n\d+)`))
+}
+
+// TestIamrolelist_MermaidFile_T1656 verifies a Mermaid file destination uses
+// the same per-role rendering while stdout keeps its own format.
+func TestIamrolelist_MermaidFile_T1656(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "roles.mmd")
+	settings := format.NewOutputSettings()
+	settings.SetOutputFormat("json")
+	settings.OutputFile = file
+	settings.OutputFileFormat = "mermaid"
+	output := format.OutputArray{Keys: []string{nameColumn}, Settings: settings}
+	output.AddContents(map[string]any{nameColumn: "role-a"})
+	roles, policies := sameNamedRolelistFixture()
+	stdout := captureIAMRoleListStdout(t, func() { writeIamrolelistOutput(output, roles, policies) })
+
+	if !strings.HasPrefix(stdout, "[{") {
+		t.Errorf("stdout is not JSON: %q", stdout)
+	}
+	data, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatalf("reading output file: %v", err)
+	}
+	got := mermaidEdges(t, string(data))
+	want := []string{
+		"role-a -> " + awsReadOnlyArn,
+		"role-a -> " + securityAuditArn,
+		"role-a -> " + roleAInlineID,
+		"role-b -> " + customerReadOnlyArn,
+		"role-b -> " + securityAuditArn,
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("edges = %q, want %q\n%s", got, want, data)
 	}
 }
 
 // TestIamrolelist_SameNamedPolicies_DrawIO_T1656 verifies Draw.io connects
 // roles to policies by DrawioID (the ARN) while labels stay friendly.
 func TestIamrolelist_SameNamedPolicies_DrawIO_T1656(t *testing.T) {
-	out := renderIamrolelist(t, "drawio", true)
+	out := renderIamrolelist(t, "drawio")
 	if !strings.Contains(out, `# connect: {"from":"Policies","to":"DrawioID"`) {
 		t.Fatalf("connection does not target DrawioID:\n%s", out)
 	}
@@ -161,8 +211,10 @@ func TestIamrolelist_SameNamedPolicies_DrawIO_T1656(t *testing.T) {
 	slices.Sort(edges)
 	want := []string{
 		"role-a -> " + awsReadOnlyArn,
+		"role-a -> " + securityAuditArn,
 		"role-a -> " + roleAInlineID,
 		"role-b -> " + customerReadOnlyArn,
+		"role-b -> " + securityAuditArn,
 	}
 	if !slices.Equal(edges, want) {
 		t.Errorf("edges = %q, want %q", edges, want)

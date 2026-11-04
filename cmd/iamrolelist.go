@@ -15,10 +15,14 @@
 package cmd
 
 import (
+	"log"
+	"maps"
+	"slices"
 	"strings"
 
 	format "github.com/ArjenSchwarz/go-output"
 	"github.com/ArjenSchwarz/go-output/drawio"
+	"github.com/ArjenSchwarz/go-output/mermaid"
 
 	"github.com/ArjenSchwarz/awstools/config"
 	"github.com/ArjenSchwarz/awstools/helpers"
@@ -113,7 +117,69 @@ func writeIamrolelist(roles []helpers.IAMRole, policies map[string]helpers.IAMPo
 		holder := format.OutputHolder{Contents: content}
 		output.AddHolder(holder)
 	}
-	output.Write()
+	writeIamrolelistOutput(output, roles, policies)
+}
+
+// writeIamrolelistOutput writes the output, rendering Mermaid destinations
+// with iamrolelistMermaid. go-output's own Mermaid renderer re-adds a source
+// node for every edge and reuses node IDs, which merges roles that have
+// several policies (T-1656). go-output cannot write only the file, so Mermaid
+// stdout with a different file format still uses go-output.
+func writeIamrolelistOutput(output format.OutputArray, roles []helpers.IAMRole, policies map[string]helpers.IAMPolicyDocument) {
+	s := output.Settings
+	fileFormat := s.OutputFileFormat
+	if fileFormat == "" {
+		fileFormat = s.OutputFormat
+	}
+	stdoutMermaid := s.OutputFormat == "mermaid"
+	fileMermaid := s.OutputFile != "" && fileFormat == "mermaid"
+	if stdoutMermaid && s.OutputFile != "" && !fileMermaid {
+		output.Write()
+		return
+	}
+	if !stdoutMermaid && !fileMermaid {
+		output.Write()
+		return
+	}
+	chart := iamrolelistMermaid(roles, policies, s.MermaidSettings)
+	if stdoutMermaid {
+		printIamrolelistBytes(chart, "", s.S3Bucket)
+	} else {
+		file := s.OutputFile
+		s.OutputFile = ""
+		output.Write()
+		s.OutputFile = file
+	}
+	if fileMermaid {
+		printIamrolelistBytes(chart, s.OutputFile, s.S3Bucket)
+	}
+}
+
+func printIamrolelistBytes(contents []byte, file string, bucket format.S3Output) {
+	if err := format.PrintByteSlice(contents, file, bucket); err != nil {
+		log.Fatal(err.Error())
+	}
+}
+
+// iamrolelistMermaid renders a flowchart with one node per role and per
+// policy ID, and an edge from each role to each of its policies.
+func iamrolelistMermaid(roles []helpers.IAMRole, policies map[string]helpers.IAMPolicyDocument, settings *mermaid.Settings) []byte {
+	chart := mermaid.NewFlowchart(settings)
+	for _, role := range roles {
+		chart.AddBasicNode(role.Name)
+	}
+	policyIDs := slices.Sorted(maps.Keys(policies))
+	for _, id := range policyIDs {
+		chart.AddBasicNode(id)
+	}
+	for _, role := range roles {
+		ids := role.GetPolicyIDs()
+		slices.Sort(ids)
+		for _, id := range ids {
+			chart.AddEdgeByNames(role.Name, id)
+		}
+	}
+	return []byte(chart.RenderString())
 }
 
 // createIamrolelistDrawIOHeader creates and configures the draw.io header settings

@@ -59,4 +59,4 @@ allowances.
 - DOT/Mermaid use the From column (`Name`) as node identity and label, so attached policy nodes are labelled with the ARN. Draw.io connects `Policies` to `DrawioID`, so labels stay friendly.
 - A row missing the To column renders as `%!s(<nil>)` and creates an edge to a missing node (panics in Mermaid), so policy rows set `Policies` to `""`.
 - Mermaid joins `[]string` with `", "` but splits on `","`, so the role link column is passed pre-joined with `","`.
-- Not worked around: Mermaid `AddBasicNode` reuses node IDs (`len(map)+1`) when a source node has several edges, so roles with multiple policies can share an ID. Tests use one policy per role for Mermaid.
+- Mermaid `AddBasicNode` reuses node IDs (`len(map)+1`) when a source has several edges, merging roles. `writeIamrolelistOutput` renders Mermaid stdout/file destinations itself via `mermaid.Flowchart`, adding each node once. go-output cannot write only the file, so Mermaid stdout with a different file format still falls back to go-output's renderer.
