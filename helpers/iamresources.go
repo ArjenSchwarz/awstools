@@ -57,7 +57,7 @@ type IAMRole struct {
 	Path             string
 	AssumeRolePolicy IAMPolicyDocument
 	InlinePolicies   map[string]*IAMPolicyDocument
-	AttachedPolicies map[string]*IAMPolicyDocument
+	AttachedPolicies map[string]*IAMPolicyDocument // keyed by policy ARN
 	Role             *types.Role
 	Type             string
 	Verbose          bool
@@ -140,8 +140,8 @@ func (role IAMRole) GetPolicyNames() []string {
 		policy := fmt.Sprintf("%s (inline for %s)", policyname, role.Name)
 		policynames = append(policynames, policy)
 	}
-	for policyname := range role.AttachedPolicies {
-		policynames = append(policynames, policyname)
+	for _, policy := range role.AttachedPolicies {
+		policynames = append(policynames, policy.Name)
 	}
 	return policynames
 }

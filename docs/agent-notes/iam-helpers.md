@@ -20,7 +20,7 @@ Affected functions: `getUserList`, `GetPoliciesMap`, `GetUserPoliciesMapForUser`
 ## Caching
 
 - `cachedUsers` (package-level var) — caches the full user list from `getUserList()`. Must be reset to `nil` in tests.
-- `cachedIAMPolicyDocuments` (package-level map) — caches IAM policy documents by name to avoid re-fetching.
+- `cachedIAMPolicyDocuments` (package-level map) — caches role policy documents. Inline entries use `<role>/<policy>`; attached entries use the policy ARN, because attached policy names are not unique (T-1656). `IAMRole.AttachedPolicies` and the attached entries in `GetRolesAndPolicies` output are also keyed by ARN — use `IAMPolicyDocument.Name` for display.
 
 ## Testing
 

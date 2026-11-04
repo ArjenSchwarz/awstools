@@ -64,11 +64,15 @@ func iamrolelist(_ *cobra.Command, _ []string) {
 		holder := format.OutputHolder{Contents: content}
 		output.AddHolder(holder)
 	}
-	for policyname, policy := range policies {
+	for policykey, policy := range policies {
 		content := make(map[string]any)
-		content[nameColumn] = policyname
+		// Attached policies are keyed by ARN; show their name instead.
+		content[nameColumn] = policykey
+		if policy.Type == helpers.IAMPolicyTypeAttached {
+			content[nameColumn] = policy.Name
+		}
 		if settings.IsDrawIO() {
-			content["DrawioID"] = policyname
+			content["DrawioID"] = policykey
 			content[imageColumn] = drawio.AWSShape("Security Identity Compliance", "Permissions")
 		}
 		content[typeColumn] = policy.Type

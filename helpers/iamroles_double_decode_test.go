@@ -63,8 +63,9 @@ func (m *doubleDecodeMockIAMClient) GetPolicyVersion(_ context.Context, _ *iam.G
 // silently corrupts "%2F" into "/". After the fix the values survive intact.
 func TestGetAttachedPoliciesForRole_NoDoubleDecode(t *testing.T) {
 	// Ensure no stale cache entry interferes with this test.
-	delete(cachedIAMPolicyDocuments, "RegressionPolicy")
-	t.Cleanup(func() { delete(cachedIAMPolicyDocuments, "RegressionPolicy") })
+	const policyArn = "arn:aws:iam::123456789012:policy/RegressionPolicy"
+	delete(cachedIAMPolicyDocuments, policyArn)
+	t.Cleanup(func() { delete(cachedIAMPolicyDocuments, policyArn) })
 
 	// Decoded JSON deliberately contains literal "%2F" and "%ZZ" as a Resource
 	// value. "%ZZ" is an invalid percent-escape, so a second QueryUnescape
@@ -75,9 +76,9 @@ func TestGetAttachedPoliciesForRole_NoDoubleDecode(t *testing.T) {
 
 	policies := getAttachedPoliciesForRole("regression-role", true, mock)
 
-	policy, ok := policies["RegressionPolicy"]
+	policy, ok := policies[policyArn]
 	if !ok {
-		t.Fatalf("expected attached policy %q to be present", "RegressionPolicy")
+		t.Fatalf("expected attached policy %q to be present", policyArn)
 	}
 	if len(policy.Statement) != 1 {
 		t.Fatalf("expected exactly one statement, got %d", len(policy.Statement))
