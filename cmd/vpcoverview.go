@@ -1,6 +1,9 @@
 package cmd
 
 import (
+	"fmt"
+	"os"
+
 	"github.com/ArjenSchwarz/awstools/config"
 	"github.com/ArjenSchwarz/awstools/helpers"
 	format "github.com/ArjenSchwarz/go-output"
@@ -19,8 +22,12 @@ The command shows separate tables for each VPC, displaying:
 - Detailed IP address usage per subnet
 - Summary statistics
 
-Use --vpc to filter results to a specific VPC.`,
-	Run: vpcOverview,
+Use --vpc to filter results to a specific VPC. When --file is used, all of
+these tables are saved to the file, not only the summary.`,
+	RunE: vpcOverview,
+	// Execute reports returned errors; avoid duplicate errors and usage from Cobra.
+	SilenceErrors: true,
+	SilenceUsage:  true,
 }
 
 var vpcIDFilter string
@@ -35,7 +42,7 @@ func getResourceDisplayName(resourceID string, tags []types.Tag) string {
 	return helpers.GetResourceDisplayNameWithGlobalLookup(resourceID, tags, getName)
 }
 
-func vpcOverview(_ *cobra.Command, _ []string) {
+func vpcOverview(_ *cobra.Command, _ []string) error {
 	awsConfig := config.DefaultAwsConfig(*settings)
 	accountName := getName(helpers.GetAccountID(awsConfig.StsClient()))
 
@@ -47,17 +54,30 @@ func vpcOverview(_ *cobra.Command, _ []string) {
 	// tables than fit in a single response still render correctly (T-805).
 	routeTables := helpers.GetAllRouteTables(ec2Client)
 
+	tables := buildVPCOverviewTables(overview.VPCs, routeTables, accountName, vpcIDFilter)
+	if err := writeOutputTables(tables); err != nil {
+		return fmt.Errorf("writing VPC overview: %w", err)
+	}
+	return nil
+}
+
+// buildVPCOverviewTables returns every table of the VPC overview report in
+// display order: one subnet overview per VPC, one IP details table per subnet
+// with IP details, and the usage summary.
+func buildVPCOverviewTables(vpcs []helpers.VPCUsageInfo, routeTables []types.RouteTable, accountName string, vpcFilter string) []format.OutputArray {
 	// Filter VPCs if vpc flag is provided
-	filteredVPCs := overview.VPCs
-	if vpcIDFilter != "" {
+	filteredVPCs := vpcs
+	if vpcFilter != "" {
 		filteredVPCs = []helpers.VPCUsageInfo{}
-		for _, vpc := range overview.VPCs {
-			if vpc.ID == vpcIDFilter {
+		for _, vpc := range vpcs {
+			if vpc.ID == vpcFilter {
 				filteredVPCs = append(filteredVPCs, vpc)
 				break
 			}
 		}
 	}
+
+	var tables []format.OutputArray
 
 	// Create separate subnet overview tables for each VPC
 	subnetKeys := []string{subnetColumn, cidrColumn, typeColumn, routeTableColumn, routesColumn, "Total IPs", "Available IPs", "Used IPs"}
@@ -94,7 +114,7 @@ func vpcOverview(_ *cobra.Command, _ []string) {
 			holder := format.OutputHolder{Contents: content}
 			subnetOutput.AddHolder(holder)
 		}
-		subnetOutput.Write()
+		tables = append(tables, subnetOutput)
 	}
 
 	// Individual tables for each subnet's IP details
@@ -121,7 +141,7 @@ func vpcOverview(_ *cobra.Command, _ []string) {
 					ipHolder := format.OutputHolder{Contents: ipContent}
 					ipOutput.AddHolder(ipHolder)
 				}
-				ipOutput.Write()
+				tables = append(tables, ipOutput)
 			}
 		}
 	}
@@ -138,7 +158,7 @@ func vpcOverview(_ *cobra.Command, _ []string) {
 	filteredSummary := helpers.SummarizeVPCUsage(filteredVPCs)
 
 	// Set title based on filter
-	if vpcIDFilter != "" {
+	if vpcFilter != "" {
 		vpcDisplay := ""
 		if len(filteredVPCs) > 0 {
 			vpcDisplay = getResourceDisplayName(filteredVPCs[0].ID, filteredVPCs[0].Tags)
@@ -169,5 +189,83 @@ func vpcOverview(_ *cobra.Command, _ []string) {
 		summaryHolder := format.OutputHolder{Contents: summaryContent}
 		summaryOutput.AddHolder(summaryHolder)
 	}
-	summaryOutput.Write()
+	tables = append(tables, summaryOutput)
+
+	return tables
+}
+
+// writeOutputTables writes several independent tables to stdout and, when
+// --file is set, saves all of them to that file (T-1536).
+//
+// go-output v1.4.0 truncates the output file on every Write() call, so writing
+// each table with --file set would leave only the last table in the file. The
+// tables are therefore first written to stdout without a file, then rendered
+// again in the file format and saved with a single PrintByteSlice call. The
+// file holds the same content as the terminal output, in the file format.
+func writeOutputTables(tables []format.OutputArray) error {
+	if len(tables) == 0 {
+		return nil
+	}
+	fileSettings := *tables[0].Settings
+	for _, table := range tables {
+		withoutFile(table).Write()
+	}
+	if fileSettings.OutputFile == "" {
+		return nil
+	}
+
+	fileFormat := fileSettings.OutputFileFormat
+	if fileFormat == "" {
+		fileFormat = fileSettings.OutputFormat
+	}
+	contents, err := captureStdout(func() {
+		for _, table := range tables {
+			table = withoutFile(table)
+			table.Settings.OutputFormat = fileFormat
+			table.Write()
+		}
+	})
+	if err != nil {
+		return err
+	}
+	return format.PrintByteSlice(contents, fileSettings.OutputFile, fileSettings.S3Bucket)
+}
+
+// withoutFile returns a copy of the table whose settings render only to
+// stdout. Append is cleared as well because go-output reads the output file
+// when appending HTML, which would fail without a file.
+func withoutFile(table format.OutputArray) format.OutputArray {
+	tableSettings := *table.Settings
+	tableSettings.OutputFile = ""
+	tableSettings.OutputFileFormat = ""
+	tableSettings.ShouldAppend = false
+	table.Settings = &tableSettings
+	return table
+}
+
+// captureStdout returns everything render writes to os.Stdout. go-output
+// v1.4.0 only exposes rendered tables through stdout or a file it truncates on
+// every call, so this is how several tables can be combined into one file.
+// A temporary file is used instead of a pipe so large reports cannot block.
+func captureStdout(render func()) ([]byte, error) {
+	tmp, err := os.CreateTemp("", "awstools-output-*")
+	if err != nil {
+		return nil, fmt.Errorf("creating temporary output file: %w", err)
+	}
+	defer func() {
+		_ = tmp.Close()
+		_ = os.Remove(tmp.Name())
+	}()
+
+	original := os.Stdout
+	os.Stdout = tmp
+	defer func() { os.Stdout = original }()
+	render()
+	os.Stdout = original
+
+	contents, err := os.ReadFile(tmp.Name())
+	if err != nil {
+		return nil, fmt.Errorf("reading temporary output file: %w", err)
+	}
+	return contents, nil
 }
