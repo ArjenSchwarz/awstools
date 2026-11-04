@@ -104,7 +104,7 @@ func createSSOPermissionsetsDrawIOContents(instance helpers.SSOInstance, output 
 	rootchildren := []string{}
 	for _, permissionset := range instance.PermissionSets {
 		if filteredSSOPermissionSet(permissionset) {
-			rootchildren = append(rootchildren, permissionset.Name)
+			rootchildren = append(rootchildren, getName(permissionset.Name))
 		}
 	}
 	content[childrenColumn] = rootchildren

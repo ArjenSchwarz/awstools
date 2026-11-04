@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/ArjenSchwarz/awstools/helpers"
@@ -120,6 +122,31 @@ func TestCreateSSOPermissionsetsDrawIOContents_RootChildrenFollowFilter(t *testi
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			isolateSSOOverviewTest(t, tc.resourceID)
+			instance := newSSOOverviewTestInstance()
+			output := format.OutputArray{Settings: format.NewOutputSettings()}
+			createSSOPermissionsetsDrawIOContents(instance, &output)
+			assertRootEdgesMatchNodes(t, output, instance.Arn, tc.want)
+		})
+	}
+}
+
+func TestCreateSSOPermissionsetsDrawIOContents_RootChildrenUseNameFile(t *testing.T) {
+	nameFile := filepath.Join(t.TempDir(), "names.json")
+	names := `{"Admin": "Administrators", "ReadOnly": "Read Only Access"}`
+	if err := os.WriteFile(nameFile, []byte(names), 0o600); err != nil {
+		t.Fatalf("writing name file: %v", err)
+	}
+	tests := map[string]struct {
+		resourceID string
+		want       []string
+	}{
+		"no filter":      {resourceID: "", want: []string{"Administrators", "Read Only Access"}},
+		"filter by name": {resourceID: "ReadOnly", want: []string{"Read Only Access"}},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			isolateSSOOverviewTest(t, tc.resourceID)
+			viper.Set("output.namefile", nameFile)
 			instance := newSSOOverviewTestInstance()
 			output := format.OutputArray{Settings: format.NewOutputSettings()}
 			createSSOPermissionsetsDrawIOContents(instance, &output)
