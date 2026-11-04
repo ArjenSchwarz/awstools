@@ -32,3 +32,5 @@ IAM client was removed as a dependency in T-481 since the alias lookup now uses 
 ## Profile Generator Integration
 
 `ProfileGenerator` (`helpers/profile_generator.go`) creates a `RoleDiscovery` instance in its constructor and uses it to discover roles, which are then converted to `GeneratedProfile` entries using a naming pattern (e.g., `{account_name}-{role_name}` or `{account_alias}-{role_name}`).
+
+The constructor builds the SSO client from the ambient AWS config, which may have no region or the wrong one. `DiscoverRoles` rebuilds it with the template profile's `sso_region` (`useSSORegion`) before any portal call (T-1468).
