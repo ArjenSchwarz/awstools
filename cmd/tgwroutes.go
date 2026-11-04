@@ -86,7 +86,7 @@ func tgwroutes(_ *cobra.Command, _ []string) {
 		content[nameColumn] = getName(resourceid)
 		if settings.IsDrawIO() {
 			// Use raw ID for DrawIO to enable proper connection matching
-			content[targetGatewayColumn] = resourceInfo.RouteTableID
+			content[targetGatewayColumn] = graphRouteTableID(resourceInfo, tgwrts)
 		} else {
 			// Use composite name for other output formats
 			if getName(resourceInfo.RouteTableID) != resourceInfo.RouteTableID && getName(resourceInfo.RouteTableID) != "" {
@@ -284,6 +284,18 @@ func filterGateway(gateways []helpers.TransitGateway) (map[string]attachedResour
 		}
 	}
 	return attachedresources, tgwrts
+}
+
+// graphRouteTableID returns the route table a resource is associated with
+// for graph output, or "" when that route table is not emitted. A resource
+// can be kept as a destination of a retained route table while its own
+// association points at a route table removed by the --resource-id filter;
+// linking to it would create an edge to a missing node.
+func graphRouteTableID(info attachedResourceInfo, tgwrts map[string][]string) string {
+	if _, ok := tgwrts[info.RouteTableID]; !ok {
+		return ""
+	}
+	return info.RouteTableID
 }
 
 func createTgwRoutesDrawIOHeader() drawio.Header {

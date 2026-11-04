@@ -154,8 +154,9 @@ func TestFilterGatewayVPCFilterKeepsDestinations(t *testing.T) {
 		}
 	}
 	// vpc-app is associated with tgw-rtb-app, which routes to vpc-shared and
-	// vpc-db. No route table routes to vpc-app, so it only matches as a source.
-	// tgw-rtb-other is unrelated to vpc-app and vpc-db.
+	// vpc-db. vpc-shared is associated with tgw-rtb-shared and vpc-other with
+	// tgw-rtb-other; neither of those route tables routes to vpc-app, so for a
+	// vpc-app filter vpc-app only matches as a source and both are removed.
 	gateways := []helpers.TransitGateway{
 		{
 			ID: "tgw-test",
@@ -165,10 +166,15 @@ func TestFilterGatewayVPCFilterKeepsDestinations(t *testing.T) {
 					Routes:            []helpers.TransitGatewayRoute{route("vpc-shared"), route("vpc-db")},
 					SourceAttachments: []helpers.TransitGatewayAttachment{source("vpc-app")},
 				},
+				"tgw-rtb-shared": {
+					ID:                "tgw-rtb-shared",
+					Routes:            []helpers.TransitGatewayRoute{route("vpc-other")},
+					SourceAttachments: []helpers.TransitGatewayAttachment{source("vpc-shared")},
+				},
 				"tgw-rtb-other": {
 					ID:                "tgw-rtb-other",
 					Routes:            []helpers.TransitGatewayRoute{route("vpc-shared")},
-					SourceAttachments: []helpers.TransitGatewayAttachment{source("vpc-other"), source("vpc-shared")},
+					SourceAttachments: []helpers.TransitGatewayAttachment{source("vpc-other")},
 				},
 			},
 		},
@@ -178,16 +184,23 @@ func TestFilterGatewayVPCFilterKeepsDestinations(t *testing.T) {
 		resourceID      string
 		wantRouteTables map[string][]string
 		wantResources   []string
+		// wantInbound maps each emitted resource to its graph association
+		// (Target Gateway column in Draw.io output).
+		wantInbound map[string]string
 	}{
 		"source-only match keeps destination resources": {
 			resourceID:      "vpc-app",
 			wantRouteTables: map[string][]string{"tgw-rtb-app": {"vpc-shared", "vpc-db"}},
 			wantResources:   []string{"vpc-app", "vpc-db", "vpc-shared"},
+			// vpc-shared is associated with the filtered-out tgw-rtb-shared,
+			// so it has no inbound graph edge.
+			wantInbound: map[string]string{"vpc-app": "tgw-rtb-app", "vpc-db": "", "vpc-shared": ""},
 		},
 		"destination match keeps only requested destination and its sources": {
 			resourceID:      "vpc-db",
 			wantRouteTables: map[string][]string{"tgw-rtb-app": {"vpc-db"}},
 			wantResources:   []string{"vpc-app", "vpc-db"},
+			wantInbound:     map[string]string{"vpc-app": "tgw-rtb-app", "vpc-db": ""},
 		},
 	}
 
@@ -207,11 +220,22 @@ func TestFilterGatewayVPCFilterKeepsDestinations(t *testing.T) {
 			slices.Sort(gotResources)
 			assert.Equal(t, tc.wantResources, gotResources)
 
+			// Outbound edges: route table -> destination resource.
 			for rt, destinations := range tgwrts {
 				for _, destination := range destinations {
 					assert.Containsf(t, attachedresources, destination, "route table %s points at %s, which is not emitted", rt, destination)
 				}
 			}
+			// Inbound edges: resource -> associated route table.
+			gotInbound := make(map[string]string, len(attachedresources))
+			for id, info := range attachedresources {
+				rt := graphRouteTableID(info, tgwrts)
+				gotInbound[id] = rt
+				if rt != "" {
+					assert.Containsf(t, tgwrts, rt, "resource %s is associated with %s, which is not emitted", id, rt)
+				}
+			}
+			assert.Equal(t, tc.wantInbound, gotInbound)
 		})
 	}
 }
