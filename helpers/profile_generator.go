@@ -202,6 +202,12 @@ func (pg *ProfileGenerator) initializeConflictDetector() error {
 	// Create conflict detector
 	pg.conflictDetector = NewProfileConflictDetector(configFile, namingPattern)
 
+	// Use the template profile's region so proposed names match the names
+	// generation will create (needed for patterns containing {region}).
+	if templateProfile, exists := configFile.GetProfile(pg.templateProfile); exists {
+		pg.conflictDetector.SetRegion(templateProfile.Region)
+	}
+
 	return nil
 }
 

@@ -57,6 +57,7 @@ type ProfileConflictDetector struct {
 	logger             Logger                        // Logger for diagnostic messages
 	profileIndex       *ProfileLookupIndex           // Efficient profile lookup index
 	resolvedSSOConfigs map[string]*ResolvedSSOConfig // Profile name -> resolved SSO config cache
+	region             string                        // Region used for {region} in proposed names (from the template profile)
 }
 
 // NewProfileConflictDetector creates a new profile conflict detector with optimized
@@ -108,6 +109,13 @@ func (pcd *ProfileConflictDetector) SetLogger(logger Logger) {
 	pcd.logger = logger
 }
 
+// SetRegion sets the region used to fill the {region} placeholder when
+// generating proposed profile names. It should match the template profile's
+// region so detection proposes the same names that generation will create.
+func (pcd *ProfileConflictDetector) SetRegion(region string) {
+	pcd.region = region
+}
+
 // preResolveSSO pre-resolves and caches SSO configurations for all profiles
 func (pcd *ProfileConflictDetector) preResolveSSO() {
 	for profileName, profile := range pcd.configFile.Profiles {
@@ -146,9 +154,9 @@ func (pcd *ProfileConflictDetector) preResolveSSO() {
 // - Uses pre-built indexes and caches for efficient profile lookups
 //
 // Error Handling:
-// - Individual role analysis failures are logged as warnings and skipped
-// - Only critical errors (e.g., invalid input) cause the method to fail
-// - Partial results are returned even if some roles fail analysis
+//   - If any role cannot be analysed, the method returns that error. A failed
+//     analysis is not proof that the role has no conflict, so callers must not
+//     treat the role as safe to generate.
 //
 // Conflict Types Detected:
 // - Same Role: Existing profile points to the same AWS role
@@ -177,9 +185,7 @@ func (pcd *ProfileConflictDetector) DetectConflicts(discoveredRoles []Discovered
 	for _, role := range discoveredRoles {
 		conflict, err := pcd.AnalyzeRole(role)
 		if err != nil {
-			pcd.logger.Printf("Warning: failed to analyze role %s in account %s: %v",
-				role.RoleName, role.AccountID, err)
-			continue
+			return nil, err
 		}
 
 		if conflict != nil {
@@ -240,7 +246,7 @@ func (pcd *ProfileConflictDetector) AnalyzeRole(role DiscoveredRole) (*ProfileCo
 		role.AccountName,
 		role.AccountAlias,
 		role.RoleName,
-		"", // Region will be filled from template profile during actual generation
+		pcd.region,
 	)
 	if err != nil {
 		return nil, NewValidationError("failed to generate profile name", err).
