@@ -285,3 +285,26 @@ func TestIamrolelist_MermaidStdoutHTMLAppend_T1656(t *testing.T) {
 		}
 	}
 }
+
+// TestIamrolelist_HTMLStdoutMermaidFileAppend_T1656 verifies HTML stdout
+// with an appended Mermaid file renders both without reading a "" file.
+func TestIamrolelist_HTMLStdoutMermaidFileAppend_T1656(t *testing.T) {
+	s := format.NewOutputSettings()
+	s.SetOutputFormat("html")
+	s.OutputFile = filepath.Join(t.TempDir(), "roles.mmd")
+	s.OutputFileFormat = "mermaid"
+	s.ShouldAppend = true
+	roles, policies := sameNamedRolelistFixture()
+	stdout := captureIAMRoleListStdout(t, func() { writeIamrolelist(roles, policies, s) })
+
+	if !strings.Contains(stdout, "<html") || !strings.Contains(stdout, customerReadOnlyArn) {
+		t.Errorf("stdout is not the HTML report: %q", stdout)
+	}
+	data, err := os.ReadFile(s.OutputFile)
+	if err != nil {
+		t.Fatalf("reading output file: %v", err)
+	}
+	if edges := mermaidEdges(t, string(data)); !slices.Equal(edges, wantRolelistEdges) {
+		t.Errorf("file edges = %q, want %q", edges, wantRolelistEdges)
+	}
+}
