@@ -1019,6 +1019,9 @@ type IPAddressInfo struct {
 	UsageType      string `json:"usage_type"`
 	AttachmentInfo string `json:"attachment_info"`
 	PublicIP       string `json:"public_ip,omitempty"`
+	// EKSCluster is the EKS cluster named by the aws:eks:cluster-name tag on
+	// the ENI or its attached EC2 instance. Empty when there is no such tag.
+	EKSCluster string `json:"eks_cluster,omitempty"`
 }
 
 // VPCUsageSummary contains aggregate VPC usage statistics
@@ -1424,7 +1427,7 @@ func SummarizeVPCUsage(vpcs []VPCUsageInfo) VPCUsageSummary {
 			summary.AvailableIPs = saturatingAdd(summary.AvailableIPs, subnet.AvailableIPs)
 
 			for _, ipDetail := range subnet.IPDetails {
-				if ipDetail.UsageType == "RESERVED BY AWS" {
+				if ipDetail.UsageType == awsReservedUsageType {
 					summary.AWSReservedIPs++
 				} else {
 					summary.ServiceIPs++
@@ -1433,6 +1436,56 @@ func SummarizeVPCUsage(vpcs []VPCUsageInfo) VPCUsageSummary {
 		}
 	}
 	return summary
+}
+
+// awsReservedUsageType is the UsageType of the five addresses AWS reserves in
+// every subnet.
+const awsReservedUsageType = "RESERVED BY AWS"
+
+// eksCategory is the IP allocation category for addresses on EKS ENIs.
+const eksCategory = "EKS"
+
+// IPAllocationCount is the number of IP addresses in a subnet that are
+// allocated to one service category.
+type IPAllocationCount struct {
+	Category string
+	IPs      int
+}
+
+// IPAllocationCategory returns the service category an allocated address is
+// counted under in the IP allocation summary, and false for AWS-reserved
+// addresses, which are not service allocations. Addresses whose ENI or
+// instance carries the aws:eks:cluster-name tag count as EKS; every other
+// address uses its usage type, so EC2 instances without the tag stay
+// "EC2 Instance".
+func IPAllocationCategory(ip IPAddressInfo) (string, bool) {
+	if ip.UsageType == awsReservedUsageType {
+		return "", false
+	}
+	if ip.EKSCluster != "" {
+		return eksCategory, true
+	}
+	return ip.UsageType, true
+}
+
+// SummarizeSubnetIPAllocations counts a subnet's allocated IP addresses per
+// service category, sorted by category name. It counts addresses, not ENIs or
+// instances, so an ENI with secondary private IPs contributes each address.
+// Only the IPv4 addresses in IPDetails are covered; AWS-reserved addresses are
+// excluded.
+func SummarizeSubnetIPAllocations(subnet SubnetUsageInfo) []IPAllocationCount {
+	counts := make(map[string]int)
+	for _, ip := range subnet.IPDetails {
+		if category, ok := IPAllocationCategory(ip); ok {
+			counts[category]++
+		}
+	}
+	result := make([]IPAllocationCount, 0, len(counts))
+	for category, count := range counts {
+		result = append(result, IPAllocationCount{Category: category, IPs: count})
+	}
+	slices.SortFunc(result, func(a, b IPAllocationCount) int { return strings.Compare(a.Category, b.Category) })
+	return result
 }
 
 // sortIPAddresses sorts IP addresses in ascending numerical order
@@ -1513,6 +1566,7 @@ func mapNetworkInterfacesToIPs(networkInterfaces []types.NetworkInterface, subne
 						IPAddress:      *privateIP.PrivateIpAddress,
 						UsageType:      getENIUsageTypeOptimized(eni, cache),
 						AttachmentInfo: getENIAttachmentDetailsOptimized(eni, cache),
+						EKSCluster:     eniEKSClusterName(eni, cache),
 					}
 
 					// Add public IP if present
@@ -1749,7 +1803,7 @@ func analyzeSubnetIPUsage(subnet types.Subnet, networkInterfaces []types.Network
 		if awsUsage, isReserved := reservedIPs[ipStr]; isReserved {
 			ipDetails = append(ipDetails, IPAddressInfo{
 				IPAddress:      ipStr,
-				UsageType:      "RESERVED BY AWS",
+				UsageType:      awsReservedUsageType,
 				AttachmentInfo: awsUsage,
 			})
 			usedCount++
@@ -1786,6 +1840,11 @@ type ENILookupCache struct {
 	NATGateways      map[string]*types.NatGateway  // VPC ID -> NAT gateways in that VPC
 	EndpointsByENI   map[string]*types.VpcEndpoint // ENI ID -> VPC endpoint
 	NATGatewaysByENI map[string]*types.NatGateway  // ENI ID -> NAT gateway
+
+	// EKSClusterNames maps instance IDs to the value of their
+	// aws:eks:cluster-name tag, read from the same DescribeInstances responses
+	// as InstanceNames. Instances without the tag have no entry.
+	EKSClusterNames map[string]string
 }
 
 // NewENILookupCache creates and populates a cache with all required AWS resource data
@@ -1965,9 +2024,48 @@ func (cache *ENILookupCache) extractInstanceNames(resp *ec2.DescribeInstancesOut
 		for _, instance := range reservation.Instances {
 			if instance.InstanceId != nil {
 				cache.InstanceNames[*instance.InstanceId] = getNameFromTags(instance.Tags)
+				if cluster := eksClusterNameFromTags(instance.Tags); cluster != "" {
+					if cache.EKSClusterNames == nil {
+						cache.EKSClusterNames = make(map[string]string)
+					}
+					cache.EKSClusterNames[*instance.InstanceId] = cluster
+				}
 			}
 		}
 	}
+}
+
+// eksClusterTagKey is the AWS-generated tag that Amazon EKS adds to EC2
+// instances participating in a cluster, whether launched by managed node
+// groups, Karpenter, or directly with EC2. The aws: prefix is reserved for AWS,
+// so users cannot set it. See
+// https://docs.aws.amazon.com/eks/latest/userguide/eks-using-tags.html
+const eksClusterTagKey = "aws:eks:cluster-name"
+
+// eksClusterNameFromTags returns the aws:eks:cluster-name tag value, or "".
+// Other Kubernetes markers (kubernetes.io/cluster/*, VPC CNI tags) are
+// deliberately ignored because they are not specific to EKS.
+func eksClusterNameFromTags(tags []types.Tag) string {
+	for _, tag := range tags {
+		if aws.ToString(tag.Key) == eksClusterTagKey {
+			return aws.ToString(tag.Value)
+		}
+	}
+	return ""
+}
+
+// eniEKSClusterName returns the EKS cluster an ENI belongs to, based on the
+// aws:eks:cluster-name tag on the ENI itself or on its attached EC2 instance.
+// It returns "" when neither carries the tag, so callers keep the ENI's
+// regular classification (for example "EC2 Instance").
+func eniEKSClusterName(eni types.NetworkInterface, cache *ENILookupCache) string {
+	if cluster := eksClusterNameFromTags(eni.TagSet); cluster != "" {
+		return cluster
+	}
+	if eni.Attachment != nil && eni.Attachment.InstanceId != nil && cache != nil {
+		return cache.EKSClusterNames[*eni.Attachment.InstanceId]
+	}
+	return ""
 }
 
 // batchFetchNATGateways fetches all NAT gateways for the given VPCs

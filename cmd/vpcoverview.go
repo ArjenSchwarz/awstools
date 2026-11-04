@@ -28,8 +28,17 @@ var overviewCmd = &cobra.Command{
 
 The command shows separate tables for each VPC, displaying:
 - Subnet overview with route table information
+- IP allocation summary: per subnet, the number of allocated IP addresses
+  for each service category (EKS, EC2 Instance, Lambda Function, RDS
+  Database, ...), followed by the AWS-reserved and available addresses
 - Detailed IP address usage per subnet
 - Summary statistics
+
+The IP allocation summary counts IPv4 addresses, including secondary private
+addresses, not ENIs or instances. Addresses count as EKS when their ENI or
+attached EC2 instance has the AWS-generated aws:eks:cluster-name tag; instances
+without that tag stay EC2 Instance. IPv6 addresses and delegated prefixes are
+not included, and IPv6-only subnets have no summary rows.
 
 Use --vpc to filter results to a specific VPC.
 
@@ -75,8 +84,9 @@ func vpcOverview(_ *cobra.Command, _ []string) error {
 }
 
 // buildVPCOverviewTables returns every table of the VPC overview report in
-// display order: one subnet overview per VPC, one IP details table per subnet
-// with IP details, and the usage summary.
+// display order: one subnet overview per VPC, one IP allocation summary per
+// VPC with IP details, one IP details table per subnet with IP details, and
+// the usage summary.
 func buildVPCOverviewTables(vpcs []helpers.VPCUsageInfo, routeTables []types.RouteTable, accountName string, vpcFilter string) []format.OutputArray {
 	// Filter VPCs if vpc flag is provided
 	filteredVPCs := vpcs
@@ -128,6 +138,13 @@ func buildVPCOverviewTables(vpcs []helpers.VPCUsageInfo, routeTables []types.Rou
 			subnetOutput.AddHolder(holder)
 		}
 		tables = append(tables, subnetOutput)
+	}
+
+	// IP allocation summary per VPC, grouped by service category (T-1538)
+	for _, vpc := range filteredVPCs {
+		if allocationOutput, ok := buildIPAllocationSummaryTable(vpc, accountName); ok {
+			tables = append(tables, allocationOutput)
+		}
 	}
 
 	// Individual tables for each subnet's IP details
@@ -205,6 +222,58 @@ func buildVPCOverviewTables(vpcs []helpers.VPCUsageInfo, routeTables []types.Rou
 	tables = append(tables, summaryOutput)
 
 	return tables
+}
+
+// IP allocation summary columns and the Allocation values that keep service
+// allocations apart from AWS-reserved and available addresses.
+const (
+	allocationColumn      = "Allocation"
+	categoryColumn        = "Category"
+	ipAddressesColumn     = "IP Addresses"
+	serviceAllocation     = "Service"
+	awsReservedAllocation = "AWS Reserved"
+	availableAllocation   = "Available"
+)
+
+// buildIPAllocationSummaryTable returns the IP allocation summary for a VPC:
+// for each subnet with per-IP details, one row per service category with its
+// number of allocated IP addresses (sorted by category), then the AWS-reserved
+// and available addresses. Subnets without IP details (IPv6-only) are left
+// out; ok is false when no subnet has details.
+func buildIPAllocationSummaryTable(vpc helpers.VPCUsageInfo, accountName string) (format.OutputArray, bool) {
+	keys := []string{subnetColumn, cidrColumn, allocationColumn, categoryColumn, ipAddressesColumn}
+	output := format.OutputArray{Keys: keys, Settings: settings.NewOutputSettings()}
+	output.Settings.Title = "IP Allocation Summary for " + getResourceDisplayName(vpc.ID, vpc.Tags) + " in account " + accountName
+	output.Settings.SeparateTables = true
+
+	addRow := func(subnetDisplay, cidr, allocation, category string, ips int) {
+		output.AddHolder(format.OutputHolder{Contents: map[string]any{
+			subnetColumn:      subnetDisplay,
+			cidrColumn:        cidr,
+			allocationColumn:  allocation,
+			categoryColumn:    category,
+			ipAddressesColumn: ips,
+		}})
+	}
+
+	for _, subnet := range vpc.Subnets {
+		if len(subnet.IPDetails) == 0 {
+			continue
+		}
+		subnetDisplay := getResourceDisplayName(subnet.ID, subnet.Tags)
+		reserved := 0
+		for _, ip := range subnet.IPDetails {
+			if _, isService := helpers.IPAllocationCategory(ip); !isService {
+				reserved++
+			}
+		}
+		for _, count := range helpers.SummarizeSubnetIPAllocations(subnet) {
+			addRow(subnetDisplay, subnet.CIDR, serviceAllocation, count.Category, count.IPs)
+		}
+		addRow(subnetDisplay, subnet.CIDR, awsReservedAllocation, "", reserved)
+		addRow(subnetDisplay, subnet.CIDR, availableAllocation, "", subnet.AvailableIPs)
+	}
+	return output, len(output.Contents) > 0
 }
 
 // vpcOverviewSection is one table of the VPC overview in a JSON or YAML file.

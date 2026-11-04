@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `vpc overview` shows an IP allocation summary per VPC: for each subnet, the number of allocated IPv4 addresses (including secondary private IPs) per service category such as EKS, EC2 Instance, Lambda Function and RDS Database, with AWS-reserved and available addresses on separate rows. Addresses count as EKS when their ENI or attached instance has the AWS-generated `aws:eks:cluster-name` tag; otherwise instances stay EC2 Instance (T-1538)
 - Regression tests for IAM access-key API failures (T-1549)
 - Makefile targets for code quality: `fmt`, `vet`, `modernize`, `check`, `security-scan`
 - Makefile targets for testing: `test-verbose`, `test-coverage`
