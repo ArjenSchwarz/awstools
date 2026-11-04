@@ -262,20 +262,24 @@ func writeVPCOverviewTables(tables []format.OutputArray, reportTitle string) err
 // existing, when appending), and text formats contain the tables in order.
 func renderVPCOverviewFile(tables []format.OutputArray, fileFormat, reportTitle string, existing []byte) ([]byte, error) {
 	switch fileFormat {
-	case "", "json", "yaml":
-		sections := make([]vpcOverviewSection, 0, len(tables))
-		for _, table := range tables {
-			sections = append(sections, vpcOverviewSection{Title: table.Settings.Title, Rows: table.GetContentsMapRaw()})
-		}
-		if fileFormat == "yaml" {
-			return yaml.Marshal(sections)
-		}
-		return json.Marshal(sections)
+	case "", "json":
+		return json.Marshal(vpcOverviewSections(tables))
+	case "yaml":
+		return yaml.Marshal(vpcOverviewSections(tables))
 	case "html":
 		return renderVPCOverviewHTML(tables, reportTitle, existing)
 	default:
 		return renderVPCOverviewText(tables, fileFormat)
 	}
+}
+
+// vpcOverviewSections returns each table's title and rows.
+func vpcOverviewSections(tables []format.OutputArray) []vpcOverviewSection {
+	sections := make([]vpcOverviewSection, 0, len(tables))
+	for _, table := range tables {
+		sections = append(sections, vpcOverviewSection{Title: table.Settings.Title, Rows: table.GetContentsMapRaw()})
+	}
+	return sections
 }
 
 // renderVPCOverviewHTML places every table in one HTML page. When existing
