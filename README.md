@@ -158,9 +158,10 @@ Get comprehensive VPC IP usage analysis:
 $ awstools vpc overview --output table
 ```
 
-Find details for a specific IP address (searches both primary and secondary IPs):
+Find details for a specific IPv4 or IPv6 address (searches both primary and secondary IPs; an IPv6 address is reported as secondary unless it is the ENI's primary IPv6 address):
 ```bash
 $ awstools vpc ip-finder 10.0.1.100 --output table
+$ awstools vpc ip-finder 2001:db8::10 --output table
 ```
 
 ### SSO Management

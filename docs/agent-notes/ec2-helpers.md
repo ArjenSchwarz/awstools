@@ -72,6 +72,13 @@ filter, so multi-VPC matches for the same RFC1918 IP on later pages were
 silently dropped (and the "multiple matches" warning never fired). Tests live
 in `helpers/ec2_ipfinder_pagination_test.go`.
 
+The filter is chosen by `findENIsByIP` (T-1706): IPv4 uses
+`addresses.private-ip-address`, IPv6 uses `ipv6-addresses.ipv6-address`
+(the IPv4 filter never matches IPv6). Input is canonicalised with
+`net.ParseIP(...).String()` because AWS stores IPv6 in lowercase compressed
+form. `isSecondaryIP` checks `Ipv6Addresses[].IsPrimaryIpv6` for IPv6. Tests
+live in `helpers/ec2_ipfinder_ipv6_test.go`.
+
 ## ENI Matching Helpers
 
 Pure, testable helpers live alongside the AWS-client-taking wrappers. Each scans a slice of AWS objects for an ENI or subnet match so nil-safety can be tested without mocking.

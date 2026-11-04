@@ -29,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `vpc ip-finder` now finds IPv6 addresses assigned to ENIs instead of reporting them as not found; IPv6 results are marked secondary unless AWS flags the address as the ENI's primary IPv6 address (T-1706)
 - `vpc enis` now reports the Transit Gateway attachment that owns each TGW ENI when a VPC has several TGW attachments, instead of reusing the last attachment found for the VPC; ENIs whose attachment can't be determined show as unknown rather than a guessed attachment (T-1571)
 - `vpc enis --split` with JSON (or YAML) output now writes one valid document of all ENI rows, including their VPC and Subnet, instead of one array per subnet back to back; table-style formats keep their per-subnet tables (T-1591)
 - IAM `rolelist` no longer merges same-named attached policies (e.g. AWS-managed and customer-managed `ReadOnlyAccess`): attached policies are keyed by ARN, policy rows gain an `ARN` column and list only their own roles, and drawio/dot/mermaid link roles to attached policies by ARN. `rolelist` mermaid output (stdout or file, alongside any other file or stdout format) no longer panics on edges to missing nodes or merges roles that have several policies (T-1656)

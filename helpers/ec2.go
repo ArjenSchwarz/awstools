@@ -2185,19 +2185,10 @@ func IsValidCIDR(cidr string) bool {
 // returned rather than silently collapsing to the first one (T-1413).
 //
 // When no ENI matches, a single result with Found=false is returned so callers
-// can report the IP as not found. Searches both primary and secondary IPs.
+// can report the IP as not found. Searches both primary and secondary IPs, for
+// IPv4 and IPv6 addresses (T-1706).
 func FindIPAddressDetails(svc *ec2.Client, ipAddress string) []IPFinderResult {
-	// Create filter for IP address search
-	// Note: addresses.private-ip-address filter includes both primary and secondary IPs
-	filters := []types.Filter{
-		{
-			Name:   aws.String("addresses.private-ip-address"),
-			Values: []string{ipAddress},
-		},
-	}
-
-	// Search for ENIs with the IP address (includes both primary and secondary IPs)
-	enis := searchENIsByIP(svc, filters)
+	ipAddress, enis := findENIsByIP(svc, ipAddress)
 
 	if len(enis) == 0 {
 		return []IPFinderResult{{
@@ -2282,8 +2273,41 @@ func searchENIsByIP(svc ec2.DescribeNetworkInterfacesAPIClient, filters []types.
 	return result
 }
 
-// isSecondaryIP checks if the IP address is a secondary IP on the ENI
+// findENIsByIP canonicalises the IP address and returns it together with every
+// ENI that has it assigned. IPv4 addresses are matched with the
+// addresses.private-ip-address filter and IPv6 addresses with
+// ipv6-addresses.ipv6-address. Before T-1706 IPv6 input was accepted by the
+// command but always searched as a private IPv4 address, so attached IPv6
+// addresses were reported as not found.
+func findENIsByIP(svc ec2.DescribeNetworkInterfacesAPIClient, ipAddress string) (string, []types.NetworkInterface) {
+	filterName := "addresses.private-ip-address"
+	if ip := net.ParseIP(ipAddress); ip != nil {
+		// AWS returns IPv6 addresses in lowercase compressed form, so use
+		// the same form for the filter and later comparisons.
+		ipAddress = ip.String()
+		if ip.To4() == nil {
+			filterName = "ipv6-addresses.ipv6-address"
+		}
+	}
+	filters := []types.Filter{
+		{
+			Name:   aws.String(filterName),
+			Values: []string{ipAddress},
+		},
+	}
+	return ipAddress, searchENIsByIP(svc, filters)
+}
+
+// isSecondaryIP checks if the IP address is a secondary IP on the ENI. An IPv6
+// address counts as secondary unless AWS flags it as the ENI's primary IPv6
+// address.
 func isSecondaryIP(eni types.NetworkInterface, ipAddress string) bool {
+	for _, ipv6 := range eni.Ipv6Addresses {
+		if aws.ToString(ipv6.Ipv6Address) == ipAddress {
+			return !aws.ToBool(ipv6.IsPrimaryIpv6)
+		}
+	}
+
 	primaryIP := aws.ToString(eni.PrivateIpAddress)
 	if primaryIP == ipAddress {
 		return false
