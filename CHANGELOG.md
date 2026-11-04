@@ -29,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- SSO `by-account` and `by-permission-set` graph outputs (drawio, dot, mermaid) filtered with `--resource-id` no longer draw root edges to accounts or permission sets that were filtered out, and permission-set root edges use name-file names to match their nodes (T-1714)
 - `vpc ip-finder` now finds IPv6 addresses assigned to ENIs instead of reporting them as not found; IPv6 results are marked secondary unless AWS flags the address as the ENI's primary IPv6 address (T-1706)
 - `vpc enis` now reports the Transit Gateway attachment that owns each TGW ENI when a VPC has several TGW attachments, instead of reusing the last attachment found for the VPC; ENIs whose attachment can't be determined show as unknown rather than a guessed attachment (T-1571)
 - `vpc enis --split` with JSON (or YAML) output now writes one valid document of all ENI rows, including their VPC and Subnet, instead of one array per subnet back to back; table-style formats keep their per-subnet tables (T-1591)

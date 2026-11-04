@@ -101,7 +101,13 @@ func createSSOPermissionsetsDrawIOContents(instance helpers.SSOInstance, output 
 	content[drawIOIDColumn] = getName(instance.Arn)
 	content[typeColumn] = "SSO"
 	content[imageColumn] = drawio.AWSShape("Security Identity Compliance", "Single Sign-On")
-	content[childrenColumn] = instance.GetPermissionSetList()
+	rootchildren := []string{}
+	for _, permissionset := range instance.PermissionSets {
+		if filteredSSOPermissionSet(permissionset) {
+			rootchildren = append(rootchildren, permissionset.Name)
+		}
+	}
+	content[childrenColumn] = rootchildren
 	holder := format.OutputHolder{Contents: content}
 	output.AddHolder(holder)
 	uniquefilter := []string{}

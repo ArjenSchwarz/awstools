@@ -99,7 +99,13 @@ func createSSOAccountDrawIOContents(instance helpers.SSOInstance, output *format
 	content[drawIOIDColumn] = getName(instance.Arn)
 	content[typeColumn] = "SSO"
 	content[imageColumn] = drawio.AWSShape("Security Identity Compliance", "Single Sign-On")
-	content[childrenColumn] = instance.GetAccountList()
+	rootchildren := []string{}
+	for _, account := range instance.Accounts {
+		if filteredSSOAccount(account) {
+			rootchildren = append(rootchildren, account.AccountID)
+		}
+	}
+	content[childrenColumn] = rootchildren
 	holder := format.OutputHolder{Contents: content}
 	output.AddHolder(holder)
 	uniquefilter := []string{}
