@@ -42,6 +42,57 @@ func TestEnisGraphFormatError_T1145(t *testing.T) {
 	}
 }
 
+// TestEnisCommand_RejectsGraphFileFormat_T1666 drives the enis command with a
+// supported stdout format but a graph --file-format. Before T-1666 only the
+// stdout format was validated, so the unsupported file format reached AWS
+// discovery and go-output. The command must now fail before any AWS call.
+func TestEnisCommand_RejectsGraphFileFormat_T1666(t *testing.T) {
+	// Point the SDK away from the user's real configuration in case the
+	// guard regresses and the command reaches AWS config loading.
+	t.Setenv("AWS_CONFIG_FILE", filepath.Join(t.TempDir(), "config"))
+	t.Setenv("AWS_SHARED_CREDENTIALS_FILE", filepath.Join(t.TempDir(), "credentials"))
+	t.Setenv("AWS_EC2_METADATA_DISABLED", "true")
+
+	tests := map[string]struct {
+		fileFormat string
+		file       string
+		wantErr    string
+	}{
+		"drawio file format":               {fileFormat: "drawio", file: "out", wantErr: "drawio"},
+		"dot file format":                  {fileFormat: "dot", file: "out", wantErr: "dot"},
+		"mixed case file format":           {fileFormat: "DrawIO", file: "out", wantErr: "drawio"},
+		"file format falls back to json":   {fileFormat: "", file: "out"},
+		"file format ignored without file": {fileFormat: "drawio", file: ""},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			configureOutput(t, "json", tc.file)
+			viper.Set("output.file-format", tc.fileFormat)
+			t.Cleanup(func() { viper.Set("output.file-format", "") })
+
+			err := enisFormatError()
+			if tc.wantErr == "" {
+				if err != nil {
+					t.Fatalf("expected no error, got %v", err)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatalf("expected an error for --file-format %q, got nil", tc.fileFormat)
+			}
+			if !strings.Contains(err.Error(), tc.wantErr) || !strings.Contains(err.Error(), "not supported") {
+				t.Errorf("error %q does not clearly reject %q", err, tc.wantErr)
+			}
+
+			// The command entry point must return the same error before any
+			// AWS discovery happens.
+			if got := enis(enisCmd, nil); got == nil || got.Error() != err.Error() {
+				t.Errorf("enis() = %v, want %v", got, err)
+			}
+		})
+	}
+}
+
 // eniAttachmentLookupClient is the minimum EC2 API surface used by
 // getAttachment (below) to resolve ENI attachment metadata via the paginated
 // helpers. Kept in the test file after T-727 moved production code to use

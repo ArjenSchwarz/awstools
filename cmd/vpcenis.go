@@ -19,8 +19,9 @@ var enisCmd = &cobra.Command{
 	Long: `Get an overview of ENIs in a VPC.
 
 	Supported output formats are json, csv, table, and html. The graph formats
-	(dot and drawio) are not supported for this command because ENIs are leaf
-	resources without a meaningful from/to relationship to diagram.
+	(dot and drawio) are not supported for this command, either as --output or
+	as --file-format, because ENIs are leaf resources without a meaningful
+	from/to relationship to diagram.
 
 	With --split, table, csv, and html output show one table per subnet. JSON
 	output is a single array of every ENI, including its VPC and Subnet.`,
@@ -48,8 +49,21 @@ func enisGraphFormatError(format string) error {
 	}
 }
 
-func enis(_ *cobra.Command, _ []string) error {
+// enisFormatError validates both the stdout format and, when --file is set,
+// the effective file format. The file format falls back to the output format
+// when --file-format is empty, matching go-output (T-1666).
+func enisFormatError() error {
 	if err := enisGraphFormatError(settings.GetOutputFormat()); err != nil {
+		return err
+	}
+	if settings.GetString("output.file") == "" {
+		return nil
+	}
+	return enisGraphFormatError(settings.GetLCString("output.file-format"))
+}
+
+func enis(_ *cobra.Command, _ []string) error {
+	if err := enisFormatError(); err != nil {
 		return err
 	}
 	awsConfig := config.DefaultAwsConfig(*settings)
